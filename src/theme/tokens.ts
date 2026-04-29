@@ -1,0 +1,60 @@
+export const tokens = {
+  colors: {
+    primary: '#3B82F6',
+    primaryGlow: 'rgba(59, 130, 246, 0.4)',
+    background: '#EAF2F8',
+    surface: '#FFFFFF',
+    surfaceAlt: '#EEEEEE',
+    textDark: '#111827',
+    textGray: '#6B7280',
+    iconGreen: '#0F766E',
+    iconGreenBg: '#D1FAE5',
+    iconBlue: '#1D4ED8',
+    iconBlueBg: '#DBEAFE',
+    // Dashboard & Status Colors
+    cardBlue: '#3B82F6',
+    cardYellow: '#EAB308',
+    statusGreen: '#10B981',
+    statusGreenBg: '#DCFCE7',
+    mutedGray: '#94A3B8',
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 16,
+    lg: 24,
+    xl: 32,
+    xxl: 48,
+  },
+  typography: {
+    sizes: {
+      xs: 12,
+      sm: 14,
+      md: 16,
+      lg: 20,
+      xl: 24,
+      xxl: 32,
+    },
+    weights: {
+      regular: '400' as const,
+      medium: '500' as const,
+      bold: '700' as const,
+      black: '900' as const,
+    },
+    fontFamily: {
+      regular: 'Outfit_400Regular',
+      medium: 'Outfit_500Medium',
+      bold: 'Outfit_700Bold',
+      black: 'Outfit_900Black',
+    },
+  },
+  radii: {
+    sm: 8,
+    md: 16,
+    xl: 24,
+    full: 9999,
+    sheet: 40,
+  },
+} as const;
+
+export type ThemeTokens = typeof tokens;
