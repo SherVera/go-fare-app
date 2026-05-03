@@ -16,10 +16,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { sendPhoneVerificationCode, confirmPhoneCode } from '@/lib/firebase';
+import { sendPhoneVerificationCode, confirmPhoneCode, setDocument, auth } from '@/lib/firebase';
 
-export default function LoginScreen() {
+export default function RegistroScreen() {
   const router = useRouter();
+  const [nombre, setNombre] = useState('');
+  const [cedula, setCedula] = useState('');
   const [phone, setPhone] = useState('');
   const [confirmation, setConfirmation] = useState<any>(null);
   const [code, setCode] = useState('');
@@ -27,7 +29,7 @@ export default function LoginScreen() {
 
   const handleBack = () => {
     if (confirmation) {
-      setConfirmation(null); // Go back to phone input
+      setConfirmation(null);
       return;
     }
     if (router.canGoBack()) {
@@ -39,14 +41,24 @@ export default function LoginScreen() {
 
   const handleSendSMS = async () => {
     try {
-      let finalPhone = phone.trim().replace(/\s+/g, '');
+      const trimmedNombre = nombre.trim();
+      const trimmedCedula = cedula.trim();
+      let finalPhone = phone.trim().replace(/\s+/g, ''); // Quitar espacios
 
       if (finalPhone.startsWith('0')) {
-        finalPhone = finalPhone.substring(1);
+        finalPhone = finalPhone.substring(1); // Quitar el 0 inicial si existe
       }
 
+      if (trimmedNombre.length < 3) {
+        Alert.alert('Atención', 'El nombre debe tener al menos 3 caracteres.');
+        return;
+      }
+      if (!/^\d{7,8}$/.test(trimmedCedula)) {
+        Alert.alert('Atención', 'La cédula debe contener exactamente 7 u 8 números.');
+        return;
+      }
       if (!/^\d{10}$/.test(finalPhone)) {
-        Alert.alert('Atención', 'Ingrese un teléfono válido de 10 dígitos (Ej: 4121234567).');
+        Alert.alert('Atención', 'El teléfono debe ser válido (Ej: 0412 1234567).');
         return;
       }
 
@@ -70,10 +82,24 @@ export default function LoginScreen() {
       }
       setLoading(true);
       await confirmPhoneCode(confirmation, code);
+      
+      // Save user to Firestore
+      if (auth.currentUser) {
+        await setDocument(`users/${auth.currentUser.uid}`, {
+          nombre,
+          cedula,
+          phone: phone.startsWith('+') ? phone : `+58${phone}`,
+        });
+      }
+      
       router.replace('/(tabs)' as any);
     } catch (error: any) {
-      console.error(error);
-      Alert.alert('Error', 'Código inválido o expirado.');
+      console.error("Error en registro:", error);
+      if (error.message && error.message.includes('firestore')) {
+        Alert.alert('Error de Base de Datos', 'Usuario autenticado pero no se pudo guardar el perfil. Revisa las reglas de Firestore.');
+      } else {
+        Alert.alert('Error', 'Código inválido o expirado. ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -81,15 +107,13 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Blob lavanda esquina sup-derecha */}
       <View style={styles.blob} />
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* ── HEADER FIJO — componente reutilizable ── */}
-        <ScreenHeader title="Verificación de Identidad" onBack={handleBack} />
+        <ScreenHeader title="Crear Cuenta" onBack={handleBack} />
 
         <ScrollView
           contentContainerStyle={styles.scroll}
@@ -97,21 +121,13 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-
           {/* ── SECCIÓN DEL ÍCONO ── */}
           <View style={styles.iconSection}>
-            {/* Sombra falsa azulada para efecto de flotación/3D */}
             <View style={styles.fakeShadow} />
             <View style={styles.iconCard}>
-              {/* Brillo superior — simula luz desde arriba */}
               <View style={styles.topShine} />
-              {/*
-               * shield-account de MaterialCommunityIcons:
-               * un solo ícono que integra escudo + persona,
-               * idéntico al diseño de referencia
-               */}
               <MaterialCommunityIcons
-                name="shield-account"
+                name="account-plus-outline"
                 size={96}
                 color={tokens.colors.primary}
               />
@@ -120,18 +136,50 @@ export default function LoginScreen() {
 
           {/* ── TÍTULOS ── */}
           <View style={styles.titleBlock}>
-            <Text style={styles.titleDark}>{confirmation ? 'Ingresa el' : 'Inicia'}</Text>
-            <Text style={styles.titleBlue}>{confirmation ? 'Código' : 'Sesión'}</Text>
+            <Text style={styles.titleDark}>{confirmation ? 'Confirma tu' : 'Únete a'}</Text>
+            <Text style={styles.titleBlue}>{confirmation ? 'Registro' : 'GoFair'}</Text>
             <Text style={styles.subtitle}>
               {confirmation 
-                ? `Ingresa el código enviado al +58 ${phone}` 
-                : `Ingrese su número de teléfono para\ncontinuar de forma segura.`}
+                ? `Ingresa el código SMS enviado al +58 ${phone}` 
+                : `Crea tu cuenta para moverte\npor la ciudad libremente.`}
             </Text>
           </View>
 
           {/* ── INPUTS ── */}
           {!confirmation ? (
             <>
+              <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>
+              <View style={styles.inputCard}>
+                <Ionicons name="person-outline" size={20} color="#3072ffe7" />
+                <View style={styles.divider} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej. Carlos Pérez"
+                  placeholderTextColor="#B8C4D4"
+                  value={nombre}
+                  onChangeText={setNombre}
+                  selectionColor={tokens.colors.primary}
+                  editable={!loading}
+                />
+              </View>
+
+              <Text style={styles.inputLabel}>NÚMERO DE IDENTIDAD</Text>
+              <View style={styles.inputCard}>
+                <Text style={styles.prefix}>V-</Text>
+                <View style={styles.divider} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="00000000"
+                  placeholderTextColor="#B8C4D4"
+                  keyboardType="number-pad"
+                  value={cedula}
+                  onChangeText={setCedula}
+                  maxLength={10}
+                  selectionColor={tokens.colors.primary}
+                  editable={!loading}
+                />
+              </View>
+
               <Text style={styles.inputLabel}>NÚMERO DE TELÉFONO</Text>
               <View style={styles.inputCard}>
                 <Text style={styles.prefix}>+58</Text>
@@ -170,7 +218,6 @@ export default function LoginScreen() {
             </>
           )}
 
-          {/* Nota de seguridad */}
           <View style={styles.secureRow}>
             <Ionicons
               name="shield-checkmark-outline"
@@ -179,11 +226,11 @@ export default function LoginScreen() {
               style={{ marginTop: 1, marginRight: 6 }}
             />
             <Text style={styles.secureText}>
-              Su información está protegida por encriptación{'\n'}de grado gubernamental para Caracas Move.
+              Su información será validada de forma segura.
             </Text>
           </View>
 
-          <View style={{ flex: 1, minHeight: 48 }} />
+          <View style={{ flex: 1, minHeight: 32 }} />
 
           {/* ── BOTÓN ── */}
           <Pressable
@@ -195,27 +242,22 @@ export default function LoginScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Text style={styles.ctaText}>{confirmation ? 'Confirmar Código' : 'Recibir SMS'}</Text>
+                <Text style={styles.ctaText}>{confirmation ? 'Confirmar Registro' : 'Recibir SMS'}</Text>
                 <Ionicons name={confirmation ? 'checkmark-circle-outline' : 'chatbubble-outline'} size={20} color="#fff" style={{ marginLeft: 10 }} />
               </>
             )}
           </Pressable>
 
-          {/* ── LINK A REGISTRO ── */}
+          {/* ── LINK A LOGIN ── */}
           <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>¿No tienes cuenta? </Text>
-            <Pressable onPress={() => router.push('/registro' as any)}>
-              <Text style={styles.registerLink}>Regístrate aquí</Text>
+            <Text style={styles.registerText}>¿Ya tienes cuenta? </Text>
+            <Pressable onPress={() => router.push('/login' as any)}>
+              <Text style={styles.registerLink}>Inicia Sesión</Text>
             </Pressable>
           </View>
 
           {/* ── FOOTER ── */}
-          <View style={styles.footerRow}>
-            <Text style={styles.footerHelp}>¿Necesitas ayuda?</Text>
-            <Text style={styles.footerBullet}> • </Text>
-            <Text style={styles.footerSupport}>Soporte Técnico</Text>
-          </View>
-          <Text style={styles.footerLegal}>CARACAS MOVE • VERIFICACIÓN SEGURA</Text>
+          <Text style={styles.footerLegal}>CARACAS MOVE • REGISTRO SEGURO</Text>
 
         </ScrollView>
       </KeyboardAvoidingView>
@@ -228,8 +270,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ECF1F9',
   },
-
-  /* Blob decorativo */
   blob: {
     position: 'absolute',
     top: 90,
@@ -240,40 +280,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#B8C8DF',
     opacity: 0.60,
   },
-
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 26,
     paddingTop: 4,
     paddingBottom: 36,
   },
-
-  /* Header */
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    marginBottom: 32,
-  },
-  backBtn: { width: 28 },
-  headerTitle: {
-    fontSize: 16,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#18243E',
-  },
-
-  /* Sección ícono centrada */
   iconSection: {
     alignItems: 'center',
-    marginBottom: 44,
+    marginBottom: 32,
   },
-
-  /*
-   * Sombra falsa: un View idéntico al card pero desplazado hacia abajo
-   * y con un color azulado semi-transparente — da efecto de profundidad
-   * tanto en iOS como en Android sin depender de elevation
-   */
   fakeShadow: {
     position: 'absolute',
     width: 148,
@@ -281,11 +297,9 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: '#91B4E0',
     opacity: 0.30,
-    top: 18,          // desplazado hacia abajo
-    transform: [{ scaleX: 0.90 }],  // ligeramente más angosto que el card
+    top: 18,
+    transform: [{ scaleX: 0.90 }],
   },
-
-  /* Tarjeta del ícono */
   iconCard: {
     width: 160,
     height: 148,
@@ -294,15 +308,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    // iOS: sombra suave extra
     shadowColor: '#5080C0',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
     shadowRadius: 16,
     elevation: 8,
   },
-
-  /* Brillo en la parte superior del card — efecto de luz 3D */
   topShine: {
     position: 'absolute',
     top: 0,
@@ -314,25 +325,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     opacity: 0.75,
   },
-
-  /* Contenedor del ícono escudo */
-  shieldContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  /*
-   * Persona: bottom: 10 = dentro del escudo, en su tercio inferior
-   * Antes era -10 (fuera del escudo), ahora está integrada
-   */
-  personInShield: {
-    position: 'absolute',
-    bottom: 10,
-    alignSelf: 'center',
-  },
-
-  /* Títulos */
-  titleBlock: { marginBottom: 32 },
+  titleBlock: { marginBottom: 24 },
   titleDark: {
     fontSize: 38,
     fontFamily: tokens.typography.fontFamily.black,
@@ -344,7 +337,7 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.black,
     color: tokens.colors.primary,
     lineHeight: 44,
-    marginBottom: 14,
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 15,
@@ -352,14 +345,12 @@ const styles = StyleSheet.create({
     color: '#6B7A93',
     lineHeight: 22,
   },
-
-  /* Input */
   inputLabel: {
     fontSize: 11,
     fontFamily: tokens.typography.fontFamily.black,
     color: '#8594AB',
     letterSpacing: 1.1,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   inputCard: {
     flexDirection: 'row',
@@ -368,7 +359,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 20,
     height: 60,
-    marginBottom: 14,
+    marginBottom: 16,
     shadowColor: '#8594AB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
@@ -388,16 +379,15 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#18243E',
     includeFontPadding: false,
   },
-
-  /* Nota de seguridad */
   secureRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    marginBottom: 10,
   },
   secureText: {
     flex: 1,
@@ -406,8 +396,6 @@ const styles = StyleSheet.create({
     color: '#8594AB',
     lineHeight: 17,
   },
-
-  /* Botón principal */
   cta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -428,13 +416,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 0.2,
   },
-
-  /* Link de Registro */
   registerContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 36,
+    marginBottom: 24,
   },
   registerText: {
     fontSize: 14,
@@ -445,28 +431,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.bold,
     color: tokens.colors.primary,
-  },
-
-  /* Footer */
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  footerHelp: {
-    fontSize: 13,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#6B7A93',
-  },
-  footerBullet: {
-    fontSize: 13,
-    color: '#B0BCCC',
-  },
-  footerSupport: {
-    fontSize: 13,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#18243E',
   },
   footerLegal: {
     textAlign: 'center',

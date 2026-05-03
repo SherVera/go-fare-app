@@ -1,11 +1,42 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { tokens } from '@/theme/tokens';
 import { StatusBar } from 'expo-status-bar';
+import { useRouter } from 'expo-router';
+import { sigOutAccount } from '@/lib/firebase';
 
 export default function PerfilScreen() {
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que deseas cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setLoggingOut(true);
+              await sigOutAccount();
+              router.replace('/login');
+            } catch (error) {
+              console.error('Error al cerrar sesión:', error);
+              Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
+            } finally {
+              setLoggingOut(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
@@ -105,9 +136,19 @@ export default function PerfilScreen() {
         </Pressable>
 
         {/* ── LOGOUT BUTTON ── */}
-        <Pressable style={styles.logoutBtn}>
-          <Ionicons name="log-out-outline" size={22} color="#DC2626" style={{ marginRight: 8 }} />
-          <Text style={styles.logoutText}>Cerrar Sesión</Text>
+        <Pressable
+          style={[styles.logoutBtn, loggingOut && { opacity: 0.6 }]}
+          onPress={handleLogout}
+          disabled={loggingOut}
+        >
+          {loggingOut ? (
+            <ActivityIndicator size="small" color="#DC2626" style={{ marginRight: 8 }} />
+          ) : (
+            <Ionicons name="log-out-outline" size={22} color="#DC2626" style={{ marginRight: 8 }} />
+          )}
+          <Text style={styles.logoutText}>
+            {loggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión'}
+          </Text>
         </Pressable>
         
         {/* Space for the absolute tab bar */}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "29132479755",
+    "project_id": "urbanconectiontest",
+    "storage_bucket": "urbanconectiontest.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:29132479755:android:f4089d8bab1bf5d2ed560e",
+        "android_client_info": {
+          "package_name": "com.gofare.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBv11r3UkgW_aXy6R8LrEUYBjM2eVGNmUI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
