@@ -23,7 +23,12 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBw4Hwy4zK_YEW8emaJy-EX_jWhCvMa5RU"
+        }
+      }
     },
     "web": {
       "output": "static",

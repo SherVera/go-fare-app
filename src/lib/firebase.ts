@@ -2,7 +2,15 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
 // Import Native Firebase Auth
-import nativeAuth from '@react-native-firebase/auth';
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+  signOut,
+  sendPasswordResetEmail,
+  signInWithPhoneNumber
+} from '@react-native-firebase/auth';
 import {
   addDoc,
   collection,
@@ -22,12 +30,12 @@ import { getDownloadURL, getStorage, ref, uploadString } from "firebase/storage"
 
 // Your web app's Firebase configuration
 export const firebaseConfig = {
- piKey: "AIzaSyBwSf8p4VRmLtOA5s14-8upyv9rgTS37B0",
-  authDomain: "urbanconectiontest.firebaseapp.com",
-  projectId: "urbanconectiontest",
-  storageBucket: "urbanconectiontest.firebasestorage.app",
-  messagingSenderId: "29132479755",
-  appId: "1:29132479755:web:0b483fdcca40164ced560e"
+apiKey: "AIzaSyAihFvcZro_r2J74qxLizdL_NAKqSafo88",
+  authDomain: "assas-432ce.firebaseapp.com",
+  projectId: "assas-432ce",
+  storageBucket: "assas-432ce.appspot.com",
+  messagingSenderId: "331016100320",
+  appId: "1:331016100320:web:e550f6377b957d1ee37385"
 };
 
 // Initialize Firebase
@@ -39,7 +47,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 export default app;
 
 // Exportamos la instancia nativa de auth para usarla en el resto de la app
-export const auth = nativeAuth();
+export const auth = getAuth();
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
@@ -48,31 +56,31 @@ export const storage = getStorage(app);
 
 //?CREAR NUEVO USUARIO///
 export const createUser = async (user: { email: string; password: string }) => {
-  return await nativeAuth().createUserWithEmailAndPassword(user.email, user.password);
+  return await createUserWithEmailAndPassword(auth, user.email, user.password);
 };
 
 //??ENTRAR CON EMAIL & CONTRASEÑA//
 export const signIn = async (user: { email: string; password: string }) => {
-  return await nativeAuth().signInWithEmailAndPassword(user.email, user.password);
+  return await signInWithEmailAndPassword(auth, user.email, user.password);
 };
 
 //?ACTUALIZAR USUARIO//
-export const updateUser = (user: {
+export const updateUser = async (user: {
   displayName?: string | null;
   photoURL?: string | null;
 }) => {
-  if (nativeAuth().currentUser) return nativeAuth().currentUser?.updateProfile(user);
+  if (auth.currentUser) return await updateProfile(auth.currentUser, user);
 };
 
 //?CERRAR SESION//
 export const sigOutAccount = async () => {
   await AsyncStorage.removeItem("user");
-  return nativeAuth().signOut();
+  return await signOut(auth);
 };
 
 //? RECUPERAR CONTRASEÑA//
-export const sentResetEmail = (email: string) => {
-  return nativeAuth().sendPasswordResetEmail(email);
+export const sentResetEmail = async (email: string) => {
+  return await sendPasswordResetEmail(auth, email);
 };
 
 
@@ -81,7 +89,7 @@ export const sentResetEmail = (email: string) => {
 //?ENVIAR SMS VERIFICACION (NATIVO)//
 export const sendPhoneVerificationCode = async (phoneNumber: string) => {
   // Con el SDK Nativo, esto llama a Google Play Integrity automáticamente sin Captcha
-  const confirmation = await nativeAuth().signInWithPhoneNumber(phoneNumber);
+  const confirmation = await signInWithPhoneNumber(auth, phoneNumber);
   return confirmation; // Retornamos el objeto de confirmación
 };
 

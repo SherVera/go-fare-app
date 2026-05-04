@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyBdWCYxJ9IydBrBpVpbX93Ad2spE6FURLo</string>
+	<string>AIzaSyClQO6ekAPNRHmXY1fJvGn2CS-VaoYE9uo</string>
 	<key>GCM_SENDER_ID</key>
-	<string>29132479755</string>
+	<string>331016100320</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.gofare.app</string>
 	<key>PROJECT_ID</key>
-	<string>urbanconectiontest</string>
+	<string>assas-432ce</string>
 	<key>STORAGE_BUCKET</key>
-	<string>urbanconectiontest.firebasestorage.app</string>
+	<string>assas-432ce.appspot.com</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:29132479755:ios:474c99ed910be408ed560e</string>
+	<string>1:331016100320:ios:4a5b00ee938c8879e37385</string>
 </dict>
 </plist>

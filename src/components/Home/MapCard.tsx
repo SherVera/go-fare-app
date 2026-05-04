@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Platform, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Animated } from 'react-native';
 import * as Location from 'expo-location';
-import MapView, { Marker } from 'react-native-maps';
 import { tokens } from '@/theme/tokens';
-
+import { NativeMap } from './NativeMap';
+import { MapErrorBoundary } from './MapErrorBoundary';
 export const MapCard = () => {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [address, setAddress] = useState<string>('Buscando ubicación...');
@@ -79,42 +79,10 @@ export const MapCard = () => {
       );
     }
 
-    if (Platform.OS === 'web') {
-      const lat = location.coords.latitude;
-      const lon = location.coords.longitude;
-      // Use standard iframe element for React Native Web
-      const Iframe = 'iframe' as any;
-      return (
-        <Iframe
-          width="100%"
-          height="100%"
-          style={{ border: 0 }}
-          loading="lazy"
-          allowFullScreen
-          src={`https://maps.google.com/maps?q=${lat},${lon}&z=15&output=embed`}
-        />
-      );
-    }
-
     return (
-      <MapView
-        style={styles.map}
-        initialRegion={{
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        }}
-        showsUserLocation={true}
-      >
-        <Marker
-          coordinate={{
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          }}
-          title="Tu Ubicación"
-        />
-      </MapView>
+      <MapErrorBoundary>
+        <NativeMap location={location} />
+      </MapErrorBoundary>
     );
   };
 

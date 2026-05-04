@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import 'react-native-reanimated';
 import { auth } from '@/lib/firebase';
+import { onAuthStateChanged } from '@react-native-firebase/auth';
 
 import {
   useFonts,
@@ -37,7 +38,7 @@ export default function RootLayout() {
 
   // 1. Escuchar el estado de autenticación de Firebase Nativo
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       setIsAuthenticated(!!user);
     });
     return unsubscribe;
