@@ -7,6 +7,7 @@ import { useColorScheme } from 'react-native';
 import 'react-native-reanimated';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   useFonts,
@@ -38,8 +39,14 @@ export default function RootLayout() {
 
   // 1. Escuchar el estado de autenticación de Firebase Nativo
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setIsAuthenticated(true);
+      } else {
+        // 🚧 Modo temporal: verificar si hay sesión por cédula guardada
+        const tempAuth = await AsyncStorage.getItem('temp_auth');
+        setIsAuthenticated(tempAuth === 'true');
+      }
     });
     return unsubscribe;
   }, []);

@@ -23,6 +23,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore";
 import { getDownloadURL, getStorage, ref, uploadString } from "firebase/storage";
 
@@ -103,7 +104,18 @@ export const confirmPhoneCode = async (
 };
 
 
-//TODO FUNCIONES DATABASE///
+//? BUSCAR USUARIO POR CEDULA EN FIRESTORE //
+export const getUserByCedula = async (cedula: string): Promise<string | null> => {
+  const usersRef = collection(db, 'users');
+  const q = query(usersRef, where('cedula', '==', cedula.trim()));
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const data = snap.docs[0].data();
+  return data.phone ?? null;
+};
+
+
+
 
 export const getCollection = async (colectionName: string, queryArray?: any[]) => {
   const ref = collection(db, colectionName);

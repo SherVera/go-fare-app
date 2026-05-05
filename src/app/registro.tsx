@@ -53,8 +53,8 @@ export default function RegistroScreen() {
         Alert.alert('Atención', 'El nombre debe tener al menos 3 caracteres.');
         return;
       }
-      if (!/^\d{7,8}$/.test(trimmedCedula)) {
-        Alert.alert('Atención', 'La cédula debe contener exactamente 7 u 8 números.');
+      if (!/^\d{5,10}$/.test(trimmedCedula)) {
+        Alert.alert('Atención', 'La cédula debe contener entre 5 y 10 números.');
         return;
       }
       if (!/^\d{10}$/.test(finalPhone)) {

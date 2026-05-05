@@ -2,7 +2,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { tokens } from '@/theme/tokens';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -16,20 +16,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { sendPhoneVerificationCode, confirmPhoneCode } from '@/lib/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [phone, setPhone] = useState('');
-  const [confirmation, setConfirmation] = useState<any>(null);
-  const [code, setCode] = useState('');
+  const [cedula, setCedula] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleBack = () => {
-    if (confirmation) {
-      setConfirmation(null); // Go back to phone input
-      return;
-    }
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -37,47 +31,21 @@ export default function LoginScreen() {
     }
   };
 
-  const handleSendSMS = async () => {
-    try {
-      let finalPhone = phone.trim().replace(/\s+/g, '');
-
-      if (finalPhone.startsWith('0')) {
-        finalPhone = finalPhone.substring(1);
-      }
-
-      if (!/^\d{10}$/.test(finalPhone)) {
-        Alert.alert('Atención', 'Ingrese un teléfono válido de 10 dígitos (Ej: 4121234567).');
-        return;
-      }
-
-      setLoading(true);
-      const phoneNumber = `+58${finalPhone}`;
-      const confirmObj = await sendPhoneVerificationCode(phoneNumber);
-      setConfirmation(confirmObj);
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert('Error', 'No se pudo enviar el SMS. Intente de nuevo.');
-    } finally {
-      setLoading(false);
+  // 🚧 ACCESO TEMPORAL — cualquier cédula válida permite el ingreso
+  const handleLogin = async () => {
+    const trimmedCedula = cedula.trim();
+    if (!/^\d{5,10}$/.test(trimmedCedula)) {
+      Alert.alert('Atención', 'Ingresa una cédula válida (5 a 10 dígitos).');
+      return;
     }
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 600));
+    // Guardar bandera de sesión temporal
+    await AsyncStorage.setItem('temp_auth', 'true');
+    setLoading(false);
+    router.replace('/(tabs)' as any);
   };
 
-  const handleVerifyCode = async () => {
-    try {
-      if (!code || code.length < 6) {
-        Alert.alert('Atención', 'Ingrese el código de 6 dígitos');
-        return;
-      }
-      setLoading(true);
-      await confirmPhoneCode(confirmation, code);
-      router.replace('/(tabs)' as any);
-    } catch (error: any) {
-      console.error(error);
-      Alert.alert('Error', 'Código inválido o expirado.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -120,55 +88,31 @@ export default function LoginScreen() {
 
           {/* ── TÍTULOS ── */}
           <View style={styles.titleBlock}>
-            <Text style={styles.titleDark}>{confirmation ? 'Ingresa el' : 'Inicia'}</Text>
-            <Text style={styles.titleBlue}>{confirmation ? 'Código' : 'Sesión'}</Text>
+            <Text style={styles.titleDark}>Inicia</Text>
+            <Text style={styles.titleBlue}>Sesión</Text>
             <Text style={styles.subtitle}>
-              {confirmation 
-                ? `Ingresa el código enviado al +58 ${phone}` 
-                : `Ingrese su número de teléfono para\ncontinuar de forma segura.`}
+              {`Ingresa tu número de cédula para\ncontinuar de forma segura.`}
             </Text>
           </View>
 
-          {/* ── INPUTS ── */}
-          {!confirmation ? (
-            <>
-              <Text style={styles.inputLabel}>NÚMERO DE TELÉFONO</Text>
-              <View style={styles.inputCard}>
-                <Text style={styles.prefix}>+58</Text>
-                <View style={styles.divider} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="412 1234567"
-                  placeholderTextColor="#B8C4D4"
-                  keyboardType="phone-pad"
-                  value={phone}
-                  onChangeText={setPhone}
-                  maxLength={12}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={styles.inputLabel}>CÓDIGO SMS</Text>
-              <View style={styles.inputCard}>
-                <Ionicons name="keypad" size={20} color="#3072ffe7" />
-                <View style={styles.divider} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="000000"
-                  placeholderTextColor="#B8C4D4"
-                  keyboardType="number-pad"
-                  value={code}
-                  onChangeText={setCode}
-                  maxLength={6}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-            </>
-          )}
+          {/* ── INPUT CÉDULA ── */}
+          <Text style={styles.inputLabel}>NÚMERO DE CÉDULA</Text>
+          <View style={styles.inputCard}>
+            <Text style={styles.prefix}>V-</Text>
+            <View style={styles.divider} />
+            <TextInput
+              style={styles.input}
+              placeholder="00000000"
+              placeholderTextColor="#B8C4D4"
+              keyboardType="number-pad"
+              value={cedula}
+              onChangeText={setCedula}
+              maxLength={10}
+              selectionColor={tokens.colors.primary}
+              editable={!loading}
+            />
+          </View>
+
 
           {/* Nota de seguridad */}
           <View style={styles.secureRow}>
@@ -188,15 +132,15 @@ export default function LoginScreen() {
           {/* ── BOTÓN ── */}
           <Pressable
             style={({ pressed }) => [styles.cta, pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] }, loading && { opacity: 0.7 }]}
-            onPress={confirmation ? handleVerifyCode : handleSendSMS}
+            onPress={handleLogin}
             disabled={loading}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Text style={styles.ctaText}>{confirmation ? 'Confirmar Código' : 'Recibir SMS'}</Text>
-                <Ionicons name={confirmation ? 'checkmark-circle-outline' : 'chatbubble-outline'} size={20} color="#fff" style={{ marginLeft: 10 }} />
+                <Text style={styles.ctaText}>Ingresar</Text>
+                <Ionicons name="arrow-forward-circle-outline" size={20} color="#fff" style={{ marginLeft: 10 }} />
               </>
             )}
           </Pressable>
