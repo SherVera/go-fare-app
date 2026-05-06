@@ -24,6 +24,26 @@ Este proyecto utiliza **Expo** y **Expo Router**.
 
 ---
 
+## 🧾 Commits y Changelog
+
+Este repo usa **Conventional Commits** con `commitizen` y genera `CHANGELOG.md` con `standard-version`.
+
+- Commit guiado:
+
+```bash
+npm run commit
+```
+
+- Generar changelog / release:
+
+```bash
+npm run release
+```
+
+Más detalles en `DEVELOPING.md`.
+
+---
+
 ## 🛠 Decisiones Técnicas y Limitaciones
 
 ### Decisiones:

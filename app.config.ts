@@ -61,6 +61,16 @@ const config: ExpoConfig = {
     },
   },
   plugins: [
+    [
+      'expo-build-properties',
+      {
+        ios: {
+          // Required for @react-native-firebase on iOS (Swift pods + static linkage).
+          useFrameworks: 'static',
+        },
+      },
+    ],
+    './plugins/withPodfileIosAllowNonModularIncludes',
     'expo-router',
     [
       'expo-splash-screen',

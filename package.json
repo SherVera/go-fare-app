@@ -9,7 +9,11 @@
     "ios": "expo run:ios",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "prebuild": "expo prebuild --clean"
+    "prebuild": "expo prebuild --clean",
+    "commit": "cz",
+    "commit:ai": "aicommits --conventional",
+    "release": "standard-version",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@expo-google-fonts/outfit": "^0.4.3",
@@ -24,6 +28,7 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "expo": "~54.0.33",
+    "expo-build-properties": "~1.0.10",
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",
@@ -51,9 +56,19 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "aicommits": "^3.1.1",
+    "commitizen": "^4.3.1",
+    "cz-conventional-changelog": "^3.3.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "patch-package": "^8.0.1",
+    "standard-version": "^9.5.0",
     "typescript": "~5.9.2"
+  },
+  "config": {
+    "commitizen": {
+      "path": "cz-conventional-changelog"
+    }
   },
   "private": true
 }
