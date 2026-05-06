@@ -1,0 +1,14 @@
+diff --git a/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBSharedUtils.h b/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBSharedUtils.h
+index ebfe513..015dda7 100644
+--- a/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBSharedUtils.h
++++ b/node_modules/@react-native-firebase/app/ios/RNFBApp/RNFBSharedUtils.h
+@@ -18,8 +18,8 @@
+ #ifndef RNFBSharedUtils_h
+ #define RNFBSharedUtils_h
+ 
+-#import <FirebaseCore/FirebaseCore.h>
+ #import <React/RCTBridgeModule.h>
++#import <FirebaseCore/FirebaseCore.h>
+ 
+ #ifdef DEBUG
+ #define DLog(fmt, ...) NSLog((@"%s [Line %d] " fmt), __PRETTY_FUNCTION__, __LINE__, ##__VA_ARGS__);
