@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "331016100320",
-    "project_id": "assas-432ce",
-    "storage_bucket": "assas-432ce.appspot.com"
+    "project_number": "338152520875",
+    "project_id": "go-fare-dev-e7501",
+    "storage_bucket": "go-fare-dev-e7501.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:331016100320:android:43b9fff4550f4adde37385",
+        "mobilesdk_app_id": "1:338152520875:android:e862d513400389f65c8bee",
         "android_client_info": {
           "package_name": "com.gofare.app"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBw4Hwy4zK_YEW8emaJy-EX_jWhCvMa5RU"
+          "current_key": "AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ"
         }
       ],
       "services": {

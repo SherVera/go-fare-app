@@ -1,15 +1,14 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-// Import Native Firebase Auth
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  getAuth,
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile,
-  signOut,
+  getAuth,
+  onAuthStateChanged,
   sendPasswordResetEmail,
-  signInWithPhoneNumber
+  signInWithEmailAndPassword,
+  signInWithPhoneNumber,
+  signOut,
+  updateProfile,
+  type FirebaseAuthTypes,
 } from '@react-native-firebase/auth';
 import {
   addDoc,
@@ -24,137 +23,99 @@ import {
   setDoc,
   updateDoc,
   where,
-} from "firebase/firestore";
-import { getDownloadURL, getStorage, ref, uploadString } from "firebase/storage";
+} from '@react-native-firebase/firestore';
+import {
+  getDownloadURL,
+  getStorage,
+  ref,
+  uploadString,
+} from '@react-native-firebase/storage';
 
-// https://firebase.google.com/docs/web/setup#available-libraries
+// `@react-native-firebase/firestore@24` doesn't ship .d.ts for the modular
+// subpath, so we derive the constraint type from `query()`'s second argument.
+type QueryConstraint = NonNullable<Parameters<typeof query>[1]>;
 
-// Your web app's Firebase configuration
-export const firebaseConfig = {
-apiKey: "AIzaSyAihFvcZro_r2J74qxLizdL_NAKqSafo88",
-  authDomain: "assas-432ce.firebaseapp.com",
-  projectId: "assas-432ce",
-  storageBucket: "assas-432ce.appspot.com",
-  messagingSenderId: "331016100320",
-  appId: "1:331016100320:web:e550f6377b957d1ee37385"
-};
+// RN Firebase auto-initializes the default app from
+// `GoogleService-Info.plist` (iOS) and `google-services.json` (Android)
+// at native startup. No `initializeApp` / `firebaseConfig` needed.
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-// Para Firestore y Storage
-export default app;
-
-// Exportamos la instancia nativa de auth para usarla en el resto de la app
 export const auth = getAuth();
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+export const db = getFirestore();
+export const storage = getStorage();
+export const listenToAuthState = onAuthStateChanged;
 
+type Credentials = { email: string; password: string };
 
-//TODO Las FUNCIONES DEL AUTH //
+export const createUser = ({ email, password }: Credentials) =>
+  createUserWithEmailAndPassword(auth, email, password);
 
-//?CREAR NUEVO USUARIO///
-export const createUser = async (user: { email: string; password: string }) => {
-  return await createUserWithEmailAndPassword(auth, user.email, user.password);
-};
+export const signIn = ({ email, password }: Credentials) =>
+  signInWithEmailAndPassword(auth, email, password);
 
-//??ENTRAR CON EMAIL & CONTRASEÑA//
-export const signIn = async (user: { email: string; password: string }) => {
-  return await signInWithEmailAndPassword(auth, user.email, user.password);
-};
-
-//?ACTUALIZAR USUARIO//
 export const updateUser = async (user: {
   displayName?: string | null;
   photoURL?: string | null;
 }) => {
-  if (auth.currentUser) return await updateProfile(auth.currentUser, user);
+  if (auth.currentUser) {
+    return updateProfile(auth.currentUser, user);
+  }
 };
 
-//?CERRAR SESION//
 export const sigOutAccount = async () => {
-  await AsyncStorage.removeItem("user");
-  return await signOut(auth);
+  await AsyncStorage.removeItem('user');
+  return signOut(auth);
 };
 
-//? RECUPERAR CONTRASEÑA//
-export const sentResetEmail = async (email: string) => {
-  return await sendPasswordResetEmail(auth, email);
-};
+export const sentResetEmail = (email: string) => sendPasswordResetEmail(auth, email);
 
+export const sendPhoneVerificationCode = (phoneNumber: string) =>
+  signInWithPhoneNumber(auth, phoneNumber);
 
-//TODO FUNCIONES AUTH - TELEFONO //
+export const confirmPhoneCode = (
+  confirmation: FirebaseAuthTypes.ConfirmationResult,
+  verificationCode: string,
+) => confirmation.confirm(verificationCode);
 
-//?ENVIAR SMS VERIFICACION (NATIVO)//
-export const sendPhoneVerificationCode = async (phoneNumber: string) => {
-  // Con el SDK Nativo, esto llama a Google Play Integrity automáticamente sin Captcha
-  const confirmation = await signInWithPhoneNumber(auth, phoneNumber);
-  return confirmation; // Retornamos el objeto de confirmación
-};
-
-//?CONFIRMAR CODIGO Y AUTENTICAR CON TELEFONO (NATIVO)//
-export const confirmPhoneCode = async (
-  confirmation: any,
-  verificationCode: string
-) => {
-  // Confirmamos directamente usando el objeto que nos devolvió Firebase Nativo
-  return await confirmation.confirm(verificationCode);
-};
-
-
-//? BUSCAR USUARIO POR CEDULA EN FIRESTORE //
 export const getUserByCedula = async (cedula: string): Promise<string | null> => {
   const usersRef = collection(db, 'users');
   const q = query(usersRef, where('cedula', '==', cedula.trim()));
   const snap = await getDocs(q);
   if (snap.empty) return null;
-  const data = snap.docs[0].data();
+  const data = snap.docs[0].data() as { phone?: string };
   return data.phone ?? null;
 };
 
-
-
-
-export const getCollection = async (colectionName: string, queryArray?: any[]) => {
-  const ref = collection(db, colectionName);
-  const q = queryArray ? query(ref, ...queryArray) : query(ref);
-  return (await getDocs(q)).docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+export const getCollection = async (
+  collectionName: string,
+  queryConstraints: QueryConstraint[] = [],
+) => {
+  const collectionRef = collection(db, collectionName);
+  const collectionQuery = query(collectionRef, ...queryConstraints);
+  return (await getDocs(collectionQuery)).docs.map((snapshot) => ({
+    id: snapshot.id,
+    ...snapshot.data(),
+  }));
 };
 
-//?OBTENER UN DOCUMENTO DE UNA COLECCION//
 export const getDocument = async (path: string) => {
   return (await getDoc(doc(db, path))).data();
 };
 
-//?SETEAR UN DOCUMENTO EN UNA COLECCION//
-export const setDocument = (path: string, data: any) => {
-  data.createAt = serverTimestamp();
-  return setDoc(doc(db, path), data);
+export const setDocument = (path: string, data: Record<string, unknown>) => {
+  return setDoc(doc(db, path), { ...data, createAt: serverTimestamp() });
 };
 
-//? ACTUALIZAR UN DOCUMENTO EN UNA COLECCION//
-export const updateDocument = (path: string, data: any) => {
+export const updateDocument = (path: string, data: Record<string, unknown>) => {
   return updateDoc(doc(db, path), data);
 };
 
-//? ELIMINAR UN DOCUMENTO DE UNA COLECCION//
-export const deleteDocument = (path: string) => {
-  return deleteDoc(doc(db, path));
+export const deleteDocument = (path: string) => deleteDoc(doc(db, path));
+
+export const addDocument = (path: string, data: Record<string, unknown>) => {
+  return addDoc(collection(db, path), { ...data, createAt: serverTimestamp() });
 };
 
-//? AGREGAR UN DOCUMENTO //////
-export const addDocument = (path: string, data: any) => {
-  data.createAt = serverTimestamp();
-  return addDoc(collection(db, path), data);
-};
-
-//?TODO ===== FUNCIONES DEL STORAGE====== ///
-
-//! SUBIR UN ARCHIVO CON FORMATO BASE64 & OBTENER SU URL//
 export const uploadBase64 = async (path: string, base64: string) => {
-  return uploadString(ref(storage, path), base64, "data_url").then(() => {
-    return getDownloadURL(ref(storage, path));
-  });
+  await uploadString(ref(storage, path), base64, 'data_url');
+  return getDownloadURL(ref(storage, path));
 };
