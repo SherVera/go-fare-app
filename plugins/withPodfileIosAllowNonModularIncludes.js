@@ -1,4 +1,4 @@
-const {withDangerousMod} = require('expo/config-plugins');
+const { withDangerousMod } = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -16,7 +16,11 @@ function withPodfileIosRnfbMapsCompat(config) {
   return withDangerousMod(config, [
     'ios',
     async (cfg) => {
-      const podfilePath = path.join(cfg.modRequest.projectRoot, 'ios', 'Podfile');
+      const podfilePath = path.join(
+        cfg.modRequest.projectRoot,
+        'ios',
+        'Podfile',
+      );
       if (!fs.existsSync(podfilePath)) {
         return cfg;
       }
@@ -30,7 +34,11 @@ function withPodfileIosRnfbMapsCompat(config) {
         );
       }
 
-      if (!contents.includes('CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES')) {
+      if (
+        !contents.includes(
+          'CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES',
+        )
+      ) {
         const anchor =
           ':ccache_enabled => ccache_enabled?(podfile_properties),\n    )\n  end';
         if (contents.includes(anchor)) {
@@ -45,7 +53,9 @@ function withPodfileIosRnfbMapsCompat(config) {
   end`,
           );
         } else {
-          console.warn('[withPodfileIosRnfbMapsCompat] post_install anchor not found; skipping');
+          console.warn(
+            '[withPodfileIosRnfbMapsCompat] post_install anchor not found; skipping',
+          );
         }
       }
 

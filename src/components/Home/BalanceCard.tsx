@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { tokens } from '@/theme/tokens';
 
 export const BalanceCard = () => {
@@ -33,7 +33,12 @@ export const BalanceCard = () => {
           <View style={[styles.miniIcon, { backgroundColor: '#065F46' }]}>
             <Ionicons name="bus" size={14} color="#FFFFFF" />
           </View>
-          <View style={[styles.miniIcon, { backgroundColor: '#1E40AF', marginLeft: 8 }]}>
+          <View
+            style={[
+              styles.miniIcon,
+              { backgroundColor: '#1E40AF', marginLeft: 8 },
+            ]}
+          >
             <Ionicons name="scan" size={14} color="#FFF" />
           </View>
         </View>

@@ -11,7 +11,8 @@ const requireEnv = (key: string): string => {
   return value;
 };
 
-const optionalEnv = (key: string): string | undefined => process.env[key] || undefined;
+const optionalEnv = (key: string): string | undefined =>
+  process.env[key] || undefined;
 
 const googleMapsIosApiKey = optionalEnv('GOOGLE_MAPS_IOS_API_KEY');
 
@@ -95,7 +96,8 @@ const config: ExpoConfig = {
   extra: {
     router: {},
     eas: {
-      projectId: optionalEnv('EAS_PROJECT_ID') ?? '1e738e60-7dd4-48be-b8f6-dd713dee3b67',
+      projectId:
+        optionalEnv('EAS_PROJECT_ID') ?? '1e738e60-7dd4-48be-b8f6-dd713dee3b67',
     },
   },
 };

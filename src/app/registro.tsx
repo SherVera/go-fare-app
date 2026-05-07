@@ -1,9 +1,9 @@
-import { ScreenHeader } from '@/components/ScreenHeader';
-import { tokens } from '@/theme/tokens';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,11 +12,16 @@ import {
   Text,
   TextInput,
   View,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { sendPhoneVerificationCode, confirmPhoneCode, setDocument, auth } from '@/lib/firebase';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import {
+  auth,
+  confirmPhoneCode,
+  sendPhoneVerificationCode,
+  setDocument,
+} from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function RegistroScreen() {
   const router = useRouter();
@@ -54,11 +59,17 @@ export default function RegistroScreen() {
         return;
       }
       if (!/^\d{5,10}$/.test(trimmedCedula)) {
-        Alert.alert('Atención', 'La cédula debe contener entre 5 y 10 números.');
+        Alert.alert(
+          'Atención',
+          'La cédula debe contener entre 5 y 10 números.',
+        );
         return;
       }
       if (!/^\d{10}$/.test(finalPhone)) {
-        Alert.alert('Atención', 'El teléfono debe ser válido (Ej: 0412 1234567).');
+        Alert.alert(
+          'Atención',
+          'El teléfono debe ser válido (Ej: 0412 1234567).',
+        );
         return;
       }
 
@@ -82,7 +93,7 @@ export default function RegistroScreen() {
       }
       setLoading(true);
       await confirmPhoneCode(confirmation, code);
-      
+
       // Save user to Firestore
       if (auth.currentUser) {
         await setDocument(`users/${auth.currentUser.uid}`, {
@@ -91,12 +102,15 @@ export default function RegistroScreen() {
           phone: phone.startsWith('+') ? phone : `+58${phone}`,
         });
       }
-      
+
       router.replace('/(tabs)' as any);
     } catch (error: any) {
-      console.error("Error en registro:", error);
+      console.error('Error en registro:', error);
       if (error.message && error.message.includes('firestore')) {
-        Alert.alert('Error de Base de Datos', 'Usuario autenticado pero no se pudo guardar el perfil. Revisa las reglas de Firestore.');
+        Alert.alert(
+          'Error de Base de Datos',
+          'Usuario autenticado pero no se pudo guardar el perfil. Revisa las reglas de Firestore.',
+        );
       } else {
         Alert.alert('Error', 'Código inválido o expirado. ' + error.message);
       }
@@ -136,11 +150,15 @@ export default function RegistroScreen() {
 
           {/* ── TÍTULOS ── */}
           <View style={styles.titleBlock}>
-            <Text style={styles.titleDark}>{confirmation ? 'Confirma tu' : 'Únete a'}</Text>
-            <Text style={styles.titleBlue}>{confirmation ? 'Registro' : 'GoFair'}</Text>
+            <Text style={styles.titleDark}>
+              {confirmation ? 'Confirma tu' : 'Únete a'}
+            </Text>
+            <Text style={styles.titleBlue}>
+              {confirmation ? 'Registro' : 'GoFair'}
+            </Text>
             <Text style={styles.subtitle}>
-              {confirmation 
-                ? `Ingresa el código SMS enviado al +58 ${phone}` 
+              {confirmation
+                ? `Ingresa el código SMS enviado al +58 ${phone}`
                 : `Crea tu cuenta para moverte\npor la ciudad libremente.`}
             </Text>
           </View>
@@ -234,7 +252,11 @@ export default function RegistroScreen() {
 
           {/* ── BOTÓN ── */}
           <Pressable
-            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] }, loading && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.cta,
+              pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+              loading && { opacity: 0.7 },
+            ]}
             onPress={confirmation ? handleVerifyCode : handleSendSMS}
             disabled={loading}
           >
@@ -242,8 +264,19 @@ export default function RegistroScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Text style={styles.ctaText}>{confirmation ? 'Confirmar Registro' : 'Recibir SMS'}</Text>
-                <Ionicons name={confirmation ? 'checkmark-circle-outline' : 'chatbubble-outline'} size={20} color="#fff" style={{ marginLeft: 10 }} />
+                <Text style={styles.ctaText}>
+                  {confirmation ? 'Confirmar Registro' : 'Recibir SMS'}
+                </Text>
+                <Ionicons
+                  name={
+                    confirmation
+                      ? 'checkmark-circle-outline'
+                      : 'chatbubble-outline'
+                  }
+                  size={20}
+                  color="#fff"
+                  style={{ marginLeft: 10 }}
+                />
               </>
             )}
           </Pressable>
@@ -258,7 +291,6 @@ export default function RegistroScreen() {
 
           {/* ── FOOTER ── */}
           <Text style={styles.footerLegal}>CARACAS MOVE • REGISTRO SEGURO</Text>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -278,7 +310,7 @@ const styles = StyleSheet.create({
     height: 76,
     borderRadius: 38,
     backgroundColor: '#B8C8DF',
-    opacity: 0.60,
+    opacity: 0.6,
   },
   scroll: {
     flexGrow: 1,
@@ -296,9 +328,9 @@ const styles = StyleSheet.create({
     height: 136,
     borderRadius: 30,
     backgroundColor: '#91B4E0',
-    opacity: 0.30,
+    opacity: 0.3,
     top: 18,
-    transform: [{ scaleX: 0.90 }],
+    transform: [{ scaleX: 0.9 }],
   },
   iconCard: {
     width: 160,
@@ -406,7 +438,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     shadowColor: '#1D5BD9',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.40,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 12,
   },

@@ -1,13 +1,15 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { tokens } from '../theme/tokens';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { tokens } from '../theme/tokens';
 
 export default function TicketDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.title}>Ticket Detail</Text>
-      <Text style={styles.subtitle}>Detalles de tu pase estarán aquí pronto.</Text>
+      <Text style={styles.subtitle}>
+        Detalles de tu pase estarán aquí pronto.
+      </Text>
     </SafeAreaView>
   );
 }

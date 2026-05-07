@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createUserWithEmailAndPassword,
+  type FirebaseAuthTypes,
   getAuth,
   onAuthStateChanged,
   sendPasswordResetEmail,
@@ -8,7 +9,6 @@ import {
   signInWithPhoneNumber,
   signOut,
   updateProfile,
-  type FirebaseAuthTypes,
 } from '@react-native-firebase/auth';
 import {
   addDoc,
@@ -66,7 +66,8 @@ export const sigOutAccount = async () => {
   return signOut(auth);
 };
 
-export const sentResetEmail = (email: string) => sendPasswordResetEmail(auth, email);
+export const sentResetEmail = (email: string) =>
+  sendPasswordResetEmail(auth, email);
 
 export const sendPhoneVerificationCode = (phoneNumber: string) =>
   signInWithPhoneNumber(auth, phoneNumber);
@@ -76,7 +77,9 @@ export const confirmPhoneCode = (
   verificationCode: string,
 ) => confirmation.confirm(verificationCode);
 
-export const getUserByCedula = async (cedula: string): Promise<string | null> => {
+export const getUserByCedula = async (
+  cedula: string,
+): Promise<string | null> => {
   const usersRef = collection(db, 'users');
   const q = query(usersRef, where('cedula', '==', cedula.trim()));
   const snap = await getDocs(q);

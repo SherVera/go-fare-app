@@ -1,46 +1,51 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { tokens } from '@/theme/tokens';
-import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import React, { useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { sigOutAccount } from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function PerfilScreen() {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = () => {
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Estás seguro de que deseas cerrar sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar Sesión',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoggingOut(true);
-              await sigOutAccount();
-              router.replace('/login');
-            } catch (error) {
-              console.error('Error al cerrar sesión:', error);
-              Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
-            } finally {
-              setLoggingOut(false);
-            }
-          },
+    Alert.alert('Cerrar Sesión', '¿Estás seguro de que deseas cerrar sesión?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cerrar Sesión',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setLoggingOut(true);
+            await sigOutAccount();
+            router.replace('/login');
+          } catch (error) {
+            console.error('Error al cerrar sesión:', error);
+            Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
+          } finally {
+            setLoggingOut(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
-      
+
       {/* ── HEADER ── */}
       <View style={styles.header}>
         <Pressable hitSlop={10} style={styles.menuBtn}>
@@ -53,8 +58,10 @@ export default function PerfilScreen() {
         />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* ── PROFILE CARD ── */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
@@ -83,14 +90,19 @@ export default function PerfilScreen() {
         <View style={styles.infoCard}>
           <Text style={styles.infoLabel}>CIUDAD</Text>
           <View style={styles.locationRow}>
-            <Ionicons name="location-outline" size={20} color="#0F766E" style={styles.locationIcon} />
+            <Ionicons
+              name="location-outline"
+              size={20}
+              color="#0F766E"
+              style={styles.locationIcon}
+            />
             <Text style={styles.infoValueDark}>Caracas, Venezuela</Text>
           </View>
         </View>
 
         {/* ── CONFIGURATION SECTION ── */}
         <Text style={styles.sectionTitle}>Configuración de la Cuenta</Text>
-        
+
         <Pressable style={styles.menuItem}>
           <View style={styles.menuIconWrapper}>
             <Ionicons name="card" size={22} color={tokens.colors.primary} />
@@ -104,7 +116,11 @@ export default function PerfilScreen() {
 
         <Pressable style={styles.menuItem}>
           <View style={styles.menuIconWrapper}>
-            <Ionicons name="lock-closed" size={22} color={tokens.colors.primary} />
+            <Ionicons
+              name="lock-closed"
+              size={22}
+              color={tokens.colors.primary}
+            />
           </View>
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>Seguridad y Contraseña</Text>
@@ -115,7 +131,11 @@ export default function PerfilScreen() {
 
         <Pressable style={styles.menuItem}>
           <View style={styles.menuIconWrapper}>
-            <Ionicons name="notifications" size={22} color={tokens.colors.primary} />
+            <Ionicons
+              name="notifications"
+              size={22}
+              color={tokens.colors.primary}
+            />
           </View>
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>Notificaciones</Text>
@@ -126,7 +146,11 @@ export default function PerfilScreen() {
 
         <Pressable style={styles.menuItem}>
           <View style={styles.menuIconWrapper}>
-            <Ionicons name="information-circle" size={24} color={tokens.colors.primary} />
+            <Ionicons
+              name="information-circle"
+              size={24}
+              color={tokens.colors.primary}
+            />
           </View>
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>Ayuda y Soporte</Text>
@@ -142,15 +166,24 @@ export default function PerfilScreen() {
           disabled={loggingOut}
         >
           {loggingOut ? (
-            <ActivityIndicator size="small" color="#DC2626" style={{ marginRight: 8 }} />
+            <ActivityIndicator
+              size="small"
+              color="#DC2626"
+              style={{ marginRight: 8 }}
+            />
           ) : (
-            <Ionicons name="log-out-outline" size={22} color="#DC2626" style={{ marginRight: 8 }} />
+            <Ionicons
+              name="log-out-outline"
+              size={22}
+              color="#DC2626"
+              style={{ marginRight: 8 }}
+            />
           )}
           <Text style={styles.logoutText}>
             {loggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión'}
           </Text>
         </Pressable>
-        
+
         {/* Space for the absolute tab bar */}
         <View style={{ height: 120 }} />
       </ScrollView>
@@ -278,7 +311,7 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6', 
+    backgroundColor: '#F3F4F6',
     padding: 16,
     borderRadius: 20,
     marginBottom: 12,
@@ -287,7 +320,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#DBEAFE', 
+    backgroundColor: '#DBEAFE',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -310,7 +343,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FEE2E2', 
+    backgroundColor: '#FEE2E2',
     paddingVertical: 18,
     borderRadius: 20,
     marginTop: 12,

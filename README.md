@@ -40,7 +40,15 @@ npm run commit
 npm run release
 ```
 
-Más detalles en `DEVELOPING.md`.
+Más detalles en [`DEVELOPING.md`](./DEVELOPING.md) (commits, PRs, plantilla de PR, CI).
+
+### Contribuir / PRs
+
+Al abrir un PR, GitHub carga la plantilla en [`.github/pull_request_template.md`](./.github/pull_request_template.md). Sigue el título en formato **Conventional Commits** si usas *squash merge*.
+
+### Lint / formato
+
+Se usa **Biome** (`npm run lint`). ESLint de Expo sigue disponible como `npm run lint:eslint` cuando haga falta.
 
 ---
 

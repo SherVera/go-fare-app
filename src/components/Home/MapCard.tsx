@@ -1,11 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Animated } from 'react-native';
 import * as Location from 'expo-location';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Animated,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { tokens } from '@/theme/tokens';
-import { NativeMap } from './NativeMap';
 import { MapErrorBoundary } from './MapErrorBoundary';
+import { NativeMap } from './NativeMap';
 export const MapCard = () => {
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [location, setLocation] = useState<Location.LocationObject | null>(
+    null,
+  );
   const [address, setAddress] = useState<string>('Buscando ubicación...');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const animatedValue = useRef(new Animated.Value(0)).current;
@@ -23,7 +31,7 @@ export const MapCard = () => {
           duration: 1000,
           useNativeDriver: false,
         }),
-      ])
+      ]),
     ).start();
 
     (async () => {
@@ -42,17 +50,18 @@ export const MapCard = () => {
 
         let geocode = await Location.reverseGeocodeAsync({
           latitude: location.coords.latitude,
-          longitude: location.coords.longitude
+          longitude: location.coords.longitude,
         });
 
         if (geocode && geocode.length > 0) {
           const place = geocode[0];
-          const name = place.street || place.district || place.city || 'Desconocida';
+          const name =
+            place.street || place.district || place.city || 'Desconocida';
           setAddress(`Ubicación actual: ${name}`);
         } else {
           setAddress('Ubicación actual: Coordenadas');
         }
-      } catch (error) {
+      } catch (_error) {
         try {
           // Fallback to last known position
           let location = await Location.getLastKnownPositionAsync({});
@@ -61,14 +70,14 @@ export const MapCard = () => {
             setAddress('Ubicación aproximada');
             return;
           }
-        } catch (e) {
+        } catch (_e) {
           // Ignore
         }
         setErrorMsg('Error al obtener ubicación');
         setAddress('Ubicación no disponible');
       }
     })();
-  }, []);
+  }, [animatedValue]);
 
   const renderMap = () => {
     if (!location) {
@@ -96,8 +105,17 @@ export const MapCard = () => {
       <View style={styles.mapWrapper}>
         {renderMap()}
         <View style={styles.badge}>
-          <Animated.View style={[styles.dot, errorMsg ? { backgroundColor: '#EF4444' } : { backgroundColor: dotColor }]} />
-          <Text style={styles.badgeText} numberOfLines={1}>{address}</Text>
+          <Animated.View
+            style={[
+              styles.dot,
+              errorMsg
+                ? { backgroundColor: '#EF4444' }
+                : { backgroundColor: dotColor },
+            ]}
+          />
+          <Text style={styles.badgeText} numberOfLines={1}>
+            {address}
+          </Text>
         </View>
       </View>
     </View>
