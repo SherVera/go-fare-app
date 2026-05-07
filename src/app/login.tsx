@@ -1,9 +1,10 @@
-import { ScreenHeader } from '@/components/ScreenHeader';
-import { tokens } from '@/theme/tokens';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,11 +13,10 @@ import {
   Text,
   TextInput,
   View,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -39,13 +39,12 @@ export default function LoginScreen() {
       return;
     }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 600));
     // Guardar bandera de sesión temporal
     await AsyncStorage.setItem('temp_auth', 'true');
     setLoading(false);
     router.replace('/(tabs)' as any);
   };
-
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -65,7 +64,6 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-
           {/* ── SECCIÓN DEL ÍCONO ── */}
           <View style={styles.iconSection}>
             {/* Sombra falsa azulada para efecto de flotación/3D */}
@@ -113,7 +111,6 @@ export default function LoginScreen() {
             />
           </View>
 
-
           {/* Nota de seguridad */}
           <View style={styles.secureRow}>
             <Ionicons
@@ -123,7 +120,8 @@ export default function LoginScreen() {
               style={{ marginTop: 1, marginRight: 6 }}
             />
             <Text style={styles.secureText}>
-              Su información está protegida por encriptación{'\n'}de grado gubernamental para Caracas Move.
+              Su información está protegida por encriptación{'\n'}de grado
+              gubernamental para Caracas Move.
             </Text>
           </View>
 
@@ -131,7 +129,11 @@ export default function LoginScreen() {
 
           {/* ── BOTÓN ── */}
           <Pressable
-            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] }, loading && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.cta,
+              pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+              loading && { opacity: 0.7 },
+            ]}
             onPress={handleLogin}
             disabled={loading}
           >
@@ -140,7 +142,12 @@ export default function LoginScreen() {
             ) : (
               <>
                 <Text style={styles.ctaText}>Ingresar</Text>
-                <Ionicons name="arrow-forward-circle-outline" size={20} color="#fff" style={{ marginLeft: 10 }} />
+                <Ionicons
+                  name="arrow-forward-circle-outline"
+                  size={20}
+                  color="#fff"
+                  style={{ marginLeft: 10 }}
+                />
               </>
             )}
           </Pressable>
@@ -159,8 +166,9 @@ export default function LoginScreen() {
             <Text style={styles.footerBullet}> • </Text>
             <Text style={styles.footerSupport}>Soporte Técnico</Text>
           </View>
-          <Text style={styles.footerLegal}>CARACAS MOVE • VERIFICACIÓN SEGURA</Text>
-
+          <Text style={styles.footerLegal}>
+            CARACAS MOVE • VERIFICACIÓN SEGURA
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -182,7 +190,7 @@ const styles = StyleSheet.create({
     height: 76,
     borderRadius: 38,
     backgroundColor: '#B8C8DF',
-    opacity: 0.60,
+    opacity: 0.6,
   },
 
   scroll: {
@@ -224,9 +232,9 @@ const styles = StyleSheet.create({
     height: 136,
     borderRadius: 30,
     backgroundColor: '#91B4E0',
-    opacity: 0.30,
-    top: 18,          // desplazado hacia abajo
-    transform: [{ scaleX: 0.90 }],  // ligeramente más angosto que el card
+    opacity: 0.3,
+    top: 18, // desplazado hacia abajo
+    transform: [{ scaleX: 0.9 }], // ligeramente más angosto que el card
   },
 
   /* Tarjeta del ícono */
@@ -362,7 +370,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     shadowColor: '#1D5BD9',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.40,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 12,
   },

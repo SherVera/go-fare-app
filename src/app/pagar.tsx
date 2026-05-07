@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { tokens } from '@/theme/tokens';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import React, { useEffect, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { tokens } from '@/theme/tokens';
 
 export default function PagarViajeScreen() {
   const router = useRouter();
@@ -17,13 +17,19 @@ export default function PagarViajeScreen() {
     if (permission && !permission.granted && permission.canAskAgain) {
       requestPermission();
     }
-  }, [permission]);
+  }, [permission, requestPermission]);
 
-  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+  const handleBarCodeScanned = ({
+    type,
+    data,
+  }: {
+    type: string;
+    data: string;
+  }) => {
     if (scanned) return;
     setScanned(true);
     Alert.alert('Código Escaneado', `Información: ${data}`, [
-      { text: 'Aceptar', onPress: () => setScanned(false) }
+      { text: 'Aceptar', onPress: () => setScanned(false) },
     ]);
   };
 
@@ -36,15 +42,29 @@ export default function PagarViajeScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={10}
+            style={styles.backButton}
+          >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </Pressable>
           <Text style={styles.headerTitle}>Pagar Viajes</Text>
         </View>
         <View style={styles.permissionContainer}>
-          <Ionicons name="camera-outline" size={64} color="#9CA3AF" style={{ marginBottom: 16 }} />
-          <Text style={styles.permissionText}>Necesitamos acceso a tu cámara para escanear los códigos QR.</Text>
-          <Pressable style={styles.permissionButton} onPress={requestPermission}>
+          <Ionicons
+            name="camera-outline"
+            size={64}
+            color="#9CA3AF"
+            style={{ marginBottom: 16 }}
+          />
+          <Text style={styles.permissionText}>
+            Necesitamos acceso a tu cámara para escanear los códigos QR.
+          </Text>
+          <Pressable
+            style={styles.permissionButton}
+            onPress={requestPermission}
+          >
             <Text style={styles.permissionButtonText}>Otorgar Permiso</Text>
           </Pressable>
         </View>
@@ -55,10 +75,14 @@ export default function PagarViajeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <StatusBar style="light" />
-      
+
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.backButton}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={10}
+          style={styles.backButton}
+        >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.headerTitle}>Pagar Viajes</Text>
@@ -79,10 +103,14 @@ export default function PagarViajeScreen() {
             <View style={[styles.corner, styles.topRight]} />
             <View style={[styles.corner, styles.bottomLeft]} />
             <View style={[styles.corner, styles.bottomRight]} />
-            
+
             {/* Laser Line */}
             <LinearGradient
-              colors={['rgba(59, 130, 246, 0)', 'rgba(59, 130, 246, 0.8)', 'rgba(59, 130, 246, 0)']}
+              colors={[
+                'rgba(59, 130, 246, 0)',
+                'rgba(59, 130, 246, 0.8)',
+                'rgba(59, 130, 246, 0)',
+              ]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.laserLine}
@@ -102,10 +130,13 @@ export default function PagarViajeScreen() {
       {/* ── BOTTOM ACTIONS ── */}
       <View style={styles.bottomSection}>
         <View style={styles.actionButtonsRow}>
-          
           <View style={styles.actionItem}>
             <Pressable style={styles.scanButtonActive}>
-              <MaterialCommunityIcons name="qrcode-scan" size={28} color="#FFFFFF" />
+              <MaterialCommunityIcons
+                name="qrcode-scan"
+                size={28}
+                color="#FFFFFF"
+              />
             </Pressable>
             <Text style={styles.actionTextActive}>ESCANEAR</Text>
           </View>
@@ -116,15 +147,17 @@ export default function PagarViajeScreen() {
             </Pressable>
             <Text style={styles.actionTextInactive}>GALERÍA</Text>
           </View>
-          
         </View>
 
         <View style={styles.secureBadge}>
-          <MaterialCommunityIcons name="shield-check" size={16} color="#10B981" />
+          <MaterialCommunityIcons
+            name="shield-check"
+            size={16}
+            color="#10B981"
+          />
           <Text style={styles.secureText}>PAGO SEGURO ENCRIPTADO</Text>
         </View>
       </View>
-
     </SafeAreaView>
   );
 }

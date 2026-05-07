@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { tokens } from '@/theme/tokens';
 
 interface ActionCardProps {
@@ -12,19 +12,28 @@ interface ActionCardProps {
   color?: string;
 }
 
-export const ActionCard = ({ title, subtitle, icon, onPress, style, color }: ActionCardProps) => {
+export const ActionCard = ({
+  title,
+  subtitle,
+  icon,
+  onPress,
+  style,
+  color,
+}: ActionCardProps) => {
   const primaryColor = color || tokens.colors.primary;
-  
+
   return (
     <Pressable
       style={({ pressed }) => [
         styles.card,
         style,
-        pressed && { transform: [{ scale: 0.98 }], opacity: 0.9 }
+        pressed && { transform: [{ scale: 0.98 }], opacity: 0.9 },
       ]}
       onPress={onPress}
     >
-      <View style={[styles.iconContainer, { backgroundColor: primaryColor + '15' }]}>
+      <View
+        style={[styles.iconContainer, { backgroundColor: primaryColor + '15' }]}
+      >
         <MaterialCommunityIcons name={icon} size={28} color={primaryColor} />
       </View>
       <Text style={styles.title}>{title}</Text>

@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { tokens } from '../theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { tokens } from '../theme/tokens';
 
 interface FeatureCardProps {
   title: string;
@@ -23,7 +23,11 @@ export const FeatureCard = ({
   return (
     <View style={[styles.card, style]}>
       <View style={[styles.iconContainer, { backgroundColor: iconBgColor }]}>
-        <Ionicons name={iconName} size={tokens.typography.sizes.lg} color={iconColor} />
+        <Ionicons
+          name={iconName}
+          size={tokens.typography.sizes.lg}
+          color={iconColor}
+        />
       </View>
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
