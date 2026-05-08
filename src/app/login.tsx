@@ -15,8 +15,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { signIn, sendVerificationEmail, sigOutAccount } from '@/lib/firebase';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { sendVerificationEmail, signIn, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
@@ -40,11 +40,17 @@ export default function LoginScreen() {
 
     // Validaciones básicas de formato
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      Alert.alert('Atención', 'Por favor, ingresa un correo electrónico válido.');
+      Alert.alert(
+        'Atención',
+        'Por favor, ingresa un correo electrónico válido.',
+      );
       return;
     }
     if (trimmedPassword.length < 6) {
-      Alert.alert('Atención', 'La contraseña debe tener al menos 6 caracteres.');
+      Alert.alert(
+        'Atención',
+        'La contraseña debe tener al menos 6 caracteres.',
+      );
       return;
     }
 
@@ -52,7 +58,10 @@ export default function LoginScreen() {
       setLoading(true);
 
       // Autenticar con Firebase
-      const userCredential = await signIn({ email: trimmedEmail, password: trimmedPassword });
+      const userCredential = await signIn({
+        email: trimmedEmail,
+        password: trimmedPassword,
+      });
 
       // Bloquear acceso si el correo no ha sido verificado
       if (!userCredential.user.emailVerified) {
@@ -72,14 +81,23 @@ export default function LoginScreen() {
               onPress: async () => {
                 try {
                   // Necesitamos volver a autenticar brevemente para enviar el correo
-                  const temp = await signIn({ email: trimmedEmail, password: trimmedPassword });
+                  const temp = await signIn({
+                    email: trimmedEmail,
+                    password: trimmedPassword,
+                  });
                   if (temp.user) {
                     await sendVerificationEmail(temp.user);
                     await sigOutAccount();
-                    Alert.alert('Correo Enviado', 'Se ha enviado un nuevo correo de verificación.');
+                    Alert.alert(
+                      'Correo Enviado',
+                      'Se ha enviado un nuevo correo de verificación.',
+                    );
                   }
                 } catch {
-                  Alert.alert('Error', 'No se pudo enviar el correo. Intenta de nuevo más tarde.');
+                  Alert.alert(
+                    'Error',
+                    'No se pudo enviar el correo. Intenta de nuevo más tarde.',
+                  );
                 }
               },
             },
@@ -98,13 +116,22 @@ export default function LoginScreen() {
         error.code === 'auth/wrong-password' ||
         error.code === 'auth/user-not-found'
       ) {
-        Alert.alert('Error', 'Correo o contraseña inválidos. Intenta de nuevo.');
+        Alert.alert(
+          'Error',
+          'Correo o contraseña inválidos. Intenta de nuevo.',
+        );
       } else if (error.code === 'auth/too-many-requests') {
-        Alert.alert('Error', 'Demasiados intentos fallidos. Intenta de nuevo más tarde.');
+        Alert.alert(
+          'Error',
+          'Demasiados intentos fallidos. Intenta de nuevo más tarde.',
+        );
       } else if (error.code === 'auth/network-request-failed') {
         Alert.alert('Error', 'Error de red. Revisa tu conexión a internet.');
       } else {
-        Alert.alert('Error', error.message || 'Ocurrió un error al iniciar sesión.');
+        Alert.alert(
+          'Error',
+          error.message || 'Ocurrió un error al iniciar sesión.',
+        );
       }
     } finally {
       setLoading(false);
@@ -183,7 +210,10 @@ export default function LoginScreen() {
               editable={!loading}
             />
             {/* Botón para mostrar u ocultar la contraseña */}
-            <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={10}>
+            <Pressable
+              onPress={() => setShowPassword(!showPassword)}
+              hitSlop={10}
+            >
               <Ionicons
                 name={showPassword ? 'eye-off-outline' : 'eye-outline'}
                 size={22}
@@ -194,7 +224,10 @@ export default function LoginScreen() {
 
           {/* ── OLVIDÉ MI CONTRASEÑA ── */}
           <View style={styles.forgotRow}>
-            <Pressable onPress={() => router.push('/forgot-password' as any)} hitSlop={10}>
+            <Pressable
+              onPress={() => router.push('/forgot-password' as any)}
+              hitSlop={10}
+            >
               <Text style={styles.forgotLink}>¿Olvidaste tu contraseña?</Text>
             </Pressable>
           </View>
@@ -229,7 +262,12 @@ export default function LoginScreen() {
             ) : (
               <>
                 <Text style={styles.ctaText}>Iniciar Sesión</Text>
-                <Ionicons name="arrow-forward-circle-outline" size={20} color="#fff" style={{ marginLeft: 10 }} />
+                <Ionicons
+                  name="arrow-forward-circle-outline"
+                  size={20}
+                  color="#fff"
+                  style={{ marginLeft: 10 }}
+                />
               </>
             )}
           </Pressable>
@@ -288,9 +326,9 @@ const styles = StyleSheet.create({
     height: 136,
     borderRadius: 30,
     backgroundColor: '#91B4E0',
-    opacity: 0.30,
+    opacity: 0.3,
     top: 18,
-    transform: [{ scaleX: 0.90 }],
+    transform: [{ scaleX: 0.9 }],
   },
   iconCard: {
     width: 160,

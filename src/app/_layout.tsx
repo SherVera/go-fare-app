@@ -50,18 +50,21 @@ export default function RootLayout() {
 
   // 1. Escuchar el estado de autenticación de Firebase Nativo
   useEffect(() => {
-    const unsubscribe = listenToAuthState(auth, async (user: FirebaseAuthTypes.User | null) => {
-      if (user) {
-        // Solo marcamos como autenticado si el correo está verificado.
-        // No cerramos sesión aquí para evitar race conditions con
-        // las pantallas de login/register que manejan el flujo explícitamente.
-        setIsAuthenticated(user.emailVerified);
-      } else {
-        // 🚧 Modo temporal: verificar si hay sesión por cédula guardada
-        const tempAuth = await AsyncStorage.getItem('temp_auth');
-        setIsAuthenticated(tempAuth === 'true');
-      }
-    });
+    const unsubscribe = listenToAuthState(
+      auth,
+      async (user: FirebaseAuthTypes.User | null) => {
+        if (user) {
+          // Solo marcamos como autenticado si el correo está verificado.
+          // No cerramos sesión aquí para evitar race conditions con
+          // las pantallas de login/register que manejan el flujo explícitamente.
+          setIsAuthenticated(user.emailVerified);
+        } else {
+          // 🚧 Modo temporal: verificar si hay sesión por cédula guardada
+          const tempAuth = await AsyncStorage.getItem('temp_auth');
+          setIsAuthenticated(tempAuth === 'true');
+        }
+      },
+    );
     return unsubscribe;
   }, []);
 

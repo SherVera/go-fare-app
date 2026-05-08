@@ -1,9 +1,9 @@
-import { ScreenHeader } from '@/components/ScreenHeader';
-import { tokens } from '@/theme/tokens';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,15 +12,21 @@ import {
   Text,
   TextInput,
   View,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { createUser, setDocument, updateUser, sendVerificationEmail, sigOutAccount } from '@/lib/firebase';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import {
+  createUser,
+  sendVerificationEmail,
+  setDocument,
+  sigOutAccount,
+  updateUser,
+} from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function RegisterScreen() {
-    const router = useRouter();
-    const [fullName, setFullName] = useState('');
+  const router = useRouter();
+  const [fullName, setFullName] = useState('');
   const [idNumber, setIdNumber] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,26 +59,41 @@ export default function RegisterScreen() {
         return;
       }
       if (!/^\d{5,10}$/.test(trimmedIdNumber)) {
-        Alert.alert('Atención', 'La cédula debe contener entre 5 y 10 dígitos.');
+        Alert.alert(
+          'Atención',
+          'La cédula debe contener entre 5 y 10 dígitos.',
+        );
         return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-        Alert.alert('Atención', 'Por favor, ingresa un correo electrónico válido.');
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa un correo electrónico válido.',
+        );
         return;
       }
       if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(trimmedPhoneNumber)) {
-        Alert.alert('Atención', 'Por favor, ingresa un número de teléfono válido (ej. 04120000000).');
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa un número de teléfono válido (ej. 04120000000).',
+        );
         return;
       }
       if (trimmedPassword.length < 6) {
-        Alert.alert('Atención', 'La contraseña debe tener al menos 6 caracteres.');
+        Alert.alert(
+          'Atención',
+          'La contraseña debe tener al menos 6 caracteres.',
+        );
         return;
       }
 
       setLoading(true);
 
       // Crear usuario en Firebase Authentication
-      const userCredential = await createUser({ email: trimmedEmail, password: trimmedPassword });
+      const userCredential = await createUser({
+        email: trimmedEmail,
+        password: trimmedPassword,
+      });
       const { user } = userCredential;
 
       // Retraso para sincronizar sesión nativa
@@ -97,7 +118,7 @@ export default function RegisterScreen() {
         console.error('Verification email error:', emailError);
         Alert.alert(
           'Aviso',
-          'La cuenta se creó pero no pudimos enviar el correo de verificación. Puedes intentar reenviarlo desde la pantalla de inicio de sesión.'
+          'La cuenta se creó pero no pudimos enviar el correo de verificación. Puedes intentar reenviarlo desde la pantalla de inicio de sesión.',
         );
       }
 
@@ -112,15 +133,24 @@ export default function RegisterScreen() {
       setRegisteredEmail(trimmedEmail);
       setVerificationSent(true);
     } catch (error: any) {
-      console.error("Registration error:", error);
+      console.error('Registration error:', error);
       if (error.code === 'auth/email-already-in-use') {
-        Alert.alert('Error', 'El correo electrónico ya está en uso por otra cuenta.');
+        Alert.alert(
+          'Error',
+          'El correo electrónico ya está en uso por otra cuenta.',
+        );
       } else if (error.code === 'auth/invalid-email') {
-        Alert.alert('Error', 'El correo electrónico tiene un formato incorrecto.');
+        Alert.alert(
+          'Error',
+          'El correo electrónico tiene un formato incorrecto.',
+        );
       } else if (error.code === 'auth/weak-password') {
         Alert.alert('Error', 'La contraseña es muy débil.');
       } else {
-        Alert.alert('Error', error.message || 'Ocurrió un error durante el registro.');
+        Alert.alert(
+          'Error',
+          error.message || 'Ocurrió un error durante el registro.',
+        );
       }
     } finally {
       setLoading(false);
@@ -150,7 +180,10 @@ export default function RegisterScreen() {
         >
           <ScreenHeader title="Verifica tu Correo" onBack={handleBack} />
           <ScrollView
-            contentContainerStyle={[styles.scroll, { justifyContent: 'center' }]}
+            contentContainerStyle={[
+              styles.scroll,
+              { justifyContent: 'center' },
+            ]}
             bounces={false}
             showsVerticalScrollIndicator={false}
           >
@@ -169,11 +202,20 @@ export default function RegisterScreen() {
 
             {/* ── TÍTULOS ── */}
             <View style={[styles.titleBlock, { alignItems: 'center' }]}>
-              <Text style={[styles.titleDark, { textAlign: 'center' }]}>Revisa tu</Text>
-              <Text style={[styles.titleBlue, { textAlign: 'center' }]}>Bandeja de Entrada</Text>
+              <Text style={[styles.titleDark, { textAlign: 'center' }]}>
+                Revisa tu
+              </Text>
+              <Text style={[styles.titleBlue, { textAlign: 'center' }]}>
+                Bandeja de Entrada
+              </Text>
               <Text style={[styles.subtitle, { textAlign: 'center' }]}>
                 {`Hemos enviado un enlace de verificación a:\n`}
-                <Text style={{ fontFamily: tokens.typography.fontFamily.bold, color: '#18243E' }}>
+                <Text
+                  style={{
+                    fontFamily: tokens.typography.fontFamily.bold,
+                    color: '#18243E',
+                  }}
+                >
                   {registeredEmail}
                 </Text>
                 {`\n\nHaz clic en el enlace del correo para activar\ntu cuenta y luego inicia sesión.`}
@@ -192,20 +234,35 @@ export default function RegisterScreen() {
                 <Text style={styles.spamTitle}>¿No llega el correo?</Text>
               </View>
               <Text style={styles.spamText}>
-                1. Revisa tu carpeta <Text style={styles.spamBold}>Spam / Correo no deseado</Text>.{'\n'}
-                2. Busca también en <Text style={styles.spamBold}>Promociones</Text> (Gmail).{'\n'}
-                3. Agrega <Text style={styles.spamBold}>noreply@gofare.firebaseapp.com</Text> a tus contactos.{'\n'}
+                1. Revisa tu carpeta{' '}
+                <Text style={styles.spamBold}>Spam / Correo no deseado</Text>.
+                {'\n'}
+                2. Busca también en{' '}
+                <Text style={styles.spamBold}>Promociones</Text> (Gmail).{'\n'}
+                3. Agrega{' '}
+                <Text style={styles.spamBold}>
+                  noreply@gofare.firebaseapp.com
+                </Text>{' '}
+                a tus contactos.{'\n'}
                 4. Si sigue sin llegar, espera 1 minuto y presiona reenviar.
               </Text>
             </View>
 
             {/* ── BOTÓN — Ir a Login ── */}
             <Pressable
-              style={({ pressed }) => [styles.cta, pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [
+                styles.cta,
+                pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+              ]}
               onPress={() => router.replace('/login' as any)}
             >
               <Text style={styles.ctaText}>Ir al Login</Text>
-              <Ionicons name="arrow-forward-circle-outline" size={20} color="#fff" style={{ marginLeft: 10 }} />
+              <Ionicons
+                name="arrow-forward-circle-outline"
+                size={20}
+                color="#fff"
+                style={{ marginLeft: 10 }}
+              />
             </Pressable>
 
             {/* ── REENVIAR CORREO ── */}
@@ -218,7 +275,9 @@ export default function RegisterScreen() {
               </Pressable>
             </View>
 
-            <Text style={styles.footerLegal}>CARACAS MOVE • REGISTRO SEGURO</Text>
+            <Text style={styles.footerLegal}>
+              CARACAS MOVE • REGISTRO SEGURO
+            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -296,7 +355,7 @@ export default function RegisterScreen() {
               editable={!loading}
             />
           </View>
-          
+
           <Text style={styles.inputLabel}>TELÉFONO</Text>
           <View style={styles.inputCard}>
             <Ionicons name="call-outline" size={20} color="#3072ffe7" />
@@ -345,14 +404,14 @@ export default function RegisterScreen() {
               selectionColor={tokens.colors.primary}
               editable={!loading}
             />
-            <Pressable 
+            <Pressable
               onPress={() => setShowPassword(!showPassword)}
               hitSlop={10}
             >
-              <Ionicons 
-                name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                size={22} 
-                color="#8594AB" 
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={22}
+                color="#8594AB"
               />
             </Pressable>
           </View>
@@ -373,7 +432,11 @@ export default function RegisterScreen() {
 
           {/* ── BOTÓN ── */}
           <Pressable
-            style={({ pressed }) => [styles.cta, pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] }, loading && { opacity: 0.7 }]}
+            style={({ pressed }) => [
+              styles.cta,
+              pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+              loading && { opacity: 0.7 },
+            ]}
             onPress={handleRegister}
             disabled={loading}
           >
@@ -382,7 +445,12 @@ export default function RegisterScreen() {
             ) : (
               <>
                 <Text style={styles.ctaText}>Crear Cuenta</Text>
-                <Ionicons name="checkmark-circle-outline" size={20} color="#fff" style={{ marginLeft: 10 }} />
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={20}
+                  color="#fff"
+                  style={{ marginLeft: 10 }}
+                />
               </>
             )}
           </Pressable>
@@ -397,7 +465,6 @@ export default function RegisterScreen() {
 
           {/* ── FOOTER ── */}
           <Text style={styles.footerLegal}>CARACAS MOVE • REGISTRO SEGURO</Text>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -417,7 +484,7 @@ const styles = StyleSheet.create({
     height: 76,
     borderRadius: 38,
     backgroundColor: '#B8C8DF',
-    opacity: 0.60,
+    opacity: 0.6,
   },
   scroll: {
     flexGrow: 1,
@@ -435,9 +502,9 @@ const styles = StyleSheet.create({
     height: 136,
     borderRadius: 30,
     backgroundColor: '#91B4E0',
-    opacity: 0.30,
+    opacity: 0.3,
     top: 18,
-    transform: [{ scaleX: 0.90 }],
+    transform: [{ scaleX: 0.9 }],
   },
   iconCard: {
     width: 160,
@@ -546,7 +613,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     shadowColor: '#1D5BD9',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.40,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 12,
   },
