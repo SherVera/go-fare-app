@@ -1,18 +1,25 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { tokens } from '@/theme/tokens';
 import { StatusBar } from 'expo-status-bar';
+import React, { useState } from 'react';
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { tokens } from '@/theme/tokens';
 
-export default function ViajesScreen() {
+export default function TripsScreen() {
   const [activeFilter, setActiveFilter] = useState('Todos');
   const filters = ['Todos', 'Este mes', 'Este año'];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
-      
+
       {/* ── HEADER ── */}
       <View style={styles.header}>
         <Pressable hitSlop={10} style={styles.menuBtn}>
@@ -25,12 +32,16 @@ export default function ViajesScreen() {
         />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* ── TITULO ── */}
         <View style={styles.titleSection}>
           <Text style={styles.pageTitle}>Viajes</Text>
-          <Text style={styles.pageSubtitle}>Revisa tu actividad y gastos de transporte.</Text>
+          <Text style={styles.pageSubtitle}>
+            Revisa tu actividad y gastos de transporte.
+          </Text>
         </View>
 
         {/* ── FILTROS ── */}
@@ -43,7 +54,12 @@ export default function ViajesScreen() {
                 style={[styles.filterTab, isActive && styles.filterTabActive]}
                 onPress={() => setActiveFilter(filter)}
               >
-                <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
+                <Text
+                  style={[
+                    styles.filterText,
+                    isActive && styles.filterTextActive,
+                  ]}
+                >
                   {filter}
                 </Text>
               </Pressable>
@@ -55,12 +71,16 @@ export default function ViajesScreen() {
         <View style={styles.summaryRow}>
           <View style={styles.summaryCardWhite}>
             <View style={styles.summaryIconWhiteBg}>
-              <MaterialCommunityIcons name="cash" size={24} color={tokens.colors.primary} />
+              <MaterialCommunityIcons
+                name="cash"
+                size={24}
+                color={tokens.colors.primary}
+              />
             </View>
             <Text style={styles.summaryLabelGrey}>GASTO TOTAL</Text>
             <Text style={styles.summaryValueDark}>Bs. 450,00</Text>
           </View>
-          
+
           <View style={styles.summaryCardBlue}>
             <View style={styles.summaryIconBlueBg}>
               <Ionicons name="bus" size={22} color="#FFFFFF" />
@@ -74,7 +94,9 @@ export default function ViajesScreen() {
         <Text style={styles.sectionTitle}>RECIENTES</Text>
 
         <View style={[styles.tripCard, styles.tripCardActive]}>
-          <View style={[styles.tripIconWrapper, { backgroundColor: '#E0E7FF' }]}>
+          <View
+            style={[styles.tripIconWrapper, { backgroundColor: '#E0E7FF' }]}
+          >
             <Ionicons name="bus" size={20} color={tokens.colors.primary} />
           </View>
           <View style={styles.tripInfo}>
@@ -82,19 +104,38 @@ export default function ViajesScreen() {
             <View style={styles.tripSubtitleRow}>
               <Text style={styles.tripSubtitle}>Hoy, 08:45 AM</Text>
               <View style={[styles.badge, { backgroundColor: '#DBEAFE' }]}>
-                <View style={[styles.badgeDot, { backgroundColor: tokens.colors.primary }]} />
-                <Text style={[styles.badgeText, { color: tokens.colors.primary }]}>EN CURSO</Text>
+                <View
+                  style={[
+                    styles.badgeDot,
+                    { backgroundColor: tokens.colors.primary },
+                  ]}
+                />
+                <Text
+                  style={[styles.badgeText, { color: tokens.colors.primary }]}
+                >
+                  EN CURSO
+                </Text>
               </View>
             </View>
           </View>
           <View style={styles.priceContainer}>
-            <Text style={[styles.priceCurrency, { color: tokens.colors.primary }]}>Bs.</Text>
-            <Text style={[styles.priceAmount, { color: tokens.colors.primary }]}>15,00</Text>
+            <Text
+              style={[styles.priceCurrency, { color: tokens.colors.primary }]}
+            >
+              Bs.
+            </Text>
+            <Text
+              style={[styles.priceAmount, { color: tokens.colors.primary }]}
+            >
+              15,00
+            </Text>
           </View>
         </View>
 
         <View style={styles.tripCard}>
-          <View style={[styles.tripIconWrapper, { backgroundColor: '#ECFDF5' }]}>
+          <View
+            style={[styles.tripIconWrapper, { backgroundColor: '#ECFDF5' }]}
+          >
             <MaterialCommunityIcons name="train" size={22} color="#0F766E" />
           </View>
           <View style={styles.tripInfo}>
@@ -102,39 +143,65 @@ export default function ViajesScreen() {
             <View style={styles.tripSubtitleRow}>
               <Text style={styles.tripSubtitle}>Ayer, 17:30 PM</Text>
               <View style={[styles.badge, { backgroundColor: '#F3F4F6' }]}>
-                <View style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]} />
-                <Text style={[styles.badgeText, { color: '#6B7280' }]}>COMPLETADO</Text>
+                <View
+                  style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]}
+                />
+                <Text style={[styles.badgeText, { color: '#6B7280' }]}>
+                  COMPLETADO
+                </Text>
               </View>
             </View>
           </View>
           <View style={styles.priceContainer}>
-            <Text style={[styles.priceCurrency, { color: tokens.colors.primary }]}>Bs.</Text>
-            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>10,00</Text>
+            <Text
+              style={[styles.priceCurrency, { color: tokens.colors.primary }]}
+            >
+              Bs.
+            </Text>
+            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>
+              10,00
+            </Text>
           </View>
         </View>
 
         <View style={styles.tripCard}>
-          <View style={[styles.tripIconWrapper, { backgroundColor: '#EEF2FF' }]}>
-            <MaterialCommunityIcons name="bus-multiple" size={22} color="#6366F1" />
+          <View
+            style={[styles.tripIconWrapper, { backgroundColor: '#EEF2FF' }]}
+          >
+            <MaterialCommunityIcons
+              name="bus-multiple"
+              size={22}
+              color="#6366F1"
+            />
           </View>
           <View style={styles.tripInfo}>
             <Text style={styles.tripTitle}>Altamira - El Hatillo</Text>
             <View style={styles.tripSubtitleRow}>
               <Text style={styles.tripSubtitle}>12 Oct, 10:15 AM</Text>
               <View style={[styles.badge, { backgroundColor: '#F3F4F6' }]}>
-                <View style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]} />
-                <Text style={[styles.badgeText, { color: '#6B7280' }]}>COMPLETADO</Text>
+                <View
+                  style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]}
+                />
+                <Text style={[styles.badgeText, { color: '#6B7280' }]}>
+                  COMPLETADO
+                </Text>
               </View>
             </View>
           </View>
           <View style={styles.priceContainer}>
-            <Text style={[styles.priceCurrency, { color: '#6B7280' }]}>Bs.</Text>
-            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>25,00</Text>
+            <Text style={[styles.priceCurrency, { color: '#6B7280' }]}>
+              Bs.
+            </Text>
+            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>
+              25,00
+            </Text>
           </View>
         </View>
 
         <View style={styles.tripCard}>
-          <View style={[styles.tripIconWrapper, { backgroundColor: '#E0E7FF' }]}>
+          <View
+            style={[styles.tripIconWrapper, { backgroundColor: '#E0E7FF' }]}
+          >
             <Ionicons name="bus" size={20} color={tokens.colors.primary} />
           </View>
           <View style={styles.tripInfo}>
@@ -142,14 +209,22 @@ export default function ViajesScreen() {
             <View style={styles.tripSubtitleRow}>
               <Text style={styles.tripSubtitle}>11 Oct, 14:20 PM</Text>
               <View style={[styles.badge, { backgroundColor: '#F3F4F6' }]}>
-                <View style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]} />
-                <Text style={[styles.badgeText, { color: '#6B7280' }]}>COMPLETADO</Text>
+                <View
+                  style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]}
+                />
+                <Text style={[styles.badgeText, { color: '#6B7280' }]}>
+                  COMPLETADO
+                </Text>
               </View>
             </View>
           </View>
           <View style={styles.priceContainer}>
-            <Text style={[styles.priceCurrency, { color: '#6B7280' }]}>Bs.</Text>
-            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>15,00</Text>
+            <Text style={[styles.priceCurrency, { color: '#6B7280' }]}>
+              Bs.
+            </Text>
+            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>
+              15,00
+            </Text>
           </View>
         </View>
 
@@ -157,12 +232,15 @@ export default function ViajesScreen() {
         <View style={styles.mapCard}>
           {/* Usamos un placeholder genérico de mapa estético porque no hay assets de mapa en el repo */}
           <Image
-            source={{ uri: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=800&q=80' }}
+            source={{
+              uri: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=800&q=80',
+            }}
             style={styles.mapImage}
           />
           <View style={styles.mapOverlay}>
             <Text style={styles.mapText}>
-              Tu ruta más frecuente: <Text style={styles.mapTextHighlight}>Chacao - Mercedes</Text>
+              Tu ruta más frecuente:{' '}
+              <Text style={styles.mapTextHighlight}>Chacao - Mercedes</Text>
             </Text>
           </View>
         </View>

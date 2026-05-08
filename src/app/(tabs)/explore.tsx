@@ -1,9 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet, SafeAreaView } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { tokens } from '@/theme/tokens';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Button';
+import { tokens } from '@/theme/tokens';
 
 export default function ExploreScreen() {
   const router = useRouter();
@@ -12,7 +12,11 @@ export default function ExploreScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.iconContainer}>
-          <Ionicons name="checkmark-circle" size={80} color={tokens.colors.iconGreen} />
+          <Ionicons
+            name="checkmark-circle"
+            size={80}
+            color={tokens.colors.iconGreen}
+          />
         </View>
         <Text style={styles.title}>¡Sesión Iniciada!</Text>
         <Text style={styles.subtitle}>

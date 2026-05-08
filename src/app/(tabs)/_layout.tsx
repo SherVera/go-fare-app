@@ -1,9 +1,9 @@
-import { tokens } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { tokens } from '@/theme/tokens';
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
@@ -44,34 +44,50 @@ export default function TabLayout() {
         options={{
           title: 'INICIO',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />
+            <Ionicons
+              name={focused ? 'home' : 'home-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />
       <Tabs.Screen
-        name="viajes"
+        name="trips"
         options={{
           title: 'VIAJES',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "bus" : "bus-outline"} size={24} color={color} />
+            <Ionicons
+              name={focused ? 'bus' : 'bus-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />
       <Tabs.Screen
-        name="recarga"
+        name="topup"
         options={{
           title: 'RECARGA',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "wallet" : "wallet-outline"} size={24} color={color} />
+            <Ionicons
+              name={focused ? 'wallet' : 'wallet-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />
       <Tabs.Screen
-        name="perfil"
+        name="profile"
         options={{
           title: 'PERFIL',
           tabBarIcon: ({ color, size, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
+            <Ionicons
+              name={focused ? 'person' : 'person-outline'}
+              size={24}
+              color={color}
+            />
           ),
         }}
       />

@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { tokens } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { tokens } from '@/theme/tokens';
 
 interface RouteItemProps {
   number: string;
@@ -14,16 +14,32 @@ interface RouteItemProps {
   icon?: keyof typeof Ionicons.glyphMap;
 }
 
-export const RouteItem = ({ number, label = 'RUTA', title, subtitle, status, type = 'bus', statusType = 'success', icon }: RouteItemProps) => {
+export const RouteItem = ({
+  number,
+  label = 'RUTA',
+  title,
+  subtitle,
+  status,
+  type = 'bus',
+  statusType = 'success',
+  icon,
+}: RouteItemProps) => {
   const isMetro = type === 'metro';
   const badgeColor = isMetro ? tokens.colors.primary : '#0F766E';
-  
+
   const getStatusColors = () => {
     switch (statusType) {
-      case 'success': return { bg: tokens.colors.statusGreenBg, text: tokens.colors.statusGreen };
-      case 'warning': return { bg: '#FEF3C7', text: '#D97706' };
-      case 'primary': return { bg: '#DBEAFE', text: '#1D4ED8' };
-      default: return { bg: '#E2E8F0', text: '#475569' };
+      case 'success':
+        return {
+          bg: tokens.colors.statusGreenBg,
+          text: tokens.colors.statusGreen,
+        };
+      case 'warning':
+        return { bg: '#FEF3C7', text: '#D97706' };
+      case 'primary':
+        return { bg: '#DBEAFE', text: '#1D4ED8' };
+      default:
+        return { bg: '#E2E8F0', text: '#475569' };
     }
   };
 
@@ -37,15 +53,26 @@ export const RouteItem = ({ number, label = 'RUTA', title, subtitle, status, typ
           <Text style={styles.routeLabel}>{isMetro ? 'METRO' : label}</Text>
         </View>
         <View style={styles.info}>
-          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          <Text style={styles.title} numberOfLines={1}>
+            {title}
+          </Text>
           <View style={styles.subtitleRow}>
-            {icon && <Ionicons name={icon} size={12} color={badgeColor} style={{ marginRight: 4 }} />}
+            {icon && (
+              <Ionicons
+                name={icon}
+                size={12}
+                color={badgeColor}
+                style={{ marginRight: 4 }}
+              />
+            )}
             <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
         </View>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}>
-        <Text style={[styles.statusText, { color: statusColors.text }]}>{status}</Text>
+        <Text style={[styles.statusText, { color: statusColors.text }]}>
+          {status}
+        </Text>
       </View>
     </View>
   );

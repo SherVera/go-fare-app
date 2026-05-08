@@ -1,12 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, StatusBar, ScrollView } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { tokens } from '@/theme/tokens';
+import React from 'react';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
 import { FeatureCard } from '@/components/FeatureCard';
 import { HeaderLogo } from '@/components/HeaderLogo';
 import { ImageHero } from '@/components/ImageHero';
+import { tokens } from '@/theme/tokens';
 
 export default function LandingScreen() {
   const router = useRouter();
@@ -18,7 +18,7 @@ export default function LandingScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content"  />
+      <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
         {/* Header Logo */}
         <HeaderLogo />
@@ -29,11 +29,17 @@ export default function LandingScreen() {
         </View>
 
         {/* Bottom Sheet */}
-        <View style={[styles.bottomSheet, { paddingBottom: insets.bottom + tokens.spacing.xl }]}>
+        <View
+          style={[
+            styles.bottomSheet,
+            { paddingBottom: insets.bottom + tokens.spacing.xl },
+          ]}
+        >
           <View style={styles.sheetContent}>
             <Text style={styles.title}>
               Muévete{'\n'}
-              libremente por <Text style={styles.titleHighlight}>tu</Text>{'\n'}
+              libremente por <Text style={styles.titleHighlight}>tu</Text>
+              {'\n'}
               <Text style={styles.titleHighlight}>ciudad.</Text>
             </Text>
             <Text style={styles.subtitle}>
