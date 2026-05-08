@@ -167,7 +167,6 @@ export default function LoginScreen() {
             />
           </View>
 
-<<<<<<< HEAD
           {/* ── INPUT PASSWORD ── */}
           <Text style={styles.inputLabel}>CONTRASEÑA</Text>
           <View style={styles.inputCard}>
@@ -201,9 +200,6 @@ export default function LoginScreen() {
           </View>
 
           {/* ── NOTA DE SEGURIDAD ── */}
-=======
-          {/* Nota de seguridad */}
->>>>>>> ffe45b543f6179768d4d5e5f45e8aeaaa0dd87f1
           <View style={styles.secureRow}>
             <Ionicons
               name="shield-checkmark-outline"
