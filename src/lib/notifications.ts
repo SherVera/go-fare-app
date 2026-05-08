@@ -1,12 +1,12 @@
 import {
   AuthorizationStatus,
+  type FirebaseMessagingTypes,
   getMessaging,
   getToken,
   onMessage,
   onNotificationOpenedApp,
   onTokenRefresh,
   requestPermission,
-  type FirebaseMessagingTypes,
 } from '@react-native-firebase/messaging';
 import { Platform } from 'react-native';
 
@@ -95,10 +95,12 @@ export const registerNotificationHandlers = ({
  * Call once after the user is authenticated to handle deep-link style
  * notifications (e.g. "open this trip").
  */
-export const getInitialNotification = async (): Promise<RemoteMessage | null> => {
-  const message = await messaging.getInitialNotification();
-  return message ?? null;
-};
+export const getInitialNotification =
+  async (): Promise<RemoteMessage | null> => {
+    const message = await messaging.getInitialNotification();
+    return message ?? null;
+  };
 
 /** True on platforms where FCM works at all. */
-export const supportsPushNotifications = Platform.OS === 'ios' || Platform.OS === 'android';
+export const supportsPushNotifications =
+  Platform.OS === 'ios' || Platform.OS === 'android';

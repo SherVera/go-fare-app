@@ -1,29 +1,32 @@
 import '@/lib/notifications-background';
 
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider,
+} from '@react-navigation/native';
 import { Stack, useRouter, useSegments } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import 'react-native-reanimated';
-import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import {
+  Outfit_400Regular,
+  Outfit_500Medium,
+  Outfit_700Bold,
+  Outfit_900Black,
+  useFonts,
+} from '@expo-google-fonts/outfit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { auth, listenToAuthState } from '@/lib/firebase';
 import {
   getFcmToken,
   getInitialNotification,
   registerNotificationHandlers,
 } from '@/lib/notifications';
-
-import {
-  useFonts,
-  Outfit_400Regular,
-  Outfit_500Medium,
-  Outfit_700Bold,
-  Outfit_900Black,
-} from '@expo-google-fonts/outfit';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,7 +38,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const segments = useSegments();
   const router = useRouter();
-  
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   const [loaded] = useFonts({
@@ -85,7 +88,8 @@ export default function RootLayout() {
 
     const unsubscribe = registerNotificationHandlers({
       onForegroundMessage: (message) => {
-        if (__DEV__) console.log('[fcm:foreground]', message.notification, message.data);
+        if (__DEV__)
+          console.log('[fcm:foreground]', message.notification, message.data);
         // TODO: mostrar toast/in-app banner con `message.notification`.
       },
       onOpened: (message) => {
@@ -105,6 +109,7 @@ export default function RootLayout() {
   }, [isAuthenticated]);
 
   // 3. Guardián Global de Rutas (Auth Guard de Expo Router)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: router is stable; adding router.replace avoids intentional redirects loop noise
   useEffect(() => {
     // Esperamos a que las fuentes carguen y Firebase responda si hay sesión
     if (!loaded || isAuthenticated === null) return;

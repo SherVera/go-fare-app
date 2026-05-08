@@ -1,9 +1,10 @@
-import { ScreenHeader } from '@/components/ScreenHeader';
-import { tokens } from '@/theme/tokens';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,11 +13,11 @@ import {
   Text,
   TextInput,
   View,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signIn, sendVerificationEmail, sigOutAccount } from '@/lib/firebase';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -109,7 +110,6 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
-
   return (
     <SafeAreaView style={styles.safeArea}>
       {/* Blob decorativo */}
@@ -167,6 +167,7 @@ export default function LoginScreen() {
             />
           </View>
 
+<<<<<<< HEAD
           {/* ── INPUT PASSWORD ── */}
           <Text style={styles.inputLabel}>CONTRASEÑA</Text>
           <View style={styles.inputCard}>
@@ -200,6 +201,9 @@ export default function LoginScreen() {
           </View>
 
           {/* ── NOTA DE SEGURIDAD ── */}
+=======
+          {/* Nota de seguridad */}
+>>>>>>> ffe45b543f6179768d4d5e5f45e8aeaaa0dd87f1
           <View style={styles.secureRow}>
             <Ionicons
               name="shield-checkmark-outline"
@@ -248,8 +252,9 @@ export default function LoginScreen() {
             <Text style={styles.footerBullet}> • </Text>
             <Text style={styles.footerSupport}>Soporte Técnico</Text>
           </View>
-          <Text style={styles.footerLegal}>CARACAS MOVE • VERIFICACIÓN SEGURA</Text>
-
+          <Text style={styles.footerLegal}>
+            CARACAS MOVE • VERIFICACIÓN SEGURA
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -269,7 +274,7 @@ const styles = StyleSheet.create({
     height: 76,
     borderRadius: 38,
     backgroundColor: '#B8C8DF',
-    opacity: 0.60,
+    opacity: 0.6,
   },
   scroll: {
     flexGrow: 1,
@@ -401,7 +406,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     shadowColor: '#1D5BD9',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.40,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 12,
   },

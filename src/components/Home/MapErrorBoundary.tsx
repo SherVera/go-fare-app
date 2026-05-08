@@ -1,12 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 interface State {
   hasError: boolean;
 }
 
-export class MapErrorBoundary extends React.Component<React.PropsWithChildren, State> {
+export class MapErrorBoundary extends React.Component<
+  React.PropsWithChildren,
+  State
+> {
   constructor(props: React.PropsWithChildren) {
     super(props);
     this.state = { hasError: false };
@@ -26,7 +29,9 @@ export class MapErrorBoundary extends React.Component<React.PropsWithChildren, S
         <View style={styles.fallback}>
           <Ionicons name="map-outline" size={40} color="#94A3B8" />
           <Text style={styles.text}>Mapa no disponible</Text>
-          <Text style={styles.sub}>Activa Maps SDK en Google Cloud Console</Text>
+          <Text style={styles.sub}>
+            Activa Maps SDK en Google Cloud Console
+          </Text>
         </View>
       );
     }

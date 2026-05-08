@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import React from 'react';
+import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { tokens } from '../theme/tokens';
 
 interface ImageHeroProps {
@@ -19,7 +19,11 @@ export const ImageHero = ({ style }: ImageHeroProps) => {
       />
       <View style={styles.badgeContainer}>
         <View style={styles.badgeIconBg}>
-          <Ionicons name="qr-code-outline" size={16} color={tokens.colors.iconGreen} />
+          <Ionicons
+            name="qr-code-outline"
+            size={16}
+            color={tokens.colors.iconGreen}
+          />
         </View>
         <View>
           <Text style={styles.badgeTitle}>PASE DIGITAL</Text>
