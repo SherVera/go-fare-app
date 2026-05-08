@@ -55,14 +55,14 @@ export default function HomeDashboard() {
             title="Recargar saldo"
             subtitle="Instantáneo vía Pago Móvil o tarjeta"
             icon="wallet-plus"
-            onPress={() => router.push('/recarga')}
+            onPress={() => router.push('/topup')}
           />
           <ActionCard
             title="Pagar viajes"
             subtitle="Escanea el código en la unidad"
             icon="qrcode-scan"
             color={tokens.colors.iconGreen}
-            onPress={() => router.push('/pagar')}
+            onPress={() => router.push('/pay')}
           />
         </View>
 

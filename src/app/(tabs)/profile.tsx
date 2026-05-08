@@ -7,7 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { sigOutAccount } from '@/lib/firebase';
 
-export default function PerfilScreen() {
+export default function ProfileScreen() {
   const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
 

@@ -1,8 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  applyActionCode,
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
@@ -46,24 +48,73 @@ export const listenToAuthState = onAuthStateChanged;
 
 type Credentials = { email: string; password: string };
 
+// ------------------------------------------------------------------
+// ActionCodeSettings — mejora entregabilidad y permite abrir el
+// enlace directamente en la app (handleCodeInApp).
+// TODO: reemplazar la URL por un dominio propio verificado en
+// Firebase Console > Authentication > Settings > Authorized domains.
+// ------------------------------------------------------------------
+export const verificationActionCodeSettings: FirebaseAuthTypes.ActionCodeSettings = {
+  url: 'https://gofare.app/verify-email',
+  handleCodeInApp: true,
+  iOS: {
+    bundleId: 'com.gofare.app',
+  },
+  android: {
+    packageName: 'com.gofare.app',
+    installApp: true,
+    minimumVersion: '12',
+  },
+};
+
 export const createUser = ({ email, password }: Credentials) =>
   createUserWithEmailAndPassword(auth, email, password);
 
 export const signIn = ({ email, password }: Credentials) =>
   signInWithEmailAndPassword(auth, email, password);
 
-export const updateUser = async (user: {
-  displayName?: string | null;
-  photoURL?: string | null;
-}) => {
-  if (auth.currentUser) {
-    return updateProfile(auth.currentUser, user);
+// Envía un correo de verificación pasando el user directamente
+// (evita race conditions con auth.currentUser en RN Firebase v22).
+// NOTA: NO pasamos ActionCodeSettings por defecto porque el dominio
+// https://gofare.app aún no está allowlisted en Firebase Console.
+// Cuando compres y verifiques un dominio propio, pasa
+// `verificationActionCodeSettings` como segundo argumento.
+export const sendVerificationEmail = async (
+  user: FirebaseAuthTypes.User,
+  actionCodeSettings?: FirebaseAuthTypes.ActionCodeSettings,
+) => {
+  try {
+    if (actionCodeSettings) {
+      await sendEmailVerification(user, actionCodeSettings);
+    } else {
+      await sendEmailVerification(user);
+    }
+    console.log('[Firebase] Verification email sent successfully to:', user.email);
+  } catch (error) {
+    console.error('[Firebase] Error sending verification email:', error);
+    throw error;
   }
 };
 
+// Aplica un código de acción recibido por deep-link (verificación de email,
+// reset de contraseña, etc.).
+export const applyEmailVerificationCode = (code: string) => applyActionCode(auth, code);
+
+export const updateUser = (
+  user: FirebaseAuthTypes.User,
+  profile: { displayName?: string | null; photoURL?: string | null },
+) => updateProfile(user, profile);
+
 export const sigOutAccount = async () => {
   await AsyncStorage.removeItem('user');
-  return signOut(auth);
+  try {
+    await signOut(auth);
+  } catch (error: any) {
+    // Si ya no hay usuario activo en el módulo nativo, es seguro ignorar.
+    if (error?.code !== 'auth/no-current-user') {
+      throw error;
+    }
+  }
 };
 
 export const sentResetEmail = (email: string) => sendPasswordResetEmail(auth, email);

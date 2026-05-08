@@ -49,7 +49,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="viajes"
+        name="trips"
         options={{
           title: 'VIAJES',
           tabBarIcon: ({ color, size, focused }) => (
@@ -58,7 +58,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="recarga"
+        name="topup"
         options={{
           title: 'RECARGA',
           tabBarIcon: ({ color, size, focused }) => (
@@ -67,7 +67,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="perfil"
+        name="profile"
         options={{
           title: 'PERFIL',
           tabBarIcon: ({ color, size, focused }) => (

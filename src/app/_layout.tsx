@@ -49,7 +49,10 @@ export default function RootLayout() {
   useEffect(() => {
     const unsubscribe = listenToAuthState(auth, async (user: FirebaseAuthTypes.User | null) => {
       if (user) {
-        setIsAuthenticated(true);
+        // Solo marcamos como autenticado si el correo está verificado.
+        // No cerramos sesión aquí para evitar race conditions con
+        // las pantallas de login/register que manejan el flujo explícitamente.
+        setIsAuthenticated(user.emailVerified);
       } else {
         // 🚧 Modo temporal: verificar si hay sesión por cédula guardada
         const tempAuth = await AsyncStorage.getItem('temp_auth');

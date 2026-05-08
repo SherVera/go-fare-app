@@ -5,7 +5,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { tokens } from '@/theme/tokens';
 import { useRouter } from 'expo-router';
 
-export default function RecargaScreen() {
+export default function TopupScreen() {
   const router = useRouter();
   const [amount, setAmount] = useState('50');
   const [selectedQuickAmount, setSelectedQuickAmount] = useState<number | null>(50);

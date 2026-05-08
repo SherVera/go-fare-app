@@ -5,7 +5,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { tokens } from '@/theme/tokens';
 import { StatusBar } from 'expo-status-bar';
 
-export default function ViajesScreen() {
+export default function TripsScreen() {
   const [activeFilter, setActiveFilter] = useState('Todos');
   const filters = ['Todos', 'Este mes', 'Este año'];
 
