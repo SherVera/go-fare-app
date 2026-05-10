@@ -11,10 +11,32 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { tokens } from '@/theme/tokens';
+import type { Trip, TripFilter, TripSummary } from '@/interfaces';
 
 export default function TripsScreen() {
-  const [activeFilter, setActiveFilter] = useState('Todos');
-  const filters = ['Todos', 'Este mes', 'Este año'];
+  const [activeFilter, setActiveFilter] = useState<TripFilter['value']>('all');
+
+  // Filtros de período — tipados con TripFilter
+  const filters: TripFilter[] = [
+    { label: 'Todos', value: 'all' },
+    { label: 'Este mes', value: 'month' },
+    { label: 'Este año', value: 'year' },
+  ];
+
+  // Resumen de viajes — tipado con TripSummary
+  const tripSummary: TripSummary = {
+    totalSpent: 450,
+    tripsCount: 32,
+    mostFrequentRoute: 'Chacao - Mercedes',
+  };
+
+  // Lista de viajes recientes — tipados con Trip[]
+  const recentTrips: Trip[] = [
+    { id: '1', userId: 'u1', origin: 'Chacao', destination: 'Las Mercedes', amount: 15, status: 'en-curso', type: 'bus', date: new Date(), route: 'Chacao - Las Mercedes' },
+    { id: '2', userId: 'u1', origin: 'Palo Verde', destination: 'Propatria', amount: 10, status: 'completado', type: 'metro', date: new Date(), route: 'Palo Verde - Propatria' },
+    { id: '3', userId: 'u1', origin: 'Altamira', destination: 'El Hatillo', amount: 25, status: 'completado', type: 'bus', date: new Date(), route: 'Altamira - El Hatillo' },
+    { id: '4', userId: 'u1', origin: 'La Paz', destination: 'Montalbán', amount: 15, status: 'completado', type: 'bus', date: new Date(), route: 'La Paz - Montalbán' },
+  ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -47,12 +69,12 @@ export default function TripsScreen() {
         {/* ── FILTROS ── */}
         <View style={styles.filtersContainer}>
           {filters.map((filter) => {
-            const isActive = activeFilter === filter;
+            const isActive = activeFilter === filter.value;
             return (
               <Pressable
-                key={filter}
+                key={filter.value}
                 style={[styles.filterTab, isActive && styles.filterTabActive]}
-                onPress={() => setActiveFilter(filter)}
+                onPress={() => setActiveFilter(filter.value)}
               >
                 <Text
                   style={[
@@ -60,7 +82,7 @@ export default function TripsScreen() {
                     isActive && styles.filterTextActive,
                   ]}
                 >
-                  {filter}
+                  {filter.label}
                 </Text>
               </Pressable>
             );
@@ -78,7 +100,9 @@ export default function TripsScreen() {
               />
             </View>
             <Text style={styles.summaryLabelGrey}>GASTO TOTAL</Text>
-            <Text style={styles.summaryValueDark}>Bs. 450,00</Text>
+            <Text style={styles.summaryValueDark}>
+              Bs. {tripSummary.totalSpent.toFixed(2).replace('.', ',')}
+            </Text>
           </View>
 
           <View style={styles.summaryCardBlue}>
@@ -86,7 +110,7 @@ export default function TripsScreen() {
               <Ionicons name="bus" size={22} color="#FFFFFF" />
             </View>
             <Text style={styles.summaryLabelLight}>VIAJES REALIZADOS</Text>
-            <Text style={styles.summaryValueLight}>32</Text>
+            <Text style={styles.summaryValueLight}>{tripSummary.tripsCount}</Text>
           </View>
         </View>
 

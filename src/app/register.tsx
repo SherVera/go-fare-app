@@ -1,5 +1,6 @@
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { tokens } from '@/theme/tokens';
+import type { RegisterFormState } from '@/interfaces';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -20,16 +21,17 @@ import { createUser, setDocument, updateUser, sendVerificationEmail, sigOutAccou
 
 export default function RegisterScreen() {
     const router = useRouter();
-    const [fullName, setFullName] = useState('');
-  const [idNumber, setIdNumber] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+    // Estado del formulario — tipado por RegisterFormState
+    const [fullName, setFullName] = useState<RegisterFormState['fullName']>('');
+  const [idNumber, setIdNumber] = useState<RegisterFormState['idNumber']>('');
+  const [email, setEmail] = useState<RegisterFormState['email']>('');
+  const [password, setPassword] = useState<RegisterFormState['password']>('');
+  const [phoneNumber, setPhoneNumber] = useState<RegisterFormState['phoneNumber']>('');
+  const [showPassword, setShowPassword] = useState<RegisterFormState['showPassword']>(false);
+  const [loading, setLoading] = useState<RegisterFormState['loading']>(false);
   // Controla si mostrar la pantalla de verificación pendiente
-  const [verificationSent, setVerificationSent] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [verificationSent, setVerificationSent] = useState<RegisterFormState['verificationSent']>(false);
+  const [registeredEmail, setRegisteredEmail] = useState<RegisterFormState['registeredEmail']>('');
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -81,12 +83,14 @@ export default function RegisterScreen() {
       // Actualizar el perfil del usuario con su nombre
       await updateUser(user, { displayName: trimmedFullName });
 
-      // Guardar datos adicionales en Firestore
+      // Guardar datos adicionales en Firestore con valores iniciales
       await setDocument(`users/${user.uid}`, {
         fullName: trimmedFullName,
         idNumber: trimmedIdNumber,
         email: trimmedEmail,
         phoneNumber: trimmedPhoneNumber,
+        balance: 0,
+        carnetId: `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
       });
 
       // Intentar enviar el correo de verificación pasando el user directamente

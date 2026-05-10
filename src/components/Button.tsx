@@ -8,15 +8,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { tokens } from '../theme/tokens';
-
-interface ButtonProps {
-  title: string;
-  onPress: () => void;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
-  iconRight?: keyof typeof Ionicons.glyphMap;
-  disabled?: boolean;
-}
+import type { ButtonProps } from '@/interfaces';
 
 export const Button = ({
   title,

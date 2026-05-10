@@ -1,5 +1,6 @@
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { tokens } from '@/theme/tokens';
+import type { ForgotPasswordFormState } from '@/interfaces';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -20,10 +21,11 @@ import { sentResetEmail } from '@/lib/firebase';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
-  const [sentEmail, setSentEmail] = useState('');
+  // Estado del formulario — tipado por ForgotPasswordFormState
+  const [email, setEmail] = useState<ForgotPasswordFormState['email']>('');
+  const [loading, setLoading] = useState<ForgotPasswordFormState['loading']>(false);
+  const [emailSent, setEmailSent] = useState<ForgotPasswordFormState['emailSent']>(false);
+  const [sentEmail, setSentEmail] = useState<ForgotPasswordFormState['sentEmail']>('');
 
   const handleBack = () => {
     if (router.canGoBack()) {

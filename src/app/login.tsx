@@ -18,13 +18,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { signIn, sendVerificationEmail, sigOutAccount } from '@/lib/firebase';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { tokens } from '@/theme/tokens';
+import type { LoginFormState } from '@/interfaces';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // Estado del formulario — tipado por LoginFormState
+  const [email, setEmail] = useState<LoginFormState['email']>('');
+  const [password, setPassword] = useState<LoginFormState['password']>('');
+  const [showPassword, setShowPassword] = useState<LoginFormState['showPassword']>(false);
+  const [loading, setLoading] = useState<LoginFormState['loading']>(false);
 
   const handleBack = () => {
     if (router.canGoBack()) {

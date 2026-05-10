@@ -2,15 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { tokens } from '../theme/tokens';
-
-interface FeatureCardProps {
-  title: string;
-  description: string;
-  iconName: keyof typeof Ionicons.glyphMap;
-  iconBgColor: string;
-  iconColor?: string;
-  style?: ViewStyle;
-}
+import type { FeatureCardProps } from '@/interfaces';
 
 export const FeatureCard = ({
   title,

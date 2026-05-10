@@ -20,7 +20,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/outfit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { auth, listenToAuthState } from '@/lib/firebase';
 import {
   getFcmToken,

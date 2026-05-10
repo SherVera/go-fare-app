@@ -2,17 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { tokens } from '@/theme/tokens';
-
-interface RouteItemProps {
-  number: string;
-  label?: string;
-  title: string;
-  subtitle: string;
-  status: string;
-  type?: 'bus' | 'metro';
-  statusType?: 'success' | 'warning' | 'neutral' | 'primary';
-  icon?: keyof typeof Ionicons.glyphMap;
-}
+import type { RouteItemProps } from '@/interfaces';
 
 export const RouteItem = ({
   number,

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   applyActionCode,
   createUserWithEmailAndPassword,
-  type FirebaseAuthTypes,
+  FirebaseAuthTypes,
   getAuth,
   onAuthStateChanged,
   sendEmailVerification,
@@ -46,7 +46,7 @@ export const db = getFirestore();
 export const storage = getStorage();
 export const listenToAuthState = onAuthStateChanged;
 
-type Credentials = { email: string; password: string };
+interface Credentials { email: string; password: string }
 
 // ------------------------------------------------------------------
 // ActionCodeSettings — mejora entregabilidad y permite abrir el

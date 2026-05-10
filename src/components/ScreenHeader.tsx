@@ -3,11 +3,7 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { tokens } from '@/theme/tokens';
-
-interface ScreenHeaderProps {
-  title: string;
-  onBack?: () => void; // si no se pasa, usa router.back() por defecto
-}
+import type { ScreenHeaderProps } from '@/interfaces';
 
 export const ScreenHeader = ({ title, onBack }: ScreenHeaderProps) => {
   const router = useRouter();

@@ -7,6 +7,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { tokens } from '@/theme/tokens';
+import type { QRScanResult } from '@/interfaces';
 
 export default function PayTripScreen() {
   const router = useRouter();
@@ -19,16 +20,17 @@ export default function PayTripScreen() {
     }
   }, [permission, requestPermission]);
 
-  const handleBarCodeScanned = ({
-    type,
-    data,
-  }: {
-    type: string;
-    data: string;
-  }) => {
+  const handleBarCodeScanned = (result: { type: string; data: string }) => {
     if (scanned) return;
     setScanned(true);
-    Alert.alert('Código Escaneado', `Información: ${data}`, [
+
+    const scanResult: QRScanResult = {
+      type: result.type,
+      data: result.data,
+      scannedAt: new Date(),
+    };
+
+    Alert.alert('Código Escaneado', `Información: ${scanResult.data}`, [
       { text: 'Aceptar', onPress: () => setScanned(false) },
     ]);
   };

@@ -57,4 +57,4 @@ export const tokens = {
   },
 } as const;
 
-export type ThemeTokens = typeof tokens;
+
