@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { tokens } from '@/theme/tokens';
 import type { RouteItemProps } from '@/interfaces';
+import { tokens } from '@/theme/tokens';
 
 export const RouteItem = ({
   number,

@@ -7,8 +7,8 @@ import {
   TextStyle,
   ViewStyle,
 } from 'react-native';
-import { tokens } from '../theme/tokens';
 import type { ButtonProps } from '@/interfaces';
+import { tokens } from '../theme/tokens';
 
 export const Button = ({
   title,

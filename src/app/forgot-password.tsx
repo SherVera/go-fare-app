@@ -1,10 +1,9 @@
-import { ScreenHeader } from '@/components/ScreenHeader';
-import { tokens } from '@/theme/tokens';
-import type { ForgotPasswordFormState } from '@/interfaces';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -13,19 +12,23 @@ import {
   Text,
   TextInput,
   View,
-  Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import type { ForgotPasswordFormState } from '@/interfaces';
 import { sentResetEmail } from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   // Estado del formulario — tipado por ForgotPasswordFormState
   const [email, setEmail] = useState<ForgotPasswordFormState['email']>('');
-  const [loading, setLoading] = useState<ForgotPasswordFormState['loading']>(false);
-  const [emailSent, setEmailSent] = useState<ForgotPasswordFormState['emailSent']>(false);
-  const [sentEmail, setSentEmail] = useState<ForgotPasswordFormState['sentEmail']>('');
+  const [loading, setLoading] =
+    useState<ForgotPasswordFormState['loading']>(false);
+  const [emailSent, setEmailSent] =
+    useState<ForgotPasswordFormState['emailSent']>(false);
+  const [sentEmail, setSentEmail] =
+    useState<ForgotPasswordFormState['sentEmail']>('');
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -39,7 +42,10 @@ export default function ForgotPasswordScreen() {
     const trimmedEmail = email.trim();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
-      Alert.alert('Atención', 'Por favor, ingresa un correo electrónico válido.');
+      Alert.alert(
+        'Atención',
+        'Por favor, ingresa un correo electrónico válido.',
+      );
       return;
     }
 
@@ -51,15 +57,27 @@ export default function ForgotPasswordScreen() {
     } catch (error: any) {
       console.error('Reset password error:', error);
       if (error.code === 'auth/user-not-found') {
-        Alert.alert('Error', 'No existe una cuenta asociada a este correo electrónico.');
+        Alert.alert(
+          'Error',
+          'No existe una cuenta asociada a este correo electrónico.',
+        );
       } else if (error.code === 'auth/invalid-email') {
-        Alert.alert('Error', 'El correo electrónico tiene un formato incorrecto.');
+        Alert.alert(
+          'Error',
+          'El correo electrónico tiene un formato incorrecto.',
+        );
       } else if (error.code === 'auth/too-many-requests') {
-        Alert.alert('Error', 'Demasiados intentos. Intenta de nuevo más tarde.');
+        Alert.alert(
+          'Error',
+          'Demasiados intentos. Intenta de nuevo más tarde.',
+        );
       } else if (error.code === 'auth/network-request-failed') {
         Alert.alert('Error', 'Error de red. Revisa tu conexión a internet.');
       } else {
-        Alert.alert('Error', error.message || 'No se pudo enviar el correo de recuperación.');
+        Alert.alert(
+          'Error',
+          error.message || 'No se pudo enviar el correo de recuperación.',
+        );
       }
     } finally {
       setLoading(false);
@@ -77,7 +95,10 @@ export default function ForgotPasswordScreen() {
         >
           <ScreenHeader title="Revisa tu Correo" onBack={handleBack} />
           <ScrollView
-            contentContainerStyle={[styles.scroll, { justifyContent: 'center' }]}
+            contentContainerStyle={[
+              styles.scroll,
+              { justifyContent: 'center' },
+            ]}
             bounces={false}
             showsVerticalScrollIndicator={false}
           >
@@ -96,11 +117,20 @@ export default function ForgotPasswordScreen() {
 
             {/* ── TÍTULOS ── */}
             <View style={[styles.titleBlock, { alignItems: 'center' }]}>
-              <Text style={[styles.titleDark, { textAlign: 'center' }]}>Correo</Text>
-              <Text style={[styles.titleBlue, { textAlign: 'center' }]}>Enviado</Text>
+              <Text style={[styles.titleDark, { textAlign: 'center' }]}>
+                Correo
+              </Text>
+              <Text style={[styles.titleBlue, { textAlign: 'center' }]}>
+                Enviado
+              </Text>
               <Text style={[styles.subtitle, { textAlign: 'center' }]}>
                 {`Hemos enviado un enlace de recuperación a:\n`}
-                <Text style={{ fontFamily: tokens.typography.fontFamily.bold, color: '#18243E' }}>
+                <Text
+                  style={{
+                    fontFamily: tokens.typography.fontFamily.bold,
+                    color: '#18243E',
+                  }}
+                >
                   {sentEmail}
                 </Text>
                 {`\n\nHaz clic en el enlace del correo para restablecer tu contraseña.`}
@@ -119,9 +149,16 @@ export default function ForgotPasswordScreen() {
                 <Text style={styles.spamTitle}>¿No llega el correo?</Text>
               </View>
               <Text style={styles.spamText}>
-                1. Revisa tu carpeta <Text style={styles.spamBold}>Spam / Correo no deseado</Text>.{'\n'}
-                2. Busca también en <Text style={styles.spamBold}>Promociones</Text> (Gmail).{'\n'}
-                3. Agrega <Text style={styles.spamBold}>noreply@gofare.firebaseapp.com</Text> a tus contactos.{'\n'}
+                1. Revisa tu carpeta{' '}
+                <Text style={styles.spamBold}>Spam / Correo no deseado</Text>.
+                {'\n'}
+                2. Busca también en{' '}
+                <Text style={styles.spamBold}>Promociones</Text> (Gmail).{'\n'}
+                3. Agrega{' '}
+                <Text style={styles.spamBold}>
+                  noreply@gofare.firebaseapp.com
+                </Text>{' '}
+                a tus contactos.{'\n'}
                 4. Si sigue sin llegar, espera 1 minuto y presiona reenviar.
               </Text>
             </View>
@@ -135,7 +172,12 @@ export default function ForgotPasswordScreen() {
               onPress={() => router.replace('/login' as any)}
             >
               <Text style={styles.ctaText}>Ir al Login</Text>
-              <Ionicons name="arrow-forward-circle-outline" size={20} color="#fff" style={{ marginLeft: 10 }} />
+              <Ionicons
+                name="arrow-forward-circle-outline"
+                size={20}
+                color="#fff"
+                style={{ marginLeft: 10 }}
+              />
             </Pressable>
 
             {/* ── REENVIAR CORREO ── */}
@@ -148,7 +190,9 @@ export default function ForgotPasswordScreen() {
               </Pressable>
             </View>
 
-            <Text style={styles.footerLegal}>CARACAS MOVE • RECUPERACIÓN SEGURA</Text>
+            <Text style={styles.footerLegal}>
+              CARACAS MOVE • RECUPERACIÓN SEGURA
+            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -244,7 +288,12 @@ export default function ForgotPasswordScreen() {
             ) : (
               <>
                 <Text style={styles.ctaText}>Enviar Enlace</Text>
-                <Ionicons name="send-outline" size={20} color="#fff" style={{ marginLeft: 10 }} />
+                <Ionicons
+                  name="send-outline"
+                  size={20}
+                  color="#fff"
+                  style={{ marginLeft: 10 }}
+                />
               </>
             )}
           </Pressable>
@@ -263,8 +312,9 @@ export default function ForgotPasswordScreen() {
             <Text style={styles.footerBullet}> • </Text>
             <Text style={styles.footerSupport}>Soporte Técnico</Text>
           </View>
-          <Text style={styles.footerLegal}>CARACAS MOVE • RECUPERACIÓN SEGURA</Text>
-
+          <Text style={styles.footerLegal}>
+            CARACAS MOVE • RECUPERACIÓN SEGURA
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -284,7 +334,7 @@ const styles = StyleSheet.create({
     height: 76,
     borderRadius: 38,
     backgroundColor: '#B8C8DF',
-    opacity: 0.60,
+    opacity: 0.6,
   },
   scroll: {
     flexGrow: 1,
@@ -302,9 +352,9 @@ const styles = StyleSheet.create({
     height: 136,
     borderRadius: 30,
     backgroundColor: '#91B4E0',
-    opacity: 0.30,
+    opacity: 0.3,
     top: 18,
-    transform: [{ scaleX: 0.90 }],
+    transform: [{ scaleX: 0.9 }],
   },
   iconCard: {
     width: 160,
@@ -407,7 +457,7 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     shadowColor: '#1D5BD9',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.40,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 12,
   },

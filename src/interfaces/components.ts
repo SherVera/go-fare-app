@@ -1,8 +1,8 @@
 // ─── Interfaces de Props de Componentes de UI ──────────────────────────────
 
 import type { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import type { ViewStyle, TextStyle } from 'react-native';
 import type { LocationObject } from 'expo-location';
+import type { TextStyle, ViewStyle } from 'react-native';
 import type { Route } from './route';
 import type { UserProfile } from './user';
 
