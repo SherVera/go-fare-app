@@ -1,8 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { tokens } from '@/theme/tokens';
 import type { ActionCardProps } from '@/interfaces';
+import { tokens } from '@/theme/tokens';
 
 export const ActionCard = ({
   title,

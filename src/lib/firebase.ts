@@ -46,7 +46,10 @@ export const db = getFirestore();
 export const storage = getStorage();
 export const listenToAuthState = onAuthStateChanged;
 
-interface Credentials { email: string; password: string }
+interface Credentials {
+  email: string;
+  password: string;
+}
 
 // ------------------------------------------------------------------
 // ActionCodeSettings — mejora entregabilidad y permite abrir el
@@ -54,18 +57,19 @@ interface Credentials { email: string; password: string }
 // TODO: reemplazar la URL por un dominio propio verificado en
 // Firebase Console > Authentication > Settings > Authorized domains.
 // ------------------------------------------------------------------
-export const verificationActionCodeSettings: FirebaseAuthTypes.ActionCodeSettings = {
-  url: 'https://gofare.app/verify-email',
-  handleCodeInApp: true,
-  iOS: {
-    bundleId: 'com.gofare.app',
-  },
-  android: {
-    packageName: 'com.gofare.app',
-    installApp: true,
-    minimumVersion: '12',
-  },
-};
+export const verificationActionCodeSettings: FirebaseAuthTypes.ActionCodeSettings =
+  {
+    url: 'https://gofare.app/verify-email',
+    handleCodeInApp: true,
+    iOS: {
+      bundleId: 'com.gofare.app',
+    },
+    android: {
+      packageName: 'com.gofare.app',
+      installApp: true,
+      minimumVersion: '12',
+    },
+  };
 
 export const createUser = ({ email, password }: Credentials) =>
   createUserWithEmailAndPassword(auth, email, password);
@@ -89,7 +93,10 @@ export const sendVerificationEmail = async (
     } else {
       await sendEmailVerification(user);
     }
-    console.log('[Firebase] Verification email sent successfully to:', user.email);
+    console.log(
+      '[Firebase] Verification email sent successfully to:',
+      user.email,
+    );
   } catch (error) {
     console.error('[Firebase] Error sending verification email:', error);
     throw error;
@@ -98,7 +105,8 @@ export const sendVerificationEmail = async (
 
 // Aplica un código de acción recibido por deep-link (verificación de email,
 // reset de contraseña, etc.).
-export const applyEmailVerificationCode = (code: string) => applyActionCode(auth, code);
+export const applyEmailVerificationCode = (code: string) =>
+  applyActionCode(auth, code);
 
 export const updateUser = (
   user: FirebaseAuthTypes.User,

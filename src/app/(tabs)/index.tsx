@@ -16,9 +16,9 @@ import { ActionCard } from '@/components/Home/ActionCard';
 import { BalanceCard } from '@/components/Home/BalanceCard';
 import { MapCard } from '@/components/Home/MapCard';
 import { RouteItem } from '@/components/Home/RouteItem';
-import { tokens } from '@/theme/tokens';
-import { auth, getDocument } from '@/lib/firebase';
 import type { Route, UserProfile } from '@/interfaces';
+import { auth, getDocument } from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function HomeDashboard() {
   const router = useRouter();

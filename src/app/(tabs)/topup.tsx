@@ -10,15 +10,17 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { PaymentMethod, QuickAmount, TopupFormState } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
-import type { PaymentMethod, TopupFormState, QuickAmount } from '@/interfaces';
 
 export default function TopupScreen() {
   const router = useRouter();
   // Estado del formulario — tipado con TopupFormState
   const [amount, setAmount] = useState<TopupFormState['amount']>('50');
-  const [selectedQuickAmount, setSelectedQuickAmount] = useState<TopupFormState['selectedQuickAmount']>(50);
-  const [selectedMethod, setSelectedMethod] = useState<TopupFormState['selectedMethod']>('pago_movil');
+  const [selectedQuickAmount, setSelectedQuickAmount] =
+    useState<TopupFormState['selectedQuickAmount']>(50);
+  const [selectedMethod, setSelectedMethod] =
+    useState<TopupFormState['selectedMethod']>('pago_movil');
 
   // Métodos de pago disponibles — tipados con PaymentMethod[]
   const paymentMethods: PaymentMethod[] = [
@@ -154,7 +156,10 @@ export default function TopupScreen() {
               onPress={() => setSelectedMethod(method.id)}
             >
               <View
-                style={[styles.methodIconWrapper, { backgroundColor: method.iconBgColor }]}
+                style={[
+                  styles.methodIconWrapper,
+                  { backgroundColor: method.iconBgColor },
+                ]}
               >
                 <MaterialCommunityIcons
                   name={method.iconName}

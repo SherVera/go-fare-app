@@ -6,8 +6,8 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { tokens } from '@/theme/tokens';
 import type { QRScanResult } from '@/interfaces';
+import { tokens } from '@/theme/tokens';
 
 export default function PayTripScreen() {
   const router = useRouter();

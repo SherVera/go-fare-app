@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,9 +13,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { sigOutAccount, auth, getDocument } from '@/lib/firebase';
+import type {
+  ProfileInfoCard,
+  ProfileMenuItem,
+  UserProfile,
+} from '@/interfaces';
+import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
-import type { UserProfile, ProfileInfoCard, ProfileMenuItem } from '@/interfaces';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -44,9 +48,21 @@ export default function ProfileScreen() {
 
   // Tarjetas de información — tipadas con ProfileInfoCard[]
   const infoCards: ProfileInfoCard[] = [
-    { label: 'CORREO ELECTRÓNICO', value: userProfile?.email || '...', type: 'email' },
-    { label: 'TELÉFONO', value: userProfile?.phoneNumber || '...', type: 'phone' },
-    { label: 'CIUDAD', value: userProfile?.city || 'Caracas, Venezuela', type: 'location' },
+    {
+      label: 'CORREO ELECTRÓNICO',
+      value: userProfile?.email || '...',
+      type: 'email',
+    },
+    {
+      label: 'TELÉFONO',
+      value: userProfile?.phoneNumber || '...',
+      type: 'phone',
+    },
+    {
+      label: 'CIUDAD',
+      value: userProfile?.city || 'Caracas, Venezuela',
+      type: 'location',
+    },
   ];
 
   // Ítems del menú — tipados con ProfileMenuItem[]
@@ -127,13 +143,18 @@ export default function ProfileScreen() {
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: userProfile?.photoURL || 'https://i.pravatar.cc/150?img=11' }}
+              source={{
+                uri:
+                  userProfile?.photoURL || 'https://i.pravatar.cc/150?img=11',
+              }}
               style={styles.profileAvatar}
             />
           </View>
-          <Text style={styles.profileName}>{userProfile?.fullName || 'Usuario'}</Text>
+          <Text style={styles.profileName}>
+            {userProfile?.fullName || 'Usuario'}
+          </Text>
           <View style={styles.idBadge}>
-            <Text style={styles.idText}>Cedula: {userProfile?.idNumber }</Text>
+            <Text style={styles.idText}>Cedula: {userProfile?.idNumber}</Text>
           </View>
         </View>
 
@@ -161,9 +182,17 @@ export default function ProfileScreen() {
         <Text style={styles.sectionTitle}>Configuración de la Cuenta</Text>
 
         {menuItems.map((item) => (
-          <Pressable key={item.id} style={styles.menuItem} onPress={item.onPress}>
+          <Pressable
+            key={item.id}
+            style={styles.menuItem}
+            onPress={item.onPress}
+          >
             <View style={styles.menuIconWrapper}>
-              <Ionicons name={item.iconName} size={22} color={tokens.colors.primary} />
+              <Ionicons
+                name={item.iconName}
+                size={22}
+                color={tokens.colors.primary}
+              />
             </View>
             <View style={styles.menuInfo}>
               <Text style={styles.menuTitle}>{item.title}</Text>

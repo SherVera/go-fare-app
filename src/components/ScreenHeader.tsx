@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { tokens } from '@/theme/tokens';
 import type { ScreenHeaderProps } from '@/interfaces';
+import { tokens } from '@/theme/tokens';
 
 export const ScreenHeader = ({ title, onBack }: ScreenHeaderProps) => {
   const router = useRouter();
