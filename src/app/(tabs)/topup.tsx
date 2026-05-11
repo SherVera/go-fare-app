@@ -10,19 +10,47 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { PaymentMethod, QuickAmount, TopupFormState } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
-export default function RecargaScreen() {
+export default function TopupScreen() {
   const router = useRouter();
-  const [amount, setAmount] = useState('50');
-  const [selectedQuickAmount, setSelectedQuickAmount] = useState<number | null>(
-    50,
-  );
-  const [selectedMethod, setSelectedMethod] = useState<
-    'pago_movil' | 'tarjeta' | 'cripto'
-  >('pago_movil');
+  // Estado del formulario — tipado con TopupFormState
+  const [amount, setAmount] = useState<TopupFormState['amount']>('50');
+  const [selectedQuickAmount, setSelectedQuickAmount] =
+    useState<TopupFormState['selectedQuickAmount']>(50);
+  const [selectedMethod, setSelectedMethod] =
+    useState<TopupFormState['selectedMethod']>('pago_movil');
 
-  const handleQuickAmount = (val: number) => {
+  // Métodos de pago disponibles — tipados con PaymentMethod[]
+  const paymentMethods: PaymentMethod[] = [
+    {
+      id: 'pago_movil',
+      title: 'Pago Móvil',
+      subtitle: 'Transferencia instantánea',
+      iconName: 'bank',
+      iconBgColor: '#EFF6FF',
+      iconColor: tokens.colors.primary,
+    },
+    {
+      id: 'tarjeta',
+      title: 'Tarjeta Débito/Crédito',
+      subtitle: 'Mastercard •••• 8829',
+      iconName: 'credit-card',
+      iconBgColor: '#ECFDF5',
+      iconColor: '#10B981',
+    },
+    {
+      id: 'cripto',
+      title: 'Criptomonedas',
+      subtitle: 'Binance Pay / USDT',
+      iconName: 'bitcoin',
+      iconBgColor: '#FAF5FF',
+      iconColor: '#A855F7',
+    },
+  ];
+
+  const handleQuickAmount = (val: QuickAmount) => {
     setSelectedQuickAmount(val);
     setAmount(val.toString());
   };
@@ -83,7 +111,7 @@ export default function RecargaScreen() {
           </View>
           <View style={styles.divider} />
           <View style={styles.quickAmountsRow}>
-            {[10, 20, 50, 100].map((val) => {
+            {([10, 20, 50, 100] as QuickAmount[]).map((val) => {
               const isSelected = selectedQuickAmount === val;
               return (
                 <Pressable
@@ -116,95 +144,46 @@ export default function RecargaScreen() {
           </Pressable>
         </View>
 
-        <Pressable
-          style={[
-            styles.methodCard,
-            selectedMethod === 'pago_movil' && styles.methodCardSelected,
-          ]}
-          onPress={() => setSelectedMethod('pago_movil')}
-        >
-          <View
-            style={[styles.methodIconWrapper, { backgroundColor: '#EFF6FF' }]}
-          >
-            <MaterialCommunityIcons
-              name="bank"
-              size={22}
-              color={tokens.colors.primary}
-            />
-          </View>
-          <View style={styles.methodInfo}>
-            <Text style={styles.methodTitle}>Pago Móvil</Text>
-            <Text style={styles.methodSubtitle}>Transferencia instantánea</Text>
-          </View>
-          <View
-            style={[
-              styles.radioOuter,
-              selectedMethod === 'pago_movil' && {
-                borderColor: tokens.colors.primary,
-              },
-            ]}
-          >
-            {selectedMethod === 'pago_movil' && (
-              <View style={styles.radioInner} />
-            )}
-          </View>
-        </Pressable>
-
-        <Pressable
-          style={[
-            styles.methodCard,
-            selectedMethod === 'tarjeta' && styles.methodCardSelected,
-          ]}
-          onPress={() => setSelectedMethod('tarjeta')}
-        >
-          <View
-            style={[styles.methodIconWrapper, { backgroundColor: '#ECFDF5' }]}
-          >
-            <Ionicons name="card" size={22} color="#10B981" />
-          </View>
-          <View style={styles.methodInfo}>
-            <Text style={styles.methodTitle}>Tarjeta Débito/Crédito</Text>
-            <Text style={styles.methodSubtitle}>Mastercard •••• 8829</Text>
-          </View>
-          <View
-            style={[
-              styles.radioOuter,
-              selectedMethod === 'tarjeta' && {
-                borderColor: tokens.colors.primary,
-              },
-            ]}
-          >
-            {selectedMethod === 'tarjeta' && <View style={styles.radioInner} />}
-          </View>
-        </Pressable>
-
-        <Pressable
-          style={[
-            styles.methodCard,
-            selectedMethod === 'cripto' && styles.methodCardSelected,
-          ]}
-          onPress={() => setSelectedMethod('cripto')}
-        >
-          <View
-            style={[styles.methodIconWrapper, { backgroundColor: '#FAF5FF' }]}
-          >
-            <MaterialCommunityIcons name="bitcoin" size={22} color="#A855F7" />
-          </View>
-          <View style={styles.methodInfo}>
-            <Text style={styles.methodTitle}>Criptomonedas</Text>
-            <Text style={styles.methodSubtitle}>Binance Pay / USDT</Text>
-          </View>
-          <View
-            style={[
-              styles.radioOuter,
-              selectedMethod === 'cripto' && {
-                borderColor: tokens.colors.primary,
-              },
-            ]}
-          >
-            {selectedMethod === 'cripto' && <View style={styles.radioInner} />}
-          </View>
-        </Pressable>
+        {paymentMethods.map((method) => {
+          const isSelected = selectedMethod === method.id;
+          return (
+            <Pressable
+              key={method.id}
+              style={[
+                styles.methodCard,
+                isSelected && styles.methodCardSelected,
+              ]}
+              onPress={() => setSelectedMethod(method.id)}
+            >
+              <View
+                style={[
+                  styles.methodIconWrapper,
+                  { backgroundColor: method.iconBgColor },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={method.iconName}
+                  size={22}
+                  color={method.iconColor}
+                />
+              </View>
+              <View style={styles.methodInfo}>
+                <Text style={styles.methodTitle}>{method.title}</Text>
+                <Text style={styles.methodSubtitle}>{method.subtitle}</Text>
+              </View>
+              <View
+                style={[
+                  styles.radioOuter,
+                  isSelected && {
+                    borderColor: tokens.colors.primary,
+                  },
+                ]}
+              >
+                {isSelected && <View style={styles.radioInner} />}
+              </View>
+            </Pressable>
+          );
+        })}
 
         {/* ── RESUMEN TOTAL ── */}
         <View style={styles.summaryCard}>
