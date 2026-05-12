@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import type { LoginFormState } from '@/interfaces';
 import { syncWithBackend } from '@/lib/api';
 import {
   sendVerificationEmail,
@@ -26,10 +27,12 @@ import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // Estado del formulario — tipado por LoginFormState
+  const [email, setEmail] = useState<LoginFormState['email']>('');
+  const [password, setPassword] = useState<LoginFormState['password']>('');
+  const [showPassword, setShowPassword] =
+    useState<LoginFormState['showPassword']>(false);
+  const [loading, setLoading] = useState<LoginFormState['loading']>(false);
 
   const handleBack = () => {
     if (router.canGoBack()) {

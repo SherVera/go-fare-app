@@ -54,7 +54,10 @@ export const db = getFirestore();
 export const storage = getStorage();
 export const listenToAuthState = onAuthStateChanged;
 
-type Credentials = { email: string; password: string };
+interface Credentials {
+  email: string;
+  password: string;
+}
 
 // ------------------------------------------------------------------
 // ActionCodeSettings — mejora entregabilidad y permite abrir el

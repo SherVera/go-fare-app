@@ -140,7 +140,6 @@ export default function RootLayout() {
   }, [phase]);
 
   // 3. Guardián: signed_in → tabs; needs_onboarding → /onboarding; signed_out → fuera de tabs
-  // biome-ignore lint/correctness/useExhaustiveDependencies: router estable; evita bucles de redirect
   useEffect(() => {
     if (!loaded || phase === 'initializing') return;
 
@@ -171,7 +170,7 @@ export default function RootLayout() {
     if (s0 === '(tabs)' || s0 === 'onboarding') {
       router.replace('/login');
     }
-  }, [phase, loaded, segments]);
+  }, [phase, loaded, segments, router]);
 
   useEffect(() => {
     if (loaded && phase !== 'initializing') {

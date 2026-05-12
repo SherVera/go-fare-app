@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import type { RegisterFormState } from '@/interfaces';
 import {
   createUser,
   sendVerificationEmail,
@@ -26,16 +27,20 @@ import { tokens } from '@/theme/tokens';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const [fullName, setFullName] = useState('');
-  const [idNumber, setIdNumber] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  // Controla si mostrar la pantalla de verificación pendiente
-  const [verificationSent, setVerificationSent] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState('');
+  // Estado del formulario — tipado por RegisterFormState
+  const [fullName, setFullName] = useState<RegisterFormState['fullName']>('');
+  const [idNumber, setIdNumber] = useState<RegisterFormState['idNumber']>('');
+  const [email, setEmail] = useState<RegisterFormState['email']>('');
+  const [password, setPassword] = useState<RegisterFormState['password']>('');
+  const [phoneNumber, setPhoneNumber] =
+    useState<RegisterFormState['phoneNumber']>('');
+  const [showPassword, setShowPassword] =
+    useState<RegisterFormState['showPassword']>(false);
+  const [loading, setLoading] = useState<RegisterFormState['loading']>(false);
+  const [verificationSent, setVerificationSent] =
+    useState<RegisterFormState['verificationSent']>(false);
+  const [registeredEmail, setRegisteredEmail] =
+    useState<RegisterFormState['registeredEmail']>('');
   const registerInFlightRef = useRef(false);
 
   const handleBack = () => {
@@ -174,7 +179,8 @@ export default function RegisterScreen() {
         idNumber: trimmedIdNumber,
         email: trimmedEmail,
         phoneNumber: trimmedPhoneNumber,
-        onboardingCompleted: true,
+        balance: 0,
+        carnetId: `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
       };
 
       try {

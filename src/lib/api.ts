@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 const BACKEND_JWT_KEY = 'backend_jwt';
@@ -18,10 +18,7 @@ async function authHeaders(): Promise<Record<string, string>> {
   return jwt ? { Authorization: `Bearer ${jwt}` } : {};
 }
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = {
     'Content-Type': 'application/json',
     ...(await authHeaders()),
@@ -32,7 +29,9 @@ async function request<T>(
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`[api] ${options.method ?? 'GET'} ${path} → ${res.status}: ${body}`);
+    throw new Error(
+      `[api] ${options.method ?? 'GET'} ${path} → ${res.status}: ${body}`,
+    );
   }
 
   return res.json() as Promise<T>;
