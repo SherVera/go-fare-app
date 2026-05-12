@@ -43,7 +43,7 @@ export interface ActionCardProps {
 }
 
 /** Props para el ítem de ruta en la lista */
-export interface RouteItemProps extends Route {}
+export type RouteItemProps = Route;
 
 /** Props para la tarjeta de balance del usuario */
 export interface BalanceCardProps {

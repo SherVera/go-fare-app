@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -26,7 +26,7 @@ export default function HomeDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchUserData = async () => {
+  const fetchUserData = useCallback(async () => {
     const user = auth.currentUser;
     if (user) {
       try {
@@ -40,11 +40,11 @@ export default function HomeDashboard() {
     }
     setLoading(false);
     setRefreshing(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchUserData();
-  }, []);
+    void fetchUserData();
+  }, [fetchUserData]);
 
   const onRefresh = () => {
     setRefreshing(true);

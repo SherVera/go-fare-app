@@ -1,5 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import {
@@ -22,10 +21,9 @@ import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ProfileScreen() {
-  const router = useRouter();
-  const [loggingOut, setLoggingOut] = useState<boolean>(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -107,7 +105,7 @@ export default function ProfileScreen() {
           try {
             setLoggingOut(true);
             await sigOutAccount();
-            router.replace('/login');
+            // La navegación a /login la hace el guardián en _layout.tsx cuando la fase pasa a signed_out.
           } catch (error) {
             console.error('Error al cerrar sesión:', error);
             Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');

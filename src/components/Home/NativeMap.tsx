@@ -1,4 +1,3 @@
-import * as Location from 'expo-location';
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';

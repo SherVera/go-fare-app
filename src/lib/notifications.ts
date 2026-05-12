@@ -12,7 +12,7 @@ import { Platform } from 'react-native';
 
 const messaging = getMessaging();
 
-export interface RemoteMessage extends FirebaseMessagingTypes.RemoteMessage {}
+export type RemoteMessage = FirebaseMessagingTypes.RemoteMessage;
 
 const isAuthorized = (status: FirebaseMessagingTypes.AuthorizationStatus) =>
   status === AuthorizationStatus.AUTHORIZED ||

@@ -1,5 +1,4 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -17,7 +16,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import type { LoginFormState } from '@/interfaces';
-import { sendVerificationEmail, signIn, sigOutAccount } from '@/lib/firebase';
+import { syncWithBackend } from '@/lib/api';
+import {
+  sendVerificationEmail,
+  signIn,
+  signInWithGoogle,
+  sigOutAccount,
+} from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
@@ -34,6 +39,32 @@ export default function LoginScreen() {
       router.back();
     } else {
       router.replace('/landing');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      const credential = await signInWithGoogle();
+      if (credential.user) {
+        try {
+          await syncWithBackend(credential.user);
+        } catch (backendErr) {
+          console.warn('[google] backend sync failed:', backendErr);
+        }
+      }
+    } catch (error: any) {
+      if (error?.code === 'auth/cancelled') return;
+      if (error?.code === 'auth/internal-error' && __DEV__) {
+        console.error('[google] auth/internal-error:', error);
+      }
+      const msg =
+        error?.code === 'auth/internal-error'
+          ? 'Error interno de Firebase (en Android suele faltar SHA-1/SHA-256 en la consola, o hace falta rebuild tras cambiar google-services).'
+          : (error?.message ?? 'No se pudo iniciar sesión con Google.');
+      Alert.alert('Error', msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -109,8 +140,15 @@ export default function LoginScreen() {
         return;
       }
 
-      // Correo verificado — permitir acceso
-      router.replace('/(tabs)' as any);
+      // Correo verificado — sincronizar con backend y permitir acceso
+      try {
+        await syncWithBackend(userCredential.user);
+      } catch (backendError) {
+        console.warn(
+          '[backend] sync failed, proceeding with Firebase auth only:',
+          backendError,
+        );
+      }
     } catch (error: any) {
       console.error('Login error:', error);
       // Manejar errores comunes de Firebase Auth con mensajes claros
@@ -130,6 +168,21 @@ export default function LoginScreen() {
         );
       } else if (error.code === 'auth/network-request-failed') {
         Alert.alert('Error', 'Error de red. Revisa tu conexión a internet.');
+      } else if (error.code === 'auth/internal-error') {
+        if (__DEV__) {
+          console.error(
+            '[login] auth/internal-error (revisa Logcat / Xcode):',
+            error,
+          );
+        }
+        Alert.alert(
+          'Error de autenticación',
+          'Firebase devolvió un error interno. Lo más habitual en desarrollo:\n\n' +
+            '• Android: registra las huellas SHA-1 y SHA-256 del keystore de debug en Firebase Console (Ajustes del proyecto → tu app Android).\n' +
+            '• Tras cambiar google-services.json o GoogleService-Info.plist, haz un rebuild nativo (npx expo run:android / run:ios).\n' +
+            '• Confirma que el proveedor Email/contraseña está activado en Authentication.\n\n' +
+            'Si usas Google, revisa también EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID.',
+        );
       } else {
         Alert.alert(
           'Error',
@@ -274,6 +327,47 @@ export default function LoginScreen() {
               </>
             )}
           </Pressable>
+
+          {/* ── SEPARADOR ── */}
+          <View style={styles.separatorRow}>
+            <View style={styles.separatorLine} />
+            <Text style={styles.separatorText}>o continuar con</Text>
+            <View style={styles.separatorLine} />
+          </View>
+
+          {/* ── BOTÓN TELÉFONO ── */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.socialBtn,
+              pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+              loading && { opacity: 0.6 },
+            ]}
+            onPress={() => router.push('/phone-login' as any)}
+            disabled={loading}
+          >
+            <Ionicons
+              name="call-outline"
+              size={22}
+              color={tokens.colors.primary}
+            />
+            <Text style={styles.socialBtnText}>Continuar con Teléfono</Text>
+          </Pressable>
+
+          {/* ── BOTÓN GOOGLE (solo si está configurado) ── */}
+          {!!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.socialBtn,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                loading && { opacity: 0.6 },
+              ]}
+              onPress={handleGoogleLogin}
+              disabled={loading}
+            >
+              <MaterialCommunityIcons name="google" size={22} color="#DB4437" />
+              <Text style={styles.socialBtnText}>Continuar con Google</Text>
+            </Pressable>
+          )}
 
           {/* ── LINK A REGISTRO ── */}
           <View style={styles.registerContainer}>
@@ -496,5 +590,43 @@ const styles = StyleSheet.create({
     color: '#B0BCCC',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
+  },
+  separatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#D4DEEC',
+  },
+  separatorText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#8594AB',
+    marginHorizontal: 12,
+  },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    height: 56,
+    marginBottom: 12,
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E2EAF4',
+  },
+  socialBtnText: {
+    fontSize: 15,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+    marginLeft: 10,
   },
 });

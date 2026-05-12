@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ExpoConfig } from 'expo/config';
 
 const requireEnv = (key: string): string => {
@@ -13,6 +15,24 @@ const requireEnv = (key: string): string => {
 
 const optionalEnv = (key: string): string | undefined =>
   process.env[key] || undefined;
+
+const projectRoot = process.cwd();
+
+function assertFirebaseClientFilesPresent(): void {
+  const iosPlist = path.join(projectRoot, 'GoogleService-Info.plist');
+  const androidJson = path.join(projectRoot, 'google-services.json');
+  const missing: string[] = [];
+  if (!fs.existsSync(iosPlist)) missing.push('GoogleService-Info.plist');
+  if (!fs.existsSync(androidJson)) missing.push('google-services.json');
+  if (missing.length === 0) return;
+  throw new Error(
+    `[app.config] Missing Firebase file(s) in project root: ${missing.join(', ')}.\n` +
+      'Download them from Firebase Console → Project settings → Your apps (iOS / Android). ' +
+      'These files are git-ignored; see .env.example.',
+  );
+}
+
+assertFirebaseClientFilesPresent();
 
 const googleMapsIosApiKey = optionalEnv('GOOGLE_MAPS_IOS_API_KEY');
 
@@ -87,6 +107,7 @@ const config: ExpoConfig = {
     '@react-native-firebase/app',
     '@react-native-firebase/auth',
     '@react-native-firebase/messaging',
+    '@react-native-google-signin/google-signin',
     'expo-dev-client',
   ],
   experiments: {

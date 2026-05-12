@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Trip, TripFilter, TripSummary } from '@/interfaces';
+import type { TripFilter, TripSummary } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
 export default function TripsScreen() {
@@ -29,54 +29,6 @@ export default function TripsScreen() {
     tripsCount: 32,
     mostFrequentRoute: 'Chacao - Mercedes',
   };
-
-  // Lista de viajes recientes — tipados con Trip[]
-  const recentTrips: Trip[] = [
-    {
-      id: '1',
-      userId: 'u1',
-      origin: 'Chacao',
-      destination: 'Las Mercedes',
-      amount: 15,
-      status: 'en-curso',
-      type: 'bus',
-      date: new Date(),
-      route: 'Chacao - Las Mercedes',
-    },
-    {
-      id: '2',
-      userId: 'u1',
-      origin: 'Palo Verde',
-      destination: 'Propatria',
-      amount: 10,
-      status: 'completado',
-      type: 'metro',
-      date: new Date(),
-      route: 'Palo Verde - Propatria',
-    },
-    {
-      id: '3',
-      userId: 'u1',
-      origin: 'Altamira',
-      destination: 'El Hatillo',
-      amount: 25,
-      status: 'completado',
-      type: 'bus',
-      date: new Date(),
-      route: 'Altamira - El Hatillo',
-    },
-    {
-      id: '4',
-      userId: 'u1',
-      origin: 'La Paz',
-      destination: 'Montalbán',
-      amount: 15,
-      status: 'completado',
-      type: 'bus',
-      date: new Date(),
-      route: 'La Paz - Montalbán',
-    },
-  ];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
