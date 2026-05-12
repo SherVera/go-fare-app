@@ -3,10 +3,12 @@ import {
   applyActionCode,
   createUserWithEmailAndPassword,
   type FirebaseAuthTypes,
+  GoogleAuthProvider,
   getAuth,
   onAuthStateChanged,
   sendEmailVerification,
   sendPasswordResetEmail,
+  signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
   signOut,
@@ -32,6 +34,12 @@ import {
   ref,
   uploadString,
 } from '@react-native-firebase/storage';
+import {
+  GoogleSignin,
+  isErrorWithCode,
+  isSuccessResponse,
+  statusCodes,
+} from '@react-native-google-signin/google-signin';
 
 // `@react-native-firebase/firestore@24` doesn't ship .d.ts for the modular
 // subpath, so we derive the constraint type from `query()`'s second argument.
@@ -133,6 +141,45 @@ export const confirmPhoneCode = (
   verificationCode: string,
 ) => confirmation.confirm(verificationCode);
 
+// ── Google Sign-In ───────────────────────────────────────────────────────────
+// Requires enabling Google Sign-In in Firebase Console and re-downloading
+// google-services.json / GoogleService-Info.plist with the OAuth client IDs.
+// Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID to the Web Client ID from Firebase Console.
+
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
+if (GOOGLE_WEB_CLIENT_ID) {
+  GoogleSignin.configure({ webClientId: GOOGLE_WEB_CLIENT_ID });
+}
+
+export const signInWithGoogle =
+  async (): Promise<FirebaseAuthTypes.UserCredential> => {
+    if (!GOOGLE_WEB_CLIENT_ID) {
+      throw new Error(
+        'Google Sign-In no está configurado. Establece EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID.',
+      );
+    }
+
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    const response = await GoogleSignin.signIn();
+
+    if (!isSuccessResponse(response)) {
+      if (
+        isErrorWithCode(response) &&
+        (response as any).code === statusCodes.SIGN_IN_CANCELLED
+      ) {
+        throw Object.assign(new Error('Cancelled'), { code: 'auth/cancelled' });
+      }
+      throw new Error('Google Sign-In falló');
+    }
+
+    const { idToken } = response.data;
+    if (!idToken) throw new Error('No se obtuvo el ID token de Google');
+
+    const credential = GoogleAuthProvider.credential(idToken);
+    return signInWithCredential(auth, credential);
+  };
+
 export const getUserByCedula = async (
   cedula: string,
 ): Promise<string | null> => {
@@ -156,19 +203,53 @@ export const getCollection = async (
   }));
 };
 
+/** Ruta tipo `coleccion/id` (un solo segmento de documento). */
+function docRefFromPath(path: string) {
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length !== 2) {
+    throw new Error(`doc path must be "collection/docId", got: ${path}`);
+  }
+  return doc(db, parts[0], parts[1]);
+}
+
 export const getDocument = async (path: string) => {
-  return (await getDoc(doc(db, path))).data();
+  return (await getDoc(docRefFromPath(path))).data();
 };
 
 export const setDocument = (path: string, data: Record<string, unknown>) => {
-  return setDoc(doc(db, path), { ...data, createAt: serverTimestamp() });
+  return setDoc(docRefFromPath(path), { ...data, createAt: serverTimestamp() });
 };
+
+/** Fusiona campos en `users/{uid}` sin borrar el resto (onboarding / ediciones). */
+export const mergeUserProfile = (uid: string, data: Record<string, unknown>) =>
+  setDoc(
+    doc(db, 'users', uid),
+    { ...data, updatedAt: serverTimestamp() },
+    { merge: true },
+  );
+
+/** Perfil listo para usar la app: flag explícito o documento legacy completo (registro email). */
+export async function isProfileOnboardingComplete(
+  uid: string,
+): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'users', uid));
+  if (!snap.exists()) return false;
+  const d = snap.data() as Record<string, unknown>;
+  if (d.onboardingCompleted === true) return true;
+  const phoneOk =
+    typeof d.phoneNumber === 'string' &&
+    /^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(d.phoneNumber);
+  const idOk = typeof d.idNumber === 'string' && /^\d{5,10}$/.test(d.idNumber);
+  const nameOk =
+    typeof d.fullName === 'string' && d.fullName.trim().length >= 3;
+  return Boolean(nameOk && idOk && phoneOk);
+}
 
 export const updateDocument = (path: string, data: Record<string, unknown>) => {
-  return updateDoc(doc(db, path), data);
+  return updateDoc(docRefFromPath(path), data);
 };
 
-export const deleteDocument = (path: string) => deleteDoc(doc(db, path));
+export const deleteDocument = (path: string) => deleteDoc(docRefFromPath(path));
 
 export const addDocument = (path: string, data: Record<string, unknown>) => {
   return addDoc(collection(db, path), { ...data, createAt: serverTimestamp() });

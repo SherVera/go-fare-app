@@ -1,5 +1,4 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
 import {
@@ -17,7 +16,6 @@ import { sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
 
   const handleLogout = () => {
@@ -30,7 +28,7 @@ export default function ProfileScreen() {
           try {
             setLoggingOut(true);
             await sigOutAccount();
-            router.replace('/login');
+            // La navegación a /login la hace el guardián en _layout.tsx cuando isAuthenticated pasa a false.
           } catch (error) {
             console.error('Error al cerrar sesión:', error);
             Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
