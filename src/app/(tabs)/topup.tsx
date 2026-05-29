@@ -1,15 +1,26 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { tokens } from '@/theme/tokens';
 import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { tokens } from '@/theme/tokens';
 
-export default function RecargaScreen() {
+export default function TopupScreen() {
   const router = useRouter();
   const [amount, setAmount] = useState('50');
-  const [selectedQuickAmount, setSelectedQuickAmount] = useState<number | null>(50);
-  const [selectedMethod, setSelectedMethod] = useState<'pago_movil' | 'tarjeta' | 'cripto'>('pago_movil');
+  const [selectedQuickAmount, setSelectedQuickAmount] = useState<number | null>(
+    50,
+  );
+  const [selectedMethod, setSelectedMethod] = useState<
+    'pago_movil' | 'tarjeta' | 'cripto'
+  >('pago_movil');
 
   const handleQuickAmount = (val: number) => {
     setSelectedQuickAmount(val);
@@ -26,7 +37,10 @@ export default function RecargaScreen() {
         <Text style={styles.headerTitle}>Recargar Saldo</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* ── BALANCE CARD ── */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>Saldo Actual</Text>
@@ -38,8 +52,15 @@ export default function RecargaScreen() {
             </View>
           </View>
           <View style={styles.lastRechargeRow}>
-            <Ionicons name="time-outline" size={14} color="#E0E7FF" style={{ marginRight: 6 }} />
-            <Text style={styles.lastRechargeText}>Última recarga: Hace 2 días</Text>
+            <Ionicons
+              name="time-outline"
+              size={14}
+              color="#E0E7FF"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.lastRechargeText}>
+              Última recarga: Hace 2 días
+            </Text>
           </View>
         </View>
 
@@ -67,10 +88,18 @@ export default function RecargaScreen() {
               return (
                 <Pressable
                   key={val}
-                  style={[styles.quickAmountBtn, isSelected && styles.quickAmountBtnSelected]}
+                  style={[
+                    styles.quickAmountBtn,
+                    isSelected && styles.quickAmountBtnSelected,
+                  ]}
                   onPress={() => handleQuickAmount(val)}
                 >
-                  <Text style={[styles.quickAmountText, isSelected && styles.quickAmountTextSelected]}>
+                  <Text
+                    style={[
+                      styles.quickAmountText,
+                      isSelected && styles.quickAmountTextSelected,
+                    ]}
+                  >
                     {val}
                   </Text>
                 </Pressable>
@@ -88,49 +117,91 @@ export default function RecargaScreen() {
         </View>
 
         <Pressable
-          style={[styles.methodCard, selectedMethod === 'pago_movil' && styles.methodCardSelected]}
+          style={[
+            styles.methodCard,
+            selectedMethod === 'pago_movil' && styles.methodCardSelected,
+          ]}
           onPress={() => setSelectedMethod('pago_movil')}
         >
-          <View style={[styles.methodIconWrapper, { backgroundColor: '#EFF6FF' }]}>
-            <MaterialCommunityIcons name="bank" size={22} color={tokens.colors.primary} />
+          <View
+            style={[styles.methodIconWrapper, { backgroundColor: '#EFF6FF' }]}
+          >
+            <MaterialCommunityIcons
+              name="bank"
+              size={22}
+              color={tokens.colors.primary}
+            />
           </View>
           <View style={styles.methodInfo}>
             <Text style={styles.methodTitle}>Pago Móvil</Text>
             <Text style={styles.methodSubtitle}>Transferencia instantánea</Text>
           </View>
-          <View style={[styles.radioOuter, selectedMethod === 'pago_movil' && { borderColor: tokens.colors.primary }]}>
-            {selectedMethod === 'pago_movil' && <View style={styles.radioInner} />}
+          <View
+            style={[
+              styles.radioOuter,
+              selectedMethod === 'pago_movil' && {
+                borderColor: tokens.colors.primary,
+              },
+            ]}
+          >
+            {selectedMethod === 'pago_movil' && (
+              <View style={styles.radioInner} />
+            )}
           </View>
         </Pressable>
 
         <Pressable
-          style={[styles.methodCard, selectedMethod === 'tarjeta' && styles.methodCardSelected]}
+          style={[
+            styles.methodCard,
+            selectedMethod === 'tarjeta' && styles.methodCardSelected,
+          ]}
           onPress={() => setSelectedMethod('tarjeta')}
         >
-          <View style={[styles.methodIconWrapper, { backgroundColor: '#ECFDF5' }]}>
+          <View
+            style={[styles.methodIconWrapper, { backgroundColor: '#ECFDF5' }]}
+          >
             <Ionicons name="card" size={22} color="#10B981" />
           </View>
           <View style={styles.methodInfo}>
             <Text style={styles.methodTitle}>Tarjeta Débito/Crédito</Text>
             <Text style={styles.methodSubtitle}>Mastercard •••• 8829</Text>
           </View>
-          <View style={[styles.radioOuter, selectedMethod === 'tarjeta' && { borderColor: tokens.colors.primary }]}>
+          <View
+            style={[
+              styles.radioOuter,
+              selectedMethod === 'tarjeta' && {
+                borderColor: tokens.colors.primary,
+              },
+            ]}
+          >
             {selectedMethod === 'tarjeta' && <View style={styles.radioInner} />}
           </View>
         </Pressable>
 
         <Pressable
-          style={[styles.methodCard, selectedMethod === 'cripto' && styles.methodCardSelected]}
+          style={[
+            styles.methodCard,
+            selectedMethod === 'cripto' && styles.methodCardSelected,
+          ]}
           onPress={() => setSelectedMethod('cripto')}
         >
-          <View style={[styles.methodIconWrapper, { backgroundColor: '#FAF5FF' }]}>
+          <View
+            style={[styles.methodIconWrapper, { backgroundColor: '#FAF5FF' }]}
+          >
             <MaterialCommunityIcons name="bitcoin" size={22} color="#A855F7" />
           </View>
           <View style={styles.methodInfo}>
             <Text style={styles.methodTitle}>Criptomonedas</Text>
             <Text style={styles.methodSubtitle}>Binance Pay / USDT</Text>
           </View>
-          <View style={[styles.radioOuter, selectedMethod === 'cripto' && { borderColor: tokens.colors.primary }]}>
+          <View
+            style={[
+              styles.radioOuter,
+              selectedMethod === 'cripto' && {
+                borderColor: tokens.colors.primary,
+              },
+            ]}
+          >
             {selectedMethod === 'cripto' && <View style={styles.radioInner} />}
           </View>
         </Pressable>
@@ -139,7 +210,14 @@ export default function RecargaScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Monto Recarga</Text>
-            <Text style={styles.summaryValue}>Bs. {amount ? parseFloat(amount.replace(',', '.')).toFixed(2).replace('.', ',') : '0,00'}</Text>
+            <Text style={styles.summaryValue}>
+              Bs.{' '}
+              {amount
+                ? parseFloat(amount.replace(',', '.'))
+                    .toFixed(2)
+                    .replace('.', ',')
+                : '0,00'}
+            </Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Comisión (0%)</Text>
@@ -148,7 +226,14 @@ export default function RecargaScreen() {
           <View style={styles.summaryDivider} />
           <View style={[styles.summaryRow, { marginBottom: 0 }]}>
             <Text style={styles.summaryTotalLabel}>Total a pagar</Text>
-            <Text style={styles.summaryTotalValue}>Bs. {amount ? parseFloat(amount.replace(',', '.')).toFixed(2).replace('.', ',') : '0,00'}</Text>
+            <Text style={styles.summaryTotalValue}>
+              Bs.{' '}
+              {amount
+                ? parseFloat(amount.replace(',', '.'))
+                    .toFixed(2)
+                    .replace('.', ',')
+                : '0,00'}
+            </Text>
           </View>
         </View>
 

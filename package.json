@@ -7,12 +7,17 @@
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "lint": "expo lint",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "lint:eslint": "expo lint",
     "typecheck": "tsc --noEmit",
     "prebuild": "expo prebuild --clean",
     "commit": "cz",
     "commit:ai": "aicommits --conventional",
     "release": "standard-version",
+    "commitlint": "commitlint --from main --to HEAD --verbose",
+    "git:flow": "bash scripts/git-happy-path.sh",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -55,6 +60,9 @@
     "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.14",
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0",
     "@types/react": "~19.1.0",
     "aicommits": "^3.1.1",
     "commitizen": "^4.3.1",

@@ -1,8 +1,3 @@
-import { ActionCard } from '@/components/Home/ActionCard';
-import { BalanceCard } from '@/components/Home/BalanceCard';
-import { MapCard } from '@/components/Home/MapCard';
-import { RouteItem } from '@/components/Home/RouteItem';
-import { tokens } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -15,6 +10,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActionCard } from '@/components/Home/ActionCard';
+import { BalanceCard } from '@/components/Home/BalanceCard';
+import { MapCard } from '@/components/Home/MapCard';
+import { RouteItem } from '@/components/Home/RouteItem';
+import { tokens } from '@/theme/tokens';
 
 export default function HomeDashboard() {
   const router = useRouter();
@@ -26,11 +26,19 @@ export default function HomeDashboard() {
       {/* ── CUSTOM HEADER ── */}
       <View style={styles.header}>
         <Pressable style={styles.headerIcon}>
-          <Ionicons name="menu-outline" size={28} color={tokens.colors.primary} />
+          <Ionicons
+            name="menu-outline"
+            size={28}
+            color={tokens.colors.primary}
+          />
         </Pressable>
         <Text style={styles.headerTitle}>GoFair</Text>
         <Pressable style={styles.headerIcon}>
-          <Ionicons name="notifications-outline" size={26} color={tokens.colors.primary} />
+          <Ionicons
+            name="notifications-outline"
+            size={26}
+            color={tokens.colors.primary}
+          />
           <View style={styles.notificationDot} />
         </Pressable>
       </View>
@@ -55,14 +63,14 @@ export default function HomeDashboard() {
             title="Recargar saldo"
             subtitle="Instantáneo vía Pago Móvil o tarjeta"
             icon="wallet-plus"
-            onPress={() => router.push('/recarga')}
+            onPress={() => router.push('/topup')}
           />
           <ActionCard
             title="Pagar viajes"
             subtitle="Escanea el código en la unidad"
             icon="qrcode-scan"
             color={tokens.colors.iconGreen}
-            onPress={() => router.push('/pagar')}
+            onPress={() => router.push('/pay')}
           />
         </View>
 

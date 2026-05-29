@@ -1,7 +1,13 @@
-import React from 'react';
-import { Pressable, Text, StyleSheet, ViewStyle, TextStyle } from 'react-native';
-import { tokens } from '../theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import {
+  Pressable,
+  StyleSheet,
+  Text,
+  TextStyle,
+  ViewStyle,
+} from 'react-native';
+import { tokens } from '../theme/tokens';
 
 interface ButtonProps {
   title: string;
@@ -12,7 +18,14 @@ interface ButtonProps {
   disabled?: boolean;
 }
 
-export const Button = ({ title, onPress, style, textStyle, iconRight, disabled }: ButtonProps) => {
+export const Button = ({
+  title,
+  onPress,
+  style,
+  textStyle,
+  iconRight,
+  disabled,
+}: ButtonProps) => {
   return (
     <Pressable
       onPress={onPress}
@@ -26,7 +39,12 @@ export const Button = ({ title, onPress, style, textStyle, iconRight, disabled }
     >
       <Text style={[styles.text, textStyle]}>{title}</Text>
       {iconRight && (
-        <Ionicons name={iconRight} size={tokens.typography.sizes.lg} color={tokens.colors.surface} style={styles.icon} />
+        <Ionicons
+          name={iconRight}
+          size={tokens.typography.sizes.lg}
+          color={tokens.colors.surface}
+          style={styles.icon}
+        />
       )}
     </Pressable>
   );

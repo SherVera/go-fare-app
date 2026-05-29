@@ -1,17 +1,14 @@
 import { useNavigation } from '@react-navigation/native';
-import { Dimensions, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
 import { FeatureCard } from '../components/FeatureCard';
 import { HeaderLogo } from '../components/HeaderLogo';
 import { ImageHero } from '../components/ImageHero';
 import { tokens } from '../theme/tokens';
 
-const { height } = Dimensions.get('window');
-
 export default function HomeScreen() {
   const navigation = useNavigation<any>();
-  const insets = useSafeAreaInsets();
 
   const handleLogin = () => {
     navigation.navigate('TicketDetail');
@@ -19,7 +16,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="transparent"
+        translucent
+      />
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} bounces={false}>
         {/* Header Logo */}
         <HeaderLogo />
@@ -34,7 +35,8 @@ export default function HomeScreen() {
           <View style={styles.sheetContent}>
             <Text style={styles.title}>
               Muévete{'\n'}
-              libremente por <Text style={styles.titleHighlight}>tu</Text>{'\n'}
+              libremente por <Text style={styles.titleHighlight}>tu</Text>
+              {'\n'}
               <Text style={styles.titleHighlight}>ciudad.</Text>
             </Text>
             <Text style={styles.subtitle}>
