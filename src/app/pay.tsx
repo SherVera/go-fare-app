@@ -6,7 +6,6 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { QRScanResult } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
 export default function PayTripScreen() {
@@ -20,17 +19,16 @@ export default function PayTripScreen() {
     }
   }, [permission, requestPermission]);
 
-  const handleBarCodeScanned = (result: { type: string; data: string }) => {
+  const handleBarCodeScanned = ({
+    type,
+    data,
+  }: {
+    type: string;
+    data: string;
+  }) => {
     if (scanned) return;
     setScanned(true);
-
-    const scanResult: QRScanResult = {
-      type: result.type,
-      data: result.data,
-      scannedAt: new Date(),
-    };
-
-    Alert.alert('Código Escaneado', `Información: ${scanResult.data}`, [
+    Alert.alert('Código Escaneado', `Información: ${data}`, [
       { text: 'Aceptar', onPress: () => setScanned(false) },
     ]);
   };

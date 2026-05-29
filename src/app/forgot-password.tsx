@@ -15,20 +15,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import type { ForgotPasswordFormState } from '@/interfaces';
 import { sentResetEmail } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  // Estado del formulario — tipado por ForgotPasswordFormState
-  const [email, setEmail] = useState<ForgotPasswordFormState['email']>('');
-  const [loading, setLoading] =
-    useState<ForgotPasswordFormState['loading']>(false);
-  const [emailSent, setEmailSent] =
-    useState<ForgotPasswordFormState['emailSent']>(false);
-  const [sentEmail, setSentEmail] =
-    useState<ForgotPasswordFormState['sentEmail']>('');
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [sentEmail, setSentEmail] = useState('');
 
   const handleBack = () => {
     if (router.canGoBack()) {

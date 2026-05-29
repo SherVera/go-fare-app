@@ -1,8 +1,16 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { ActionCardProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
+
+interface ActionCardProps {
+  title: string;
+  subtitle: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  onPress?: () => void;
+  style?: any;
+  color?: string;
+}
 
 export const ActionCard = ({
   title,

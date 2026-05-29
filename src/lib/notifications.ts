@@ -1,6 +1,6 @@
 import {
   AuthorizationStatus,
-  FirebaseMessagingTypes,
+  type FirebaseMessagingTypes,
   getMessaging,
   getToken,
   onMessage,
@@ -52,14 +52,14 @@ export const getFcmToken = async (): Promise<string | null> => {
   }
 };
 
-interface NotificationHandlers {
+type NotificationHandlers = {
   /** Triggered when a remote message arrives while the app is foregrounded. */
   onForegroundMessage?: (message: RemoteMessage) => void;
   /** Triggered when the user taps a notification that opened the app from background. */
   onOpened?: (message: RemoteMessage) => void;
   /** Triggered whenever FCM rotates the device token (app upgrade, restore, etc.). */
   onTokenChange?: (token: string) => void;
-}
+};
 
 /**
  * Wires up FCM listeners. Returns an unsubscribe function that detaches

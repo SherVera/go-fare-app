@@ -10,25 +10,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { TripFilter, TripSummary } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
 export default function TripsScreen() {
-  const [activeFilter, setActiveFilter] = useState<TripFilter['value']>('all');
-
-  // Filtros de período — tipados con TripFilter
-  const filters: TripFilter[] = [
-    { label: 'Todos', value: 'all' },
-    { label: 'Este mes', value: 'month' },
-    { label: 'Este año', value: 'year' },
-  ];
-
-  // Resumen de viajes — tipado con TripSummary
-  const tripSummary: TripSummary = {
-    totalSpent: 450,
-    tripsCount: 32,
-    mostFrequentRoute: 'Chacao - Mercedes',
-  };
+  const [activeFilter, setActiveFilter] = useState('Todos');
+  const filters = ['Todos', 'Este mes', 'Este año'];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -61,12 +47,12 @@ export default function TripsScreen() {
         {/* ── FILTROS ── */}
         <View style={styles.filtersContainer}>
           {filters.map((filter) => {
-            const isActive = activeFilter === filter.value;
+            const isActive = activeFilter === filter;
             return (
               <Pressable
-                key={filter.value}
+                key={filter}
                 style={[styles.filterTab, isActive && styles.filterTabActive]}
-                onPress={() => setActiveFilter(filter.value)}
+                onPress={() => setActiveFilter(filter)}
               >
                 <Text
                   style={[
@@ -74,7 +60,7 @@ export default function TripsScreen() {
                     isActive && styles.filterTextActive,
                   ]}
                 >
-                  {filter.label}
+                  {filter}
                 </Text>
               </Pressable>
             );
@@ -92,9 +78,7 @@ export default function TripsScreen() {
               />
             </View>
             <Text style={styles.summaryLabelGrey}>GASTO TOTAL</Text>
-            <Text style={styles.summaryValueDark}>
-              Bs. {tripSummary.totalSpent.toFixed(2).replace('.', ',')}
-            </Text>
+            <Text style={styles.summaryValueDark}>Bs. 450,00</Text>
           </View>
 
           <View style={styles.summaryCardBlue}>
@@ -102,9 +86,7 @@ export default function TripsScreen() {
               <Ionicons name="bus" size={22} color="#FFFFFF" />
             </View>
             <Text style={styles.summaryLabelLight}>VIAJES REALIZADOS</Text>
-            <Text style={styles.summaryValueLight}>
-              {tripSummary.tripsCount}
-            </Text>
+            <Text style={styles.summaryValueLight}>32</Text>
           </View>
         </View>
 

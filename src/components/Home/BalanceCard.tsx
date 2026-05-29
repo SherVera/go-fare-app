@@ -2,10 +2,9 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import type { BalanceCardProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
-export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
+export const BalanceCard = () => {
   return (
     <LinearGradient
       colors={['#1E40AF', '#3B82F6', '#EAB308']}
@@ -17,8 +16,7 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
         <View>
           <Text style={styles.label}>SALDO DISPONIBLE</Text>
           <Text style={styles.balance}>
-            {balance.toFixed(2).replace('.', ',')}{' '}
-            <Text style={styles.currency}>Bs</Text>
+            482,50 <Text style={styles.currency}>Bs</Text>
           </Text>
         </View>
         <Pressable style={styles.nfcButton}>
@@ -29,9 +27,7 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
       <View style={styles.bottomRow}>
         <View>
           <Text style={styles.labelSmall}>CARACAS MOVE ID</Text>
-          <Text style={styles.idNumber}>
-            {carnetId || '0000 • 0000 • 0000'}
-          </Text>
+          <Text style={styles.idNumber}>4892 • 3012 • 8821</Text>
         </View>
         <View style={styles.iconRow}>
           <View style={[styles.miniIcon, { backgroundColor: '#065F46' }]}>

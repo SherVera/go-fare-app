@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,7 +15,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import type { RegisterFormState } from '@/interfaces';
 import {
   createUser,
   sendVerificationEmail,
@@ -27,21 +26,16 @@ import { tokens } from '@/theme/tokens';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  // Estado del formulario — tipado por RegisterFormState
-  const [fullName, setFullName] = useState<RegisterFormState['fullName']>('');
-  const [idNumber, setIdNumber] = useState<RegisterFormState['idNumber']>('');
-  const [email, setEmail] = useState<RegisterFormState['email']>('');
-  const [password, setPassword] = useState<RegisterFormState['password']>('');
-  const [phoneNumber, setPhoneNumber] =
-    useState<RegisterFormState['phoneNumber']>('');
-  const [showPassword, setShowPassword] =
-    useState<RegisterFormState['showPassword']>(false);
-  const [loading, setLoading] = useState<RegisterFormState['loading']>(false);
-  const [verificationSent, setVerificationSent] =
-    useState<RegisterFormState['verificationSent']>(false);
-  const [registeredEmail, setRegisteredEmail] =
-    useState<RegisterFormState['registeredEmail']>('');
-  const registerInFlightRef = useRef(false);
+  const [fullName, setFullName] = useState('');
+  const [idNumber, setIdNumber] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  // Controla si mostrar la pantalla de verificación pendiente
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -52,8 +46,6 @@ export default function RegisterScreen() {
   };
 
   const handleRegister = async () => {
-    if (registerInFlightRef.current) return;
-
     try {
       const trimmedFullName = fullName.trim();
       const trimmedIdNumber = idNumber.trim();
@@ -95,118 +87,51 @@ export default function RegisterScreen() {
         return;
       }
 
-      registerInFlightRef.current = true;
       setLoading(true);
 
+      // Crear usuario en Firebase Authentication
       const userCredential = await createUser({
         email: trimmedEmail,
         password: trimmedPassword,
       });
       const { user } = userCredential;
 
-      if (__DEV__) {
-        console.log('[register] Firebase createUser OK:', {
-          uid: user.uid,
-          email: user.email,
-          emailVerified: user.emailVerified,
-          creationTime: user.metadata?.creationTime,
-        });
-      }
+      // Retraso para sincronizar sesión nativa
+      await new Promise((resolve) => setTimeout(resolve, 400));
 
-      // El botón no debe quedar bloqueado si reload / correo / Firestore se cuelgan.
-      setLoading(false);
+      // Actualizar el perfil del usuario con su nombre
+      await updateUser(user, { displayName: trimmedFullName });
 
-      try {
-        await Promise.race([
-          user.reload(),
-          new Promise<never>((_, rej) => {
-            setTimeout(
-              () =>
-                rej(
-                  Object.assign(new Error('reload timeout'), {
-                    code: 'reload-deadline',
-                  }),
-                ),
-              8000,
-            );
-          }),
-        ]);
-      } catch {
-        /* ignorar timeout u otros */
-      }
-
-      const EMAIL_DEADLINE_MS = 22_000;
-      try {
-        await Promise.race([
-          sendVerificationEmail(user),
-          new Promise<never>((_, rej) => {
-            setTimeout(
-              () =>
-                rej(
-                  Object.assign(new Error('Correo: tiempo agotado'), {
-                    code: 'email-deadline',
-                  }),
-                ),
-              EMAIL_DEADLINE_MS,
-            );
-          }),
-        ]);
-        if (__DEV__) {
-          console.log('[register] sendEmailVerification OK →', user.email);
-        }
-      } catch (emailError: any) {
-        console.error('[register] sendEmailVerification:', emailError);
-        Alert.alert(
-          'Correo de verificación',
-          `${emailError?.code ?? 'error'}: ${emailError?.message ?? 'desconocido'}\n\n` +
-            'Si ves “email-deadline”, la petición tardó demasiado; revisa red y Firebase. Puedes reintentar desde Iniciar sesión.',
-        );
-      }
-
-      // Mostrar “revisa tu correo” antes de cerrar sesión / Firestore para no perder el estado si el layout re-renderiza.
-      setRegisteredEmail(trimmedEmail);
-      setVerificationSent(true);
-
-      // Perfil Auth + Firestore (en segundo plano respecto a la UI de verificación).
-      try {
-        await updateUser(user, { displayName: trimmedFullName });
-      } catch (profileErr) {
-        console.warn('[register] updateUser:', profileErr);
-      }
-
-      const profilePayload = {
+      // Guardar datos adicionales en Firestore
+      await setDocument(`users/${user.uid}`, {
         fullName: trimmedFullName,
         idNumber: trimmedIdNumber,
         email: trimmedEmail,
         phoneNumber: trimmedPhoneNumber,
-        balance: 0,
-        carnetId: `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
-      };
+      });
 
+      // Intentar enviar el correo de verificación pasando el user directamente
+      // Se usa un try/catch propio para que, si falla, igual mostremos la pantalla
       try {
-        await Promise.race([
-          setDocument(`users/${user.uid}`, profilePayload),
-          new Promise<never>((_, rej) => {
-            setTimeout(
-              () =>
-                rej(
-                  Object.assign(new Error('Firestore timeout'), {
-                    code: 'firestore-deadline',
-                  }),
-                ),
-              12_000,
-            );
-          }),
-        ]);
-      } catch (fsErr: any) {
-        console.warn('[register] setDocument:', fsErr?.code ?? fsErr);
+        await sendVerificationEmail(user);
+      } catch (emailError: any) {
+        console.error('Verification email error:', emailError);
+        Alert.alert(
+          'Aviso',
+          'La cuenta se creó pero no pudimos enviar el correo de verificación. Puedes intentar reenviarlo desde la pantalla de inicio de sesión.',
+        );
       }
 
+      // Cerrar sesión inmediatamente para que no pueda acceder hasta verificar
       try {
         await sigOutAccount();
       } catch (signOutError) {
-        console.warn('[register] signOut:', signOutError);
+        console.warn('Could not sign out after registration:', signOutError);
       }
+
+      // Siempre mostrar la pantalla de verificación pendiente
+      setRegisteredEmail(trimmedEmail);
+      setVerificationSent(true);
     } catch (error: any) {
       console.error('Registration error:', error);
       if (error.code === 'auth/email-already-in-use') {
@@ -221,22 +146,6 @@ export default function RegisterScreen() {
         );
       } else if (error.code === 'auth/weak-password') {
         Alert.alert('Error', 'La contraseña es muy débil.');
-      } else if (error.code === 'auth/network-request-failed') {
-        Alert.alert('Error', 'Error de red. Revisa tu conexión a internet.');
-      } else if (error.code === 'auth/internal-error') {
-        if (__DEV__) {
-          console.error(
-            '[register] auth/internal-error (iOS: GoogleService-Info completo + rebuild):',
-            error,
-          );
-        }
-        Alert.alert(
-          'Error de registro',
-          'Firebase devolvió un error interno al crear la cuenta. Suele deberse a la configuración iOS:\n\n' +
-            '• Descarga de nuevo el GoogleService-Info.plist completo desde Firebase Console (debe incluir CLIENT_ID y REVERSED_CLIENT_ID) y sustituye el del proyecto.\n' +
-            '• Vuelve a ejecutar npx expo run:ios.\n' +
-            '• Comprueba que el método Email/contraseña esté activado en Authentication.',
-        );
       } else {
         Alert.alert(
           'Error',
@@ -245,7 +154,6 @@ export default function RegisterScreen() {
       }
     } finally {
       setLoading(false);
-      registerInFlightRef.current = false;
     }
   };
 

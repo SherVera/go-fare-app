@@ -68,7 +68,7 @@ El **mensaje del commit** lo pasas tú (Conventional Commits); si prefieres asis
 
 | Workflow | Qué hace |
 |----------|-----------|
-| [ci.yml](.github/workflows/ci.yml) | `npm ci`, `npm run lint` (Biome), `npm run typecheck` en `push` y `pull_request` hacia `main`, `staging` o `dev` |
+| [ci.yml](.github/workflows/ci.yml) | `npm ci`, `npm run lint` (Biome), `npm run typecheck` en `push` y `pull_request` a `main` |
 | [semantic-pr.yml](.github/workflows/semantic-pr.yml) | Valida que el **título del PR** siga Conventional Commits (útil con *squash merge*) |
 | [commitlint.yml](.github/workflows/commitlint.yml) | Valida los **mensajes de commit** del PR con [commitlint.config.cjs](./commitlint.config.cjs) |
 | [dependency-review.yml](.github/workflows/dependency-review.yml) | Revisa dependencias nuevas en el PR (severidad configurable) |

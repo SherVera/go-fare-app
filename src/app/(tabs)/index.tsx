@@ -1,10 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React from 'react';
 import {
-  ActivityIndicator,
   Pressable,
-  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,70 +14,10 @@ import { ActionCard } from '@/components/Home/ActionCard';
 import { BalanceCard } from '@/components/Home/BalanceCard';
 import { MapCard } from '@/components/Home/MapCard';
 import { RouteItem } from '@/components/Home/RouteItem';
-import type { Route, UserProfile } from '@/interfaces';
-import { auth, getDocument } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function HomeDashboard() {
   const router = useRouter();
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const fetchUserData = useCallback(async () => {
-    const user = auth.currentUser;
-    if (user) {
-      try {
-        const data = await getDocument(`users/${user.uid}`);
-        if (data) {
-          setUserProfile(data as UserProfile);
-        }
-      } catch (error) {
-        console.error('[Home] Error fetching user data:', error);
-      }
-    }
-    setLoading(false);
-    setRefreshing(false);
-  }, []);
-
-  useEffect(() => {
-    void fetchUserData();
-  }, [fetchUserData]);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchUserData();
-  };
-
-  // Rutas cercanas — tipadas con la interface Route
-  const nearbyRoutes: Route[] = [
-    {
-      number: '201',
-      title: 'Chacaíto - El Hatillo',
-      subtitle: 'Llega en 4 min • 1.2 km',
-      status: 'ÓPTIMO',
-      icon: 'time-outline',
-      estimatedArrivalMin: 4,
-    },
-    {
-      number: 'L1',
-      title: 'Propatria - Palo Verde',
-      subtitle: 'Frecuencia: 6 min',
-      status: 'REGULAR',
-      type: 'metro',
-      statusType: 'primary',
-      icon: 'flash-outline',
-    },
-  ];
-
-  if (loading && !refreshing) {
-    return (
-      <View style={[styles.container, styles.loadingCenter]}>
-        <StatusBar barStyle="dark-content" />
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -108,29 +46,16 @@ export default function HomeDashboard() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[tokens.colors.primary]}
-            tintColor={tokens.colors.primary}
-          />
-        }
       >
         {/* ── GREETING ── */}
         <View style={styles.greetingSection}>
           <Text style={styles.greetingLabel}>¡HOLA DE NUEVO!</Text>
-          <Text style={styles.userName}>
-            Hola, {userProfile?.fullName?.split(' ')[0] || 'Usuario'}
-          </Text>
+          <Text style={styles.userName}>Hola, Carlos</Text>
           <Text style={styles.greetingSub}>¿A dónde te diriges hoy?</Text>
         </View>
 
         {/* ── BALANCE CARD ── */}
-        <BalanceCard
-          balance={userProfile?.balance ?? 0}
-          carnetId={userProfile?.carnetId || '0000 • 0000 • 0000'}
-        />
+        <BalanceCard />
 
         {/* ── QUICK ACTIONS ── */}
         <View style={styles.actionsRow}>
@@ -157,19 +82,23 @@ export default function HomeDashboard() {
           </Pressable>
         </View>
 
-        {nearbyRoutes.map((route) => (
-          <RouteItem
-            key={route.number}
-            number={route.number}
-            label={route.label}
-            title={route.title}
-            subtitle={route.subtitle}
-            status={route.status}
-            type={route.type}
-            statusType={route.statusType}
-            icon={route.icon}
-          />
-        ))}
+        <RouteItem
+          number="201"
+          title="Chacaíto - El Hatillo"
+          subtitle="Llega en 4 min • 1.2 km"
+          status="ÓPTIMO"
+          icon="time-outline"
+        />
+
+        <RouteItem
+          number="L1"
+          title="Propatria - Palo Verde"
+          subtitle="Frecuencia: 6 min"
+          status="REGULAR"
+          type="metro"
+          statusType="primary"
+          icon="flash-outline"
+        />
 
         {/* ── MAP SECTION ── */}
         <MapCard />
@@ -185,10 +114,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-  },
-  loadingCenter: {
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
