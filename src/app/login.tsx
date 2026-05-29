@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import * as SecureStore from 'expo-secure-store';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,21 +18,171 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { sendVerificationEmail, signIn, sigOutAccount } from '@/lib/firebase';
+import type { LoginFormState } from '@/interfaces';
+import {
+  createFareAccount,
+  getFareAccountByUserId,
+  loginWithFirebaseToken,
+  syncWithBackend,
+} from '@/lib/api';
+import {
+  sendVerificationEmail,
+  signIn,
+  signInWithGoogle,
+  sigOutAccount,
+} from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // Estado del formulario — tipado por LoginFormState
+  const [email, setEmail] = useState<LoginFormState['email']>('');
+  const [password, setPassword] = useState<LoginFormState['password']>('');
+  const [showPassword, setShowPassword] =
+    useState<LoginFormState['showPassword']>(false);
+  const [loading, setLoading] = useState<LoginFormState['loading']>(false);
+
+  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
+  const [biometricsType, setBiometricsType] = useState('Biometría');
+
+  useEffect(() => {
+    const checkSavedCredentials = async () => {
+      try {
+        const savedEmail = await SecureStore.getItemAsync('savedEmail');
+        const savedPassword = await SecureStore.getItemAsync('savedPassword');
+        const savedPref = await AsyncStorage.getItem('isBiometricsEnabled');
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (
+          savedEmail &&
+          savedPassword &&
+          savedPref === 'true' &&
+          hasHardware &&
+          isEnrolled
+        ) {
+          setHasSavedCredentials(true);
+          const types =
+            await LocalAuthentication.supportedAuthenticationTypesAsync();
+          if (
+            types.includes(
+              LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+            )
+          ) {
+            setBiometricsType(
+              Platform.OS === 'ios' ? 'FaceID' : 'Reconocimiento Facial',
+            );
+          } else if (
+            types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
+          ) {
+            setBiometricsType('Huella Dactilar');
+          }
+        }
+      } catch (err) {
+        console.warn('[Login] Error checking saved credentials:', err);
+      }
+    };
+    checkSavedCredentials();
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: `Inicia sesión con tu ${biometricsType}`,
+        fallbackLabel: 'Usar contraseña',
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        setLoading(true);
+        const savedEmail = await SecureStore.getItemAsync('savedEmail');
+        const savedPassword = await SecureStore.getItemAsync('savedPassword');
+
+        if (savedEmail && savedPassword) {
+          setEmail(savedEmail);
+          setPassword(savedPassword);
+
+          const userCredential = await signIn({
+            email: savedEmail,
+            password: savedPassword,
+          });
+
+          const idToken = await userCredential.user.getIdToken();
+          const { user: backendUser } = await loginWithFirebaseToken(idToken);
+
+          try {
+            await getFareAccountByUserId(backendUser.id);
+          } catch {
+            try {
+              await createFareAccount(backendUser.id);
+            } catch (createError) {
+              console.warn(
+                '[Login] Error al crear la cuenta de tarifa:',
+                createError,
+              );
+            }
+          }
+
+          const roles = (backendUser as any).roles || [];
+          const isOwner = roles.some(
+            (role: any) => role.name === 'transport_owner',
+          );
+          const isDriver = roles.some((role: any) => role.name === 'driver');
+
+          if (isOwner) {
+            await AsyncStorage.setItem('user_role', 'transport_owner');
+            router.replace('/vehicle-owner/dashboard' as any);
+          } else if (isDriver) {
+            await AsyncStorage.setItem('user_role', 'driver');
+            router.replace('/driver/dashboard' as any);
+          } else {
+            await AsyncStorage.setItem('user_role', 'passenger');
+            router.replace('/(tabs)' as any);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Login] Error during biometric login:', err);
+      Alert.alert(
+        'Error',
+        'Hubo un error al intentar autenticar con biometría.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace('/landing');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      setLoading(true);
+      const credential = await signInWithGoogle();
+      if (credential.user) {
+        try {
+          await syncWithBackend(credential.user);
+        } catch (backendErr) {
+          console.warn('[google] backend sync failed:', backendErr);
+        }
+      }
+    } catch (error: any) {
+      if (error?.code === 'auth/cancelled') return;
+      if (error?.code === 'auth/internal-error' && __DEV__) {
+        console.error('[google] auth/internal-error:', error);
+      }
+      const msg =
+        error?.code === 'auth/internal-error'
+          ? 'Error interno de Firebase (en Android suele faltar SHA-1/SHA-256 en la consola, o hace falta rebuild tras cambiar google-services).'
+          : (error?.message ?? 'No se pudo iniciar sesión con Google.');
+      Alert.alert('Error', msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,7 +225,7 @@ export default function LoginScreen() {
         }
         Alert.alert(
           'Correo No Verificado',
-          'Por favor, verifica tu correo antes de iniciar sesión.\n\nSi no ves el correo, revisa tu carpeta de Spam o Promociones y agrega noreply@gofare.firebaseapp.com a tus contactos.',
+          'Por favor, verifica tu correo antes de iniciar sesión.\n\nSi no ves el correo, revisa tu carpeta de Spam o Promociones y agrega noreply@go-fare-dev-e7501.firebaseapp.com a tus contactos.',
           [
             { text: 'Cerrar', style: 'cancel' },
             {
@@ -106,10 +258,72 @@ export default function LoginScreen() {
         return;
       }
 
-      // Correo verificado — permitir acceso
-      router.replace('/(tabs)' as any);
+      // Correo verificado — sincronizar con backend y permitir acceso
+      let backendUser;
+      try {
+        const response = await syncWithBackend(userCredential.user);
+        backendUser = response.user;
+      } catch (backendError) {
+        console.warn(
+          '[backend] sync failed, proceeding with Firebase auth only:',
+          backendError,
+        );
+      }
+
+      // Guardar credenciales encriptadas para inicio rápido
+      try {
+        const savedPref = await AsyncStorage.getItem('isBiometricsEnabled');
+        if (savedPref === 'true') {
+          await SecureStore.setItemAsync('savedEmail', trimmedEmail);
+          await SecureStore.setItemAsync('savedPassword', trimmedPassword);
+        }
+      } catch (storeError) {
+        console.warn(
+          '[Login] Error saving credentials to SecureStore:',
+          storeError,
+        );
+      }
+
+      if (backendUser) {
+        // Sincronizar o crear la cuenta de tarifa (Fare Account) del usuario
+        try {
+          await getFareAccountByUserId(backendUser.id);
+        } catch {
+          try {
+            await createFareAccount(backendUser.id);
+          } catch (createError) {
+            console.warn(
+              '[Login] Error al crear la cuenta de tarifa:',
+              createError,
+            );
+          }
+        }
+
+        const roles = (backendUser as any).roles || [];
+        const isOwner = roles.some(
+          (role: any) => role.name === 'transport_owner',
+        );
+        const isDriver = roles.some((role: any) => role.name === 'driver');
+        const userRole = isOwner
+          ? 'transport_owner'
+          : isDriver
+            ? 'driver'
+            : 'passenger';
+        await AsyncStorage.setItem('user_role', userRole);
+
+        if (isOwner) {
+          router.replace('/vehicle-owner/dashboard' as any);
+        } else if (isDriver) {
+          router.replace('/driver/dashboard' as any);
+        } else {
+          router.replace('/(tabs)' as any);
+        }
+      } else {
+        await AsyncStorage.setItem('user_role', 'passenger');
+        router.replace('/(tabs)' as any);
+      }
     } catch (error: any) {
-      console.error('Login error:', error);
+      console.warn('Login error:', error);
       // Manejar errores comunes de Firebase Auth con mensajes claros
       if (
         error.code === 'auth/invalid-credential' ||
@@ -127,6 +341,21 @@ export default function LoginScreen() {
         );
       } else if (error.code === 'auth/network-request-failed') {
         Alert.alert('Error', 'Error de red. Revisa tu conexión a internet.');
+      } else if (error.code === 'auth/internal-error') {
+        if (__DEV__) {
+          console.error(
+            '[login] auth/internal-error (revisa Logcat / Xcode):',
+            error,
+          );
+        }
+        Alert.alert(
+          'Error de autenticación',
+          'Firebase devolvió un error interno. Lo más habitual en desarrollo:\n\n' +
+            '• Android: registra las huellas SHA-1 y SHA-256 del keystore de debug en Firebase Console (Ajustes del proyecto → tu app Android).\n' +
+            '• Tras cambiar google-services.json o GoogleService-Info.plist, haz un rebuild nativo (npx expo run:android / run:ios).\n' +
+            '• Confirma que el proveedor Email/contraseña está activado en Authentication.\n\n' +
+            'Si usas Google, revisa también EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID.',
+        );
       } else {
         Alert.alert(
           'Error',
@@ -144,7 +373,7 @@ export default function LoginScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScreenHeader title="Iniciar Sesión" onBack={handleBack} />
 
@@ -247,36 +476,117 @@ export default function LoginScreen() {
 
           <View style={{ flex: 1, minHeight: 48 }} />
 
-          {/* ── BOTÓN ── */}
+          {/* ── BOTONES DE ACCESO ── */}
+          <View style={hasSavedCredentials ? styles.ctaRow : null}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.cta,
+                hasSavedCredentials && {
+                  flex: 1,
+                  marginRight: 12,
+                  marginBottom: 0,
+                },
+                pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+                loading && { opacity: 0.7 },
+              ]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.ctaText}>Iniciar Sesión</Text>
+                  <Ionicons
+                    name="arrow-forward-circle-outline"
+                    size={20}
+                    color="#fff"
+                    style={{ marginLeft: 10 }}
+                  />
+                </>
+              )}
+            </Pressable>
+
+            {hasSavedCredentials && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.biometricCtaBtn,
+                  pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] },
+                  loading && { opacity: 0.7 },
+                ]}
+                onPress={handleBiometricLogin}
+                disabled={loading}
+              >
+                <Ionicons
+                  name="finger-print"
+                  size={28}
+                  color={tokens.colors.primary}
+                />
+              </Pressable>
+            )}
+          </View>
+
+          {/* ── SEPARADOR ── */}
+          <View style={styles.separatorRow}>
+            <View style={styles.separatorLine} />
+            <Text style={styles.separatorText}>o continuar con</Text>
+            <View style={styles.separatorLine} />
+          </View>
+
+          {/* ── BOTÓN TELÉFONO ── */}
           <Pressable
             style={({ pressed }) => [
-              styles.cta,
-              pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
-              loading && { opacity: 0.7 },
+              styles.socialBtn,
+              pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+              loading && { opacity: 0.6 },
             ]}
-            onPress={handleLogin}
+            onPress={() => router.push('/phone-login' as any)}
             disabled={loading}
           >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.ctaText}>Iniciar Sesión</Text>
-                <Ionicons
-                  name="arrow-forward-circle-outline"
-                  size={20}
-                  color="#fff"
-                  style={{ marginLeft: 10 }}
-                />
-              </>
-            )}
+            <Ionicons
+              name="call-outline"
+              size={22}
+              color={tokens.colors.primary}
+            />
+            <Text style={styles.socialBtnText}>Continuar con Teléfono</Text>
           </Pressable>
+
+          {/* ── BOTÓN GOOGLE (solo si está configurado) ── */}
+          {!!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.socialBtn,
+                pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                loading && { opacity: 0.6 },
+              ]}
+              onPress={handleGoogleLogin}
+              disabled={loading}
+            >
+              <MaterialCommunityIcons name="google" size={22} color="#DB4437" />
+              <Text style={styles.socialBtnText}>Continuar con Google</Text>
+            </Pressable>
+          )}
 
           {/* ── LINK A REGISTRO ── */}
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>¿No tienes una cuenta? </Text>
             <Pressable onPress={() => router.push('/register' as any)}>
               <Text style={styles.registerLink}>Regístrate</Text>
+            </Pressable>
+          </View>
+
+          {/* ── LINK REGISTRO DUEÑO VEHÍCULO ── */}
+          <View
+            style={[
+              styles.registerContainer,
+              { marginTop: -20, marginBottom: 28 },
+            ]}
+          >
+            <Text style={styles.registerText}>¿Eres dueño de vehículo? </Text>
+            <Pressable
+              onPress={() => router.push('/register-vehicle-owner' as any)}
+            >
+              <Text style={styles.registerLink}>Envía tu solicitud aquí</Text>
             </Pressable>
           </View>
 
@@ -444,6 +754,27 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 12,
   },
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 28,
+  },
+  biometricCtaBtn: {
+    width: 60,
+    height: 60,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: tokens.colors.primary,
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
   ctaText: {
     fontSize: 18,
     fontFamily: tokens.typography.fontFamily.bold,
@@ -493,5 +824,43 @@ const styles = StyleSheet.create({
     color: '#B0BCCC',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
+  },
+  separatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#D4DEEC',
+  },
+  separatorText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#8594AB',
+    marginHorizontal: 12,
+  },
+  socialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    height: 56,
+    marginBottom: 12,
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#E2EAF4',
+  },
+  socialBtnText: {
+    fontSize: 15,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+    marginLeft: 10,
   },
 });

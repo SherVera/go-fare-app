@@ -2,6 +2,7 @@ name: Semantic PR title
 
 on:
   pull_request:
+    branches: [main, staging, dev]
     types:
       - opened
       - edited
