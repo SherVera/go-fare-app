@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,17 +17,111 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import type { LoginFormState } from '@/interfaces';
+import {
+  createFareAccount,
+  getFareAccountByUserId,
+  loginWithFirebaseToken,
+} from '@/lib/api';
 import { sendVerificationEmail, signIn, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
+import * as SecureStore from 'expo-secure-store';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 export default function LoginScreen() {
   const router = useRouter();
   // Estado del formulario — tipado por LoginFormState
-  const [email, setEmail] = useState<LoginFormState['email']>('');
+  const [email, setEmail] = useState<LoginFormState['email']>( '');
   const [password, setPassword] = useState<LoginFormState['password']>('');
   const [showPassword, setShowPassword] =
     useState<LoginFormState['showPassword']>(false);
   const [loading, setLoading] = useState<LoginFormState['loading']>(false);
+
+  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
+  const [biometricsType, setBiometricsType] = useState('Biometría');
+
+  useEffect(() => {
+    const checkSavedCredentials = async () => {
+      try {
+        const savedEmail = await SecureStore.getItemAsync('savedEmail');
+        const savedPassword = await SecureStore.getItemAsync('savedPassword');
+        const savedPref = await AsyncStorage.getItem('isBiometricsEnabled');
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (savedEmail && savedPassword && savedPref === 'true' && hasHardware && isEnrolled) {
+          setHasSavedCredentials(true);
+          const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+          if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
+            setBiometricsType(Platform.OS === 'ios' ? 'FaceID' : 'Reconocimiento Facial');
+          } else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+            setBiometricsType('Huella Dactilar');
+          }
+        }
+      } catch (err) {
+        console.warn('[Login] Error checking saved credentials:', err);
+      }
+    };
+    checkSavedCredentials();
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    try {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: `Inicia sesión con tu ${biometricsType}`,
+        fallbackLabel: 'Usar contraseña',
+        disableDeviceFallback: false,
+      });
+
+      if (result.success) {
+        setLoading(true);
+        const savedEmail = await SecureStore.getItemAsync('savedEmail');
+        const savedPassword = await SecureStore.getItemAsync('savedPassword');
+
+        if (savedEmail && savedPassword) {
+          setEmail(savedEmail);
+          setPassword(savedPassword);
+
+          const userCredential = await signIn({
+            email: savedEmail,
+            password: savedPassword,
+          });
+
+          const idToken = await userCredential.user.getIdToken();
+          const { user: backendUser } = await loginWithFirebaseToken(idToken);
+
+          try {
+            await getFareAccountByUserId(backendUser.id);
+          } catch {
+            try {
+              await createFareAccount(backendUser.id);
+            } catch (createError) {
+              console.warn('[Login] Error al crear la cuenta de tarifa:', createError);
+            }
+          }
+
+          const roles = (backendUser as any).roles || [];
+          const isOwner = roles.some((role: any) => role.name === 'transport_owner');
+          const isDriver = roles.some((role: any) => role.name === 'driver');
+          
+          if (isOwner) {
+            await AsyncStorage.setItem('user_role', 'transport_owner');
+            router.replace('/vehicle-owner/dashboard' as any);
+          } else if (isDriver) {
+            await AsyncStorage.setItem('user_role', 'driver');
+            router.replace('/driver/dashboard' as any);
+          } else {
+            await AsyncStorage.setItem('user_role', 'passenger');
+            router.replace('/(tabs)' as any);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Login] Error during biometric login:', err);
+      Alert.alert('Error', 'Hubo un error al intentar autenticar con biometría.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -76,7 +170,7 @@ export default function LoginScreen() {
         }
         Alert.alert(
           'Correo No Verificado',
-          'Por favor, verifica tu correo antes de iniciar sesión.\n\nSi no ves el correo, revisa tu carpeta de Spam o Promociones y agrega noreply@gofare.firebaseapp.com a tus contactos.',
+          'Por favor, verifica tu correo antes de iniciar sesión.\n\nSi no ves el correo, revisa tu carpeta de Spam o Promociones y agrega noreply@go-fare-dev-e7501.firebaseapp.com a tus contactos.',
           [
             { text: 'Cerrar', style: 'cancel' },
             {
@@ -109,10 +203,51 @@ export default function LoginScreen() {
         return;
       }
 
-      // Correo verificado — permitir acceso
-      router.replace('/(tabs)' as any);
+      // Correo verificado — permitir acceso e intercambiar token con el backend
+      const idToken = await userCredential.user.getIdToken();
+      const { user: backendUser } = await loginWithFirebaseToken(idToken);
+
+      // Guardar credenciales encriptadas para inicio rápido
+      try {
+        const savedPref = await AsyncStorage.getItem('isBiometricsEnabled');
+        if (savedPref === 'true') {
+          await SecureStore.setItemAsync('savedEmail', trimmedEmail);
+          await SecureStore.setItemAsync('savedPassword', trimmedPassword);
+        }
+      } catch (storeError) {
+        console.warn('[Login] Error saving credentials to SecureStore:', storeError);
+      }
+
+      // Sincronizar o crear la cuenta de tarifa (Fare Account) del usuario
+      try {
+        await getFareAccountByUserId(backendUser.id);
+      } catch {
+        try {
+          await createFareAccount(backendUser.id);
+        } catch (createError) {
+          console.warn(
+            '[Login] Error al crear la cuenta de tarifa:',
+            createError,
+          );
+        }
+      }
+
+      const roles = (backendUser as any).roles || [];
+      const isOwner = roles.some((role: any) => role.name === 'transport_owner');
+      const isDriver = roles.some((role: any) => role.name === 'driver');
+      
+      if (isOwner) {
+        await AsyncStorage.setItem('user_role', 'transport_owner');
+        router.replace('/vehicle-owner/dashboard' as any);
+      } else if (isDriver) {
+        await AsyncStorage.setItem('user_role', 'driver');
+        router.replace('/driver/dashboard' as any);
+      } else {
+        await AsyncStorage.setItem('user_role', 'passenger');
+        router.replace('/(tabs)' as any);
+      }
     } catch (error: any) {
-      console.error('Login error:', error);
+      console.warn('Login error:', error);
       // Manejar errores comunes de Firebase Auth con mensajes claros
       if (
         error.code === 'auth/invalid-credential' ||
@@ -147,7 +282,7 @@ export default function LoginScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScreenHeader title="Iniciar Sesión" onBack={handleBack} />
 
@@ -250,36 +385,65 @@ export default function LoginScreen() {
 
           <View style={{ flex: 1, minHeight: 48 }} />
 
-          {/* ── BOTÓN ── */}
-          <Pressable
-            style={({ pressed }) => [
-              styles.cta,
-              pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
-              loading && { opacity: 0.7 },
-            ]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.ctaText}>Iniciar Sesión</Text>
+          {/* ── BOTONES DE ACCESO ── */}
+          <View style={hasSavedCredentials ? styles.ctaRow : null}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.cta,
+                hasSavedCredentials && { flex: 1, marginRight: 12, marginBottom: 0 },
+                pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
+                loading && { opacity: 0.7 },
+              ]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.ctaText}>Iniciar Sesión</Text>
+                  <Ionicons
+                    name="arrow-forward-circle-outline"
+                    size={20}
+                    color="#fff"
+                    style={{ marginLeft: 10 }}
+                  />
+                </>
+              )}
+            </Pressable>
+
+            {hasSavedCredentials && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.biometricCtaBtn,
+                  pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] },
+                  loading && { opacity: 0.7 },
+                ]}
+                onPress={handleBiometricLogin}
+                disabled={loading}
+              >
                 <Ionicons
-                  name="arrow-forward-circle-outline"
-                  size={20}
-                  color="#fff"
-                  style={{ marginLeft: 10 }}
+                  name="finger-print"
+                  size={28}
+                  color={tokens.colors.primary}
                 />
-              </>
+              </Pressable>
             )}
-          </Pressable>
+          </View>
 
           {/* ── LINK A REGISTRO ── */}
           <View style={styles.registerContainer}>
             <Text style={styles.registerText}>¿No tienes una cuenta? </Text>
             <Pressable onPress={() => router.push('/register' as any)}>
               <Text style={styles.registerLink}>Regístrate</Text>
+            </Pressable>
+          </View>
+
+          {/* ── LINK REGISTRO DUEÑO VEHÍCULO ── */}
+          <View style={[styles.registerContainer, { marginTop: -20, marginBottom: 28 }]}>
+            <Text style={styles.registerText}>¿Eres dueño de vehículo? </Text>
+            <Pressable onPress={() => router.push('/register-vehicle-owner' as any)}>
+              <Text style={styles.registerLink}>Envía tu solicitud aquí</Text>
             </Pressable>
           </View>
 
@@ -446,6 +610,27 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 12,
+  },
+  ctaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 28,
+  },
+  biometricCtaBtn: {
+    width: 60,
+    height: 60,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: tokens.colors.primary,
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
   },
   ctaText: {
     fontSize: 18,

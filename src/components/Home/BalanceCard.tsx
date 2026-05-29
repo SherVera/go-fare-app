@@ -6,6 +6,8 @@ import type { BalanceCardProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
 export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
+  const numericBalance = typeof balance === 'number' ? balance : parseFloat(balance as any) || 0;
+
   return (
     <LinearGradient
       colors={['#1E40AF', '#3B82F6', '#EAB308']}
@@ -17,7 +19,7 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
         <View>
           <Text style={styles.label}>SALDO DISPONIBLE</Text>
           <Text style={styles.balance}>
-            {balance.toFixed(2).replace('.', ',')}{' '}
+            {numericBalance.toFixed(2).replace('.', ',')}{' '}
             <Text style={styles.currency}>Bs</Text>
           </Text>
         </View>

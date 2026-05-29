@@ -88,6 +88,7 @@ const config: ExpoConfig = {
     '@react-native-firebase/auth',
     '@react-native-firebase/messaging',
     'expo-dev-client',
+    'expo-secure-store',
   ],
   experiments: {
     typedRoutes: true,

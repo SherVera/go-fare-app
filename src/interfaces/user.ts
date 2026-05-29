@@ -1,6 +1,7 @@
 export interface UserProfile {
   uid: string;
   fullName: string;
+  displayName?: string;
   idNumber: string; // Cédula venezolana
   email: string;
   phoneNumber: string;
