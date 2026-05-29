@@ -8,7 +8,7 @@ import {
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useColorScheme } from 'react-native';
 import 'react-native-reanimated';
 
@@ -21,7 +21,18 @@ import {
 } from '@expo-google-fonts/outfit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import { auth, listenToAuthState } from '@/lib/firebase';
+import { clearBackendJwt, syncWithBackend, getGoFareToken, clearGoFareToken, getBackendProfile } from '@/lib/api';
+import { registerAuthSessionResolver } from '@/lib/auth-session';
+import {
+  auth,
+  isProfileOnboardingComplete,
+  listenToAuthState,
+  sigOutAccount,
+} from '@/lib/firebase';
+import { AppState, AppStateStatus, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as LocalAuthentication from 'expo-local-authentication';
 import {
   getFcmToken,
   getInitialNotification,
@@ -30,16 +41,165 @@ import {
 
 SplashScreen.preventAutoHideAsync();
 
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+type SessionPhase =
+  | 'initializing'
+  | 'signed_out'
+  | 'needs_onboarding'
+  | 'signed_in';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const segments = useSegments();
   const router = useRouter();
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [phase, setPhase] = useState<SessionPhase>('initializing');
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isLocked, _setIsLocked] = useState(false);
+  const isLockedRef = useRef(false);
+  const setIsLocked = useCallback((val: boolean) => {
+    isLockedRef.current = val;
+    _setIsLocked(val);
+  }, []);
+
+  const [biometricsType, setBiometricsType] = useState<string>('Biometría');
+  const isAuthenticatingRef = useRef(false);
+  const wasInBackground = useRef(false);
+
+  const triggerBiometricUnlock = useCallback(async () => {
+    if (isAuthenticatingRef.current) return;
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+      if (hasHardware && isEnrolled) {
+        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+        if (
+          types.includes(
+            LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+          )
+        ) {
+          setBiometricsType(
+            Platform.OS === 'ios' ? 'FaceID' : 'Reconocimiento Facial',
+          );
+        } else if (
+          types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
+        ) {
+          setBiometricsType('Huella Dactilar');
+        }
+
+        isAuthenticatingRef.current = true;
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Desbloquear GoFare',
+          fallbackLabel: 'Ingresar con contraseña',
+          disableDeviceFallback: false,
+        });
+
+        if (result.success) {
+          setIsLocked(false);
+        }
+      } else {
+        setIsLocked(false);
+      }
+    } catch (err) {
+      console.warn('[Layout] Error during biometric unlock:', err);
+      setIsLocked(false);
+    } finally {
+      // Retrasar el reinicio de isAuthenticatingRef.current permite que las transiciones
+      // tardías del AppState del OS al cerrar el modal (que activan 'active') se ignoren correctamente.
+      setTimeout(() => {
+        isAuthenticatingRef.current = false;
+        console.log('[Layout] isAuthenticatingRef reset to false');
+      }, 1000);
+    }
+  }, [setIsLocked]);
+
+  const handleBiometricLogout = async () => {
+    try {
+      await sigOutAccount();
+      await clearBackendJwt();
+      setIsLocked(false);
+    } catch (err) {
+      console.warn('[Layout] Error logging out from lock screen:', err);
+    }
+  };
+
+  // Escuchar cambios de estado de autenticación y cargar preferencia de biometría
+  useEffect(() => {
+    if (phase === 'initializing') return;
+
+    if (phase !== 'signed_in') {
+      setIsLocked(false);
+      return;
+    }
+
+    const initBiometricLock = async () => {
+      try {
+        const savedPref = await AsyncStorage.getItem('isBiometricsEnabled');
+        if (savedPref === 'true') {
+          setIsLocked(true);
+          setTimeout(() => {
+            triggerBiometricUnlock();
+          }, 300);
+        }
+      } catch (err) {
+        console.warn('[Layout] Error reading biometric preference:', err);
+      }
+    };
+
+    initBiometricLock();
+  }, [phase, triggerBiometricUnlock, setIsLocked]);
+
+  // Escuchar si la app vuelve de segundo plano
+  useEffect(() => {
+    if (phase !== 'signed_in') return;
+
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      console.log('[Layout] AppState change:', nextAppState, {
+        isAuthenticating: isAuthenticatingRef.current,
+        isLocked: isLockedRef.current,
+        wasInBackground: wasInBackground.current,
+      });
+
+      if (nextAppState === 'background') {
+        if (!isAuthenticatingRef.current) {
+          wasInBackground.current = true;
+        }
+        return;
+      }
+
+      if (nextAppState === 'active') {
+        if (isAuthenticatingRef.current) {
+          console.log('[Layout] Active transition ignored: currently authenticating');
+          return;
+        }
+
+        const savedPref = await AsyncStorage.getItem('isBiometricsEnabled');
+        if (savedPref === 'true') {
+          if (wasInBackground.current || isLockedRef.current) {
+            console.log(
+              '[Layout] Triggering biometric lock. wasInBackground:',
+              wasInBackground.current,
+              'isLocked:',
+              isLockedRef.current
+            );
+            wasInBackground.current = false;
+            setIsLocked(true);
+            setTimeout(() => {
+              triggerBiometricUnlock();
+            }, 300);
+          }
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener(
+      'change',
+      handleAppStateChange,
+    );
+    return () => {
+      subscription.remove();
+    };
+  }, [phase, triggerBiometricUnlock, setIsLocked]);
 
   const [loaded] = useFonts({
     Outfit_400Regular,
@@ -48,60 +208,152 @@ export default function RootLayout() {
     Outfit_900Black,
   });
 
-  // 1. Escuchar el estado de autenticación de Firebase Nativo
+  // 1. Firebase Auth + perfil Firestore (onboarding) + sincronización de rol
   useEffect(() => {
-    const unsubscribe = listenToAuthState(
-      auth,
-      async (user: FirebaseAuthTypes.User | null) => {
-        if (user) {
-          // Solo marcamos como autenticado si el correo está verificado.
-          // No cerramos sesión aquí para evitar race conditions con
-          // las pantallas de login/register que manejan el flujo explícitamente.
-          setIsAuthenticated(user.emailVerified);
-        } else {
-          // 🚧 Modo temporal: verificar si hay sesión por cédula guardada
-          const tempAuth = await AsyncStorage.getItem('temp_auth');
-          setIsAuthenticated(tempAuth === 'true');
+    let cancelled = false;
+
+    const applyPhase = async (user: FirebaseAuthTypes.User | null) => {
+      if (!user) {
+        await clearBackendJwt();
+        if (!cancelled) setPhase('signed_out');
+        return;
+      }
+
+      const isPhoneUser = !!user.phoneNumber;
+      const isVerified = user.emailVerified || isPhoneUser;
+
+      if (!isVerified) {
+        if (!cancelled) setPhase('signed_out');
+        return;
+      }
+
+      let backendUser;
+      try {
+        const response = await syncWithBackend(user);
+        backendUser = response.user;
+      } catch (err) {
+        console.warn('[backend] token refresh failed:', err);
+      }
+
+      let role = null;
+      if (backendUser) {
+        const roles = (backendUser as any).roles || [];
+        const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+        const isDriver = roles.some((r: any) => r.name === 'driver');
+        role = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
+        await AsyncStorage.setItem('user_role', role);
+      } else {
+        role = await AsyncStorage.getItem('user_role');
+      }
+
+      let complete = false;
+      if (role === 'driver' || role === 'transport_owner') {
+        complete = true;
+      } else {
+        try {
+          complete = await isProfileOnboardingComplete(user.uid);
+        } catch (e) {
+          console.warn('[onboarding] could not read profile:', e);
         }
-      },
-    );
-    return unsubscribe;
+      }
+
+      if (cancelled) return;
+      setPhase(complete ? 'signed_in' : 'needs_onboarding');
+    };
+
+    registerAuthSessionResolver(applyPhase);
+
+    const unsubscribe = listenToAuthState(auth, (user) => {
+      void applyPhase(user);
+    });
+
+    return () => {
+      cancelled = true;
+      registerAuthSessionResolver(async (_user) => {});
+      unsubscribe();
+    };
   }, []);
 
-  // 2. Notificaciones FCM: registrar handlers + obtener token al iniciar sesión.
-  // Solo se ejecuta cuando hay sesión, para evitar pedir permisos en el landing.
+  // Cargar el rol del usuario desde AsyncStorage y verificar con el backend
   useEffect(() => {
-    if (!isAuthenticated) return;
+    let active = true;
+    const loadAndVerifyRole = async () => {
+      try {
+        const cachedRole = await AsyncStorage.getItem('user_role');
+        if (active) {
+          setUserRole(cachedRole);
+        }
+
+        try {
+          const backendUser = await getBackendProfile();
+          if (backendUser && active) {
+            const roles = (backendUser as any).roles || [];
+            const isOwner = roles.some((role: any) => role.name === 'transport_owner');
+            const isDriver = roles.some((role: any) => role.name === 'driver');
+            const newRole = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
+            
+            if (newRole !== cachedRole) {
+              console.log('[Layout] User role updated from backend:', newRole);
+              await AsyncStorage.setItem('user_role', newRole);
+              if (active) {
+                setUserRole(newRole);
+              }
+            }
+          }
+        } catch (backendErr: any) {
+          console.warn('[Layout] Error verifying role with backend in background:', backendErr.message || backendErr);
+          if (!cachedRole && active) {
+            setUserRole('passenger');
+          }
+        }
+      } catch (e) {
+        console.warn('[Layout] Error loading role from storage:', e);
+      }
+    };
+
+    if (phase === 'signed_in') {
+      loadAndVerifyRole();
+    } else {
+      setUserRole(null);
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [phase]);
+
+  // 2. FCM solo con sesión completa (tabs)
+  useEffect(() => {
+    if (phase !== 'signed_in') return;
 
     let cancelled = false;
 
     (async () => {
-      const token = await getFcmToken();
-      if (!cancelled && token && __DEV__) {
-        console.log('[fcm:token]', token);
-      }
-      // TODO: enviar `token` al backend asociado al usuario actual.
+      try {
+        const token = await getFcmToken();
+        if (!cancelled && token && __DEV__) {
+          console.log('[fcm:token]', token);
+        }
 
-      const initial = await getInitialNotification();
-      if (!cancelled && initial && __DEV__) {
-        console.log('[fcm:cold-start]', initial.data);
+        const initial = await getInitialNotification();
+        if (!cancelled && initial && __DEV__) {
+          console.log('[fcm:cold-start]', initial.data);
+        }
+      } catch (error) {
+        console.error('[Layout] Error in FCM initialization:', error);
       }
-      // TODO: navegar según `initial.data` (deep link).
     })();
 
     const unsubscribe = registerNotificationHandlers({
       onForegroundMessage: (message) => {
         if (__DEV__)
           console.log('[fcm:foreground]', message.notification, message.data);
-        // TODO: mostrar toast/in-app banner con `message.notification`.
       },
       onOpened: (message) => {
         if (__DEV__) console.log('[fcm:opened]', message.data);
-        // TODO: navegar según `message.data`.
       },
       onTokenChange: (token) => {
         if (__DEV__) console.log('[fcm:token-refresh]', token);
-        // TODO: re-enviar `token` al backend.
       },
     });
 
@@ -109,35 +361,142 @@ export default function RootLayout() {
       cancelled = true;
       unsubscribe();
     };
-  }, [isAuthenticated]);
+  }, [phase]);
 
-  // 3. Guardián Global de Rutas (Auth Guard de Expo Router)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: router is stable; adding router.replace avoids intentional redirects loop noise
+  // 3. Guardián: signed_in → dashboard según rol; needs_onboarding → /onboarding; signed_out → fuera de tabs
   useEffect(() => {
-    // Esperamos a que las fuentes carguen y Firebase responda si hay sesión
-    if (!loaded || isAuthenticated === null) return;
+    if (!loaded || phase === 'initializing') return;
 
-    // ¿El usuario está navegando dentro de la app principal?
-    const inTabsGroup = segments[0] === '(tabs)';
+    if (phase === 'signed_in' && userRole === null) return; // esperar a tener el rol
 
-    if (isAuthenticated && !inTabsGroup) {
-      // Si tiene sesión activa pero está en el Landing o Login, forzar redirección al Perfil
-      router.replace('/(tabs)' as any);
-    } else if (!isAuthenticated && inTabsGroup) {
-      // Si no tiene sesión pero intenta entrar a la App, expulsarlo al Landing
-      router.replace('/landing');
+    const s0 = segments[0] as string | undefined;
+    const publicAuthRoutes = new Set([
+      'login',
+      'landing',
+      'register',
+      'forgot-password',
+      'phone-login',
+      'register-vehicle-owner',
+    ]);
+
+    if (phase === 'signed_in') {
+      const onGate = !s0 || publicAuthRoutes.has(s0) || s0 === 'onboarding';
+      
+      if (onGate) {
+        if (userRole === 'transport_owner') {
+          router.replace('/vehicle-owner/dashboard' as any);
+        } else if (userRole === 'driver') {
+          router.replace('/driver/dashboard' as any);
+        } else {
+          router.replace('/(tabs)' as any);
+        }
+      } else {
+        // Verificar correspondencia de rol si intenta navegar
+        if (userRole === 'transport_owner') {
+          if (s0 === '(tabs)' || s0 === 'driver') {
+            router.replace('/vehicle-owner/dashboard' as any);
+          }
+        } else if (userRole === 'driver') {
+          if (s0 === '(tabs)' || s0 === 'vehicle-owner') {
+            router.replace('/driver/dashboard' as any);
+          }
+        } else {
+          // Passenger
+          if (s0 === 'vehicle-owner' || s0 === 'driver') {
+            router.replace('/(tabs)' as any);
+          }
+        }
+      }
+      return;
     }
-  }, [isAuthenticated, loaded, segments]);
 
-  // 4. Ocultar la pantalla de carga solo cuando tengamos fuentes y sesión verificada
+    if (phase === 'needs_onboarding') {
+      if (s0 !== 'onboarding') {
+        router.replace('/onboarding' as any);
+      }
+      return;
+    }
+
+    if (phase === 'signed_out') {
+      const isPublic = s0 && publicAuthRoutes.has(s0);
+      if (!isPublic) {
+        router.replace('/landing');
+      }
+    }
+  }, [phase, loaded, segments, router, userRole]);
+
   useEffect(() => {
-    if (loaded && isAuthenticated !== null) {
-      SplashScreen.hideAsync();
+    console.log('[Layout] Ready state check:', { loaded, phase });
+    if (loaded && phase !== 'initializing') {
+      console.log('[Layout] Hiding splash screen...');
+      SplashScreen.hideAsync().catch((err) => {
+        console.error('[Layout] Error hiding splash screen:', err);
+      });
     }
-  }, [loaded, isAuthenticated]);
+  }, [loaded, phase]);
 
-  if (!loaded || isAuthenticated === null) {
+  // Timeout de seguridad para evitar que la app se quede colgada si Firebase/fuentes tardan
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (phase === 'initializing') {
+        console.warn(
+          '[Layout] Auth state resolution timed out (4s). Falling back to signed_out.',
+        );
+        setPhase('signed_out');
+      }
+    }, 4000);
+
+    return () => clearTimeout(timeoutId);
+  }, [phase]);
+
+  if (!loaded || phase === 'initializing') {
     return null;
+  }
+
+  if (isLocked) {
+    return (
+      <SafeAreaView style={styles.lockContainer}>
+        <StatusBar style="light" />
+        <View style={styles.lockHeader}>
+          <Ionicons
+            name="navigate"
+            size={48}
+            color="#0EA5E9"
+            style={styles.lockLogo}
+          />
+          <Text style={styles.lockAppName}>GoFair</Text>
+        </View>
+
+        <View style={styles.lockBody}>
+          <Pressable
+            onPress={triggerBiometricUnlock}
+            style={styles.fingerprintBtn}
+          >
+            <Ionicons name="finger-print" size={80} color="#0EA5E9" />
+          </Pressable>
+          <Text style={styles.lockTitle}>Desbloqueo con {biometricsType}</Text>
+          <Text style={styles.lockSubtitle}>
+            Toca el sensor o escanea tu rostro para acceder a GoFare.
+          </Text>
+
+          <Pressable
+            style={styles.unlockActionBtn}
+            onPress={triggerBiometricUnlock}
+          >
+            <Text style={styles.unlockActionText}>Desbloquear</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.lockFooter}>
+          <Pressable
+            style={styles.switchAccountBtn}
+            onPress={handleBiometricLogout}
+          >
+            <Text style={styles.switchAccountText}>Cerrar Sesión</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -147,3 +506,85 @@ export default function RootLayout() {
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  lockContainer: {
+    flex: 1,
+    backgroundColor: '#0F172A', // Slate 900 (Fondo oscuro premium)
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 48,
+  },
+  lockHeader: {
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  lockLogo: {
+    marginBottom: 8,
+  },
+  lockAppName: {
+    fontSize: 24,
+    fontFamily: 'Outfit_700Bold',
+    color: '#F8FAFC',
+    letterSpacing: 1.5,
+  },
+  lockBody: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  fingerprintBtn: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: '#1E293B', // Slate 800
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: '#38BDF8', // Sky 400
+    // Sombras
+    shadowColor: '#0EA5E9',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  lockTitle: {
+    fontSize: 20,
+    fontFamily: 'Outfit_700Bold',
+    color: '#F8FAFC',
+    marginBottom: 8,
+  },
+  lockSubtitle: {
+    fontSize: 14,
+    fontFamily: 'Outfit_400Regular',
+    color: '#94A3B8', // Slate 400
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 32,
+  },
+  unlockActionBtn: {
+    backgroundColor: '#0EA5E9', // Sky 500
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  unlockActionText: {
+    color: '#FFFFFF',
+    fontFamily: 'Outfit_700Bold',
+    fontSize: 15,
+  },
+  lockFooter: {
+    marginBottom: 20,
+  },
+  switchAccountBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  switchAccountText: {
+    color: '#EF4444', // Red 500
+    fontFamily: 'Outfit_500Medium',
+    fontSize: 14,
+  },
+});

@@ -1,31 +1,158 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type {
+  BackendTicket,
+  Trip,
+  TripFilter,
+  TripSummary,
+} from '@/interfaces';
+import {
+  getBackendProfile,
+  getUserTickets,
+  getFareAccountByUserId,
+  getAccountTransactions,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function TripsScreen() {
-  const [activeFilter, setActiveFilter] = useState('Todos');
-  const filters = ['Todos', 'Este mes', 'Este año'];
+  const [activeTab, setActiveTab] = useState<'trips' | 'transactions'>('trips');
+  const [activeFilter, setActiveFilter] = useState<TripFilter['value']>('all');
+  const [tickets, setTickets] = useState<BackendTicket[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
+  // Filtros de período — tipados con TripFilter
+  const filters: TripFilter[] = [
+    { label: 'Todos', value: 'all' },
+    { label: 'Este mes', value: 'month' },
+    { label: 'Este año', value: 'year' },
+  ];
+
+  const fetchTicketsData = useCallback(async () => {
+    try {
+      const backendUser = await getBackendProfile();
+      if (backendUser) {
+        // 1. Obtener viajes / boletos
+        const userTickets = await getUserTickets(backendUser.id);
+        userTickets.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
+        setTickets(userTickets);
+
+        // 2. Obtener cuenta de tarifa e historial de transacciones de recarga/débito
+        try {
+          const account = await getFareAccountByUserId(backendUser.id);
+          if (account) {
+            const userTxs = await getAccountTransactions(account.id);
+            userTxs.sort(
+              (a, b) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+            );
+            setTransactions(userTxs);
+          }
+        } catch (txErr) {
+          console.warn('[Trips] Error fetching transactions:', txErr);
+        }
+      }
+    } catch (error) {
+      console.error('[Trips] Error fetching data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTicketsData();
+    }, [fetchTicketsData])
+  );
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchTicketsData();
+  };
+
+  // Resumen dinámico de viajes calculado a partir de la API
+  const totalSpent = tickets
+    .filter((t) => t.status === 'used')
+    .reduce((sum, t) => sum + t.price, 0);
+  const tripsCount = tickets.filter((t) => t.status === 'used').length;
+
+  // Encontrar la ruta más frecuente
+  const routeCounts: Record<string, number> = {};
+  tickets.forEach((t) => {
+    const routeName = t.route || 'General';
+    routeCounts[routeName] = (routeCounts[routeName] || 0) + 1;
+  });
+  let mostFrequentRoute = 'Ninguno';
+  let maxCount = 0;
+  Object.entries(routeCounts).forEach(([route, count]) => {
+    if (count > maxCount) {
+      maxCount = count;
+      mostFrequentRoute = route;
+    }
+  });
+
+  const tripSummary: TripSummary = {
+    totalSpent,
+    tripsCount,
+    mostFrequentRoute,
+  };
+
+  // Filtrado de boletos por tiempo
+  const filteredTickets = tickets.filter((t) => {
+    const ticketDate = new Date(t.createdAt);
+    const now = new Date();
+    if (activeFilter === 'month') {
+      return (
+        ticketDate.getMonth() === now.getMonth() &&
+        ticketDate.getFullYear() === now.getFullYear()
+      );
+    }
+    if (activeFilter === 'year') {
+      return ticketDate.getFullYear() === now.getFullYear();
+    }
+    return true;
+  });
+
+  // Filtrado de transacciones por tiempo
+  const filteredTransactions = transactions.filter((tx) => {
+    const txDate = new Date(tx.createdAt);
+    const now = new Date();
+    if (activeFilter === 'month') {
+      return (
+        txDate.getMonth() === now.getMonth() &&
+        txDate.getFullYear() === now.getFullYear()
+      );
+    }
+    if (activeFilter === 'year') {
+      return txDate.getFullYear() === now.getFullYear();
+    }
+    return true;
+  });
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        <Pressable hitSlop={10} style={styles.menuBtn}>
-          <Ionicons name="menu" size={28} color={tokens.colors.primary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Gofair</Text>
+        <Text style={styles.headerTitle}>GoFair</Text>
         <Image
           source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
           style={styles.avatar}
@@ -35,24 +162,47 @@ export default function TripsScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
       >
         {/* ── TITULO ── */}
         <View style={styles.titleSection}>
-          <Text style={styles.pageTitle}>Viajes</Text>
+          <Text style={styles.pageTitle}>Actividad</Text>
           <Text style={styles.pageSubtitle}>
-            Revisa tu actividad y gastos de transporte.
+            Revisa tus viajes, recargas y transacciones monetarias.
           </Text>
+        </View>
+
+        {/* ── SEGMENTED CONTROL ── */}
+        <View style={styles.segmentContainer}>
+          <Pressable
+            style={[styles.segmentBtn, activeTab === 'trips' && styles.segmentBtnActive]}
+            onPress={() => setActiveTab('trips')}
+          >
+            <Text style={[styles.segmentText, activeTab === 'trips' && styles.segmentTextActive]}>
+              Viajes
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.segmentBtn, activeTab === 'transactions' && styles.segmentBtnActive]}
+            onPress={() => setActiveTab('transactions')}
+          >
+            <Text style={[styles.segmentText, activeTab === 'transactions' && styles.segmentTextActive]}>
+              Transacciones
+            </Text>
+          </Pressable>
         </View>
 
         {/* ── FILTROS ── */}
         <View style={styles.filtersContainer}>
           {filters.map((filter) => {
-            const isActive = activeFilter === filter;
+            const isActive = activeFilter === filter.value;
             return (
               <Pressable
-                key={filter}
+                key={filter.value}
                 style={[styles.filterTab, isActive && styles.filterTabActive]}
-                onPress={() => setActiveFilter(filter)}
+                onPress={() => setActiveFilter(filter.value)}
               >
                 <Text
                   style={[
@@ -60,192 +210,226 @@ export default function TripsScreen() {
                     isActive && styles.filterTextActive,
                   ]}
                 >
-                  {filter}
+                  {filter.label}
                 </Text>
               </Pressable>
             );
           })}
         </View>
 
-        {/* ── RESUMEN CARDS ── */}
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCardWhite}>
-            <View style={styles.summaryIconWhiteBg}>
-              <MaterialCommunityIcons
-                name="cash"
-                size={24}
+        {/* CONTENIDO DE VIAJES (TRIPS) */}
+        {activeTab === 'trips' && (
+          <View>
+            {/* ── RESUMEN CARDS ── */}
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryCardWhite}>
+                <View style={styles.summaryIconWhiteBg}>
+                  <MaterialCommunityIcons
+                    name="cash"
+                    size={24}
+                    color={tokens.colors.primary}
+                  />
+                </View>
+                <Text style={styles.summaryLabelGrey}>GASTO TOTAL</Text>
+                <Text style={styles.summaryValueDark}>
+                  Bs. {tripSummary.totalSpent.toFixed(2).replace('.', ',')}
+                </Text>
+              </View>
+
+              <View style={styles.summaryCardBlue}>
+                <View style={styles.summaryIconBlueBg}>
+                  <Ionicons name="bus" size={22} color="#FFFFFF" />
+                </View>
+                <Text style={styles.summaryLabelLight}>VIAJES REALIZADOS</Text>
+                <Text style={styles.summaryValueLight}>
+                  {tripSummary.tripsCount}
+                </Text>
+              </View>
+            </View>
+
+            {/* ── LISTA VIAJES RECIENTES ── */}
+            <Text style={styles.sectionTitle}>HISTORIAL DE VIAJES</Text>
+
+            {loading ? (
+              <ActivityIndicator
+                size="large"
                 color={tokens.colors.primary}
+                style={{ marginTop: 24, marginBottom: 24 }}
               />
-            </View>
-            <Text style={styles.summaryLabelGrey}>GASTO TOTAL</Text>
-            <Text style={styles.summaryValueDark}>Bs. 450,00</Text>
-          </View>
+            ) : filteredTickets.length === 0 ? (
+              <View style={styles.noTripsContainer}>
+                <Ionicons name="bus-outline" size={48} color="#9CA3AF" />
+                <Text style={styles.noTripsText}>
+                  No se encontraron boletos ni viajes registrados en este período.
+                </Text>
+              </View>
+            ) : (
+              filteredTickets.map((ticket) => {
+                const isUsed = ticket.status === 'used';
+                const ticketDate = new Date(ticket.createdAt);
+                const formattedDate = ticketDate.toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+                return (
+                  <View key={ticket.id} style={styles.tripCard}>
+                    <View
+                      style={[
+                        styles.tripIconWrapper,
+                        { backgroundColor: isUsed ? '#F3F4F6' : '#EFF6FF' },
+                      ]}
+                    >
+                      <Ionicons
+                        name="bus"
+                        size={20}
+                        color={isUsed ? '#6B7280' : tokens.colors.primary}
+                      />
+                    </View>
+                    <View style={styles.tripInfo}>
+                      <Text style={styles.tripTitle}>
+                        {ticket.route || 'Boleto General'}
+                      </Text>
+                      <View style={styles.tripSubtitleRow}>
+                        <Text style={styles.tripSubtitle}>{formattedDate}</Text>
+                        <View
+                          style={[
+                            styles.badge,
+                            { backgroundColor: isUsed ? '#F3F4F6' : '#DBEAFE' },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.badgeDot,
+                              {
+                                backgroundColor: isUsed
+                                  ? '#9CA3AF'
+                                  : tokens.colors.primary,
+                              },
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.badgeText,
+                              { color: isUsed ? '#6B7280' : tokens.colors.primary },
+                            ]}
+                          >
+                            {isUsed ? 'COMPLETADO' : 'ACTIVO'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.priceContainer}>
+                      <Text
+                        style={[
+                          styles.priceCurrency,
+                          { color: isUsed ? '#6B7280' : tokens.colors.primary },
+                        ]}
+                      >
+                        Bs.
+                      </Text>
+                      <Text
+                        style={[
+                          styles.priceAmount,
+                          { color: isUsed ? '#4B5563' : tokens.colors.primary },
+                        ]}
+                      >
+                        {ticket.price.toFixed(2).replace('.', ',')}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
 
-          <View style={styles.summaryCardBlue}>
-            <View style={styles.summaryIconBlueBg}>
-              <Ionicons name="bus" size={22} color="#FFFFFF" />
-            </View>
-            <Text style={styles.summaryLabelLight}>VIAJES REALIZADOS</Text>
-            <Text style={styles.summaryValueLight}>32</Text>
-          </View>
-        </View>
-
-        {/* ── LISTA RECIENTES ── */}
-        <Text style={styles.sectionTitle}>RECIENTES</Text>
-
-        <View style={[styles.tripCard, styles.tripCardActive]}>
-          <View
-            style={[styles.tripIconWrapper, { backgroundColor: '#E0E7FF' }]}
-          >
-            <Ionicons name="bus" size={20} color={tokens.colors.primary} />
-          </View>
-          <View style={styles.tripInfo}>
-            <Text style={styles.tripTitle}>Chacao - Las Mercedes</Text>
-            <View style={styles.tripSubtitleRow}>
-              <Text style={styles.tripSubtitle}>Hoy, 08:45 AM</Text>
-              <View style={[styles.badge, { backgroundColor: '#DBEAFE' }]}>
-                <View
-                  style={[
-                    styles.badgeDot,
-                    { backgroundColor: tokens.colors.primary },
-                  ]}
-                />
-                <Text
-                  style={[styles.badgeText, { color: tokens.colors.primary }]}
-                >
-                  EN CURSO
+            {/* ── MAPA RUTA FRECUENTE ── */}
+            <View style={styles.mapCard}>
+              <Image
+                source={{
+                  uri: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=800&q=80',
+                }}
+                style={styles.mapImage}
+              />
+              <View style={styles.mapOverlay}>
+                <Text style={styles.mapText}>
+                  Tu ruta más frecuente:{' '}
+                  <Text style={styles.mapTextHighlight}>Chacao - Mercedes</Text>
                 </Text>
               </View>
             </View>
           </View>
-          <View style={styles.priceContainer}>
-            <Text
-              style={[styles.priceCurrency, { color: tokens.colors.primary }]}
-            >
-              Bs.
-            </Text>
-            <Text
-              style={[styles.priceAmount, { color: tokens.colors.primary }]}
-            >
-              15,00
-            </Text>
-          </View>
-        </View>
+        )}
 
-        <View style={styles.tripCard}>
-          <View
-            style={[styles.tripIconWrapper, { backgroundColor: '#ECFDF5' }]}
-          >
-            <MaterialCommunityIcons name="train" size={22} color="#0F766E" />
-          </View>
-          <View style={styles.tripInfo}>
-            <Text style={styles.tripTitle}>Palo Verde - Propatria</Text>
-            <View style={styles.tripSubtitleRow}>
-              <Text style={styles.tripSubtitle}>Ayer, 17:30 PM</Text>
-              <View style={[styles.badge, { backgroundColor: '#F3F4F6' }]}>
-                <View
-                  style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]}
-                />
-                <Text style={[styles.badgeText, { color: '#6B7280' }]}>
-                  COMPLETADO
+        {/* CONTENIDO DE TRANSACCIONES (MONEY FLOW) */}
+        {activeTab === 'transactions' && (
+          <View>
+            <Text style={styles.sectionTitle}>HISTORIAL DE MOVIMIENTOS</Text>
+
+            {loading ? (
+              <ActivityIndicator
+                size="large"
+                color={tokens.colors.primary}
+                style={{ marginTop: 24, marginBottom: 24 }}
+              />
+            ) : filteredTransactions.length === 0 ? (
+              <View style={styles.noTripsContainer}>
+                <Ionicons name="card-outline" size={48} color="#9CA3AF" />
+                <Text style={styles.noTripsText}>
+                  No se encontraron recargas ni transacciones registradas en este período.
                 </Text>
               </View>
-            </View>
+            ) : (
+              filteredTransactions.map((tx) => {
+                const isCredit = tx.type === 'credit';
+                const txDate = new Date(tx.createdAt);
+                const formattedDate = txDate.toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+                return (
+                  <View key={tx.id} style={styles.tripCard}>
+                    <View
+                      style={[
+                        styles.tripIconWrapper,
+                        { backgroundColor: isCredit ? '#ECFDF5' : '#FEF2F2' },
+                      ]}
+                    >
+                      <Ionicons
+                        name={isCredit ? 'wallet' : 'bus'}
+                        size={20}
+                        color={isCredit ? '#10B981' : '#EF4444'}
+                      />
+                    </View>
+                    <View style={styles.tripInfo}>
+                      <Text style={styles.tripTitle}>
+                        {isCredit ? 'Recarga de Saldo' : 'Débito por Viaje'}
+                      </Text>
+                      <Text style={styles.tripSubtitle}>
+                        {tx.description || (isCredit ? 'Saldo adicionado' : 'Pago por viaje en bus')}
+                      </Text>
+                      <Text style={[styles.tripSubtitle, { marginTop: 4 }]}>{formattedDate}</Text>
+                    </View>
+                    <View style={[styles.priceContainer, { minWidth: 70, alignItems: 'flex-end' }]}>
+                      <Text
+                        style={{
+                          fontSize: 15,
+                          fontFamily: tokens.typography.fontFamily.black,
+                          color: isCredit ? '#10B981' : '#EF4444',
+                        }}
+                      >
+                        {isCredit ? '+' : '-'} Bs. {Number(tx.amount || 0).toFixed(2).replace('.', ',')}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
-          <View style={styles.priceContainer}>
-            <Text
-              style={[styles.priceCurrency, { color: tokens.colors.primary }]}
-            >
-              Bs.
-            </Text>
-            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>
-              10,00
-            </Text>
-          </View>
-        </View>
+        )}
 
-        <View style={styles.tripCard}>
-          <View
-            style={[styles.tripIconWrapper, { backgroundColor: '#EEF2FF' }]}
-          >
-            <MaterialCommunityIcons
-              name="bus-multiple"
-              size={22}
-              color="#6366F1"
-            />
-          </View>
-          <View style={styles.tripInfo}>
-            <Text style={styles.tripTitle}>Altamira - El Hatillo</Text>
-            <View style={styles.tripSubtitleRow}>
-              <Text style={styles.tripSubtitle}>12 Oct, 10:15 AM</Text>
-              <View style={[styles.badge, { backgroundColor: '#F3F4F6' }]}>
-                <View
-                  style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]}
-                />
-                <Text style={[styles.badgeText, { color: '#6B7280' }]}>
-                  COMPLETADO
-                </Text>
-              </View>
-            </View>
-          </View>
-          <View style={styles.priceContainer}>
-            <Text style={[styles.priceCurrency, { color: '#6B7280' }]}>
-              Bs.
-            </Text>
-            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>
-              25,00
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.tripCard}>
-          <View
-            style={[styles.tripIconWrapper, { backgroundColor: '#E0E7FF' }]}
-          >
-            <Ionicons name="bus" size={20} color={tokens.colors.primary} />
-          </View>
-          <View style={styles.tripInfo}>
-            <Text style={styles.tripTitle}>La Paz - Montalbán</Text>
-            <View style={styles.tripSubtitleRow}>
-              <Text style={styles.tripSubtitle}>11 Oct, 14:20 PM</Text>
-              <View style={[styles.badge, { backgroundColor: '#F3F4F6' }]}>
-                <View
-                  style={[styles.badgeDot, { backgroundColor: '#9CA3AF' }]}
-                />
-                <Text style={[styles.badgeText, { color: '#6B7280' }]}>
-                  COMPLETADO
-                </Text>
-              </View>
-            </View>
-          </View>
-          <View style={styles.priceContainer}>
-            <Text style={[styles.priceCurrency, { color: '#6B7280' }]}>
-              Bs.
-            </Text>
-            <Text style={[styles.priceAmount, { color: '#4B5563' }]}>
-              15,00
-            </Text>
-          </View>
-        </View>
-
-        {/* ── MAPA RUTA FRECUENTE ── */}
-        <View style={styles.mapCard}>
-          {/* Usamos un placeholder genérico de mapa estético porque no hay assets de mapa en el repo */}
-          <Image
-            source={{
-              uri: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=800&q=80',
-            }}
-            style={styles.mapImage}
-          />
-          <View style={styles.mapOverlay}>
-            <Text style={styles.mapText}>
-              Tu ruta más frecuente:{' '}
-              <Text style={styles.mapTextHighlight}>Chacao - Mercedes</Text>
-            </Text>
-          </View>
-        </View>
-
-        {/* Extra space for absolute tabs */}
         <View style={{ height: 120 }} />
       </ScrollView>
     </SafeAreaView>
@@ -502,5 +686,54 @@ const styles = StyleSheet.create({
   },
   mapTextHighlight: {
     color: '#93C5FD', // light blue to pop on dark overlay
+  },
+  noTripsContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderStyle: 'dashed',
+    marginTop: 8,
+    marginBottom: 24,
+  },
+  noTripsText: {
+    marginTop: 12,
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
+  segmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 24,
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  segmentBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  segmentText: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#64748B',
+  },
+  segmentTextActive: {
+    color: tokens.colors.primary,
   },
 });
