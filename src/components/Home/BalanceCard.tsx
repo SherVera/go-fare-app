@@ -6,7 +6,8 @@ import type { BalanceCardProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
 export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
-  const numericBalance = typeof balance === 'number' ? balance : parseFloat(balance as any) || 0;
+  const numericBalance =
+    typeof balance === 'number' ? balance : parseFloat(balance as any) || 0;
 
   return (
     <LinearGradient

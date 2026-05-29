@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,8 +15,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import { clearGoFareToken, getBackendProfile } from '@/lib/api';
 import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -39,7 +39,7 @@ export default function VehicleOwnerProfile() {
   const [phone, setPhone] = useState('...');
   const [coopName, setCoopName] = useState('Cooperativa Caracas Move R.L.');
   const [coopRif, setCoopRif] = useState('J-304598124');
-  
+
   // Stats
   const [unitsCount, setUnitsCount] = useState(0);
   const [driversCount, setDriversCount] = useState(0);
@@ -52,12 +52,18 @@ export default function VehicleOwnerProfile() {
         // Cargar datos del usuario
         try {
           const backendUser = await getBackendProfile();
-          setName(backendUser.displayName || `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() || 'Socio');
+          setName(
+            backendUser.displayName ||
+              `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+              'Socio',
+          );
           setEmail(backendUser.email);
           setPhone(backendUser.phoneNumber || 'No registrado');
         } catch {
           // Fallback a Firestore
-          const legacyData = await getDocument(`users/${user.uid}`).catch(() => null);
+          const legacyData = await getDocument(`users/${user.uid}`).catch(
+            () => null,
+          );
           if (legacyData) {
             setName(legacyData.fullName || 'Socio');
             setEmail(legacyData.email || user.email || 'socio@example.com');
@@ -67,19 +73,33 @@ export default function VehicleOwnerProfile() {
       }
 
       // Cargar cooperativa seleccionada localmente si existe
-      const coopStr = await AsyncStorage.getItem('mock_vehicle_owner_cooperative');
+      const coopStr = await AsyncStorage.getItem(
+        'mock_vehicle_owner_cooperative',
+      );
       if (coopStr) {
         const coopData = JSON.parse(coopStr);
         setCoopName(coopData.businessName);
-        setCoopRif(coopData.idNumber.startsWith('RIF:') ? coopData.idNumber : `RIF: ${coopData.idNumber}`);
+        setCoopRif(
+          coopData.idNumber.startsWith('RIF:')
+            ? coopData.idNumber
+            : `RIF: ${coopData.idNumber}`,
+        );
       }
 
       // Contar unidades
-      const localVehiclesStr = await AsyncStorage.getItem('mock_vehicle_requests');
-      const localVehicles: MockVehicle[] = localVehiclesStr ? JSON.parse(localVehiclesStr) : [];
-      
-      const deletedPlatesStr = await AsyncStorage.getItem('mock_deleted_vehicle_plates');
-      const deletedPlates: string[] = deletedPlatesStr ? JSON.parse(deletedPlatesStr) : [];
+      const localVehiclesStr = await AsyncStorage.getItem(
+        'mock_vehicle_requests',
+      );
+      const localVehicles: MockVehicle[] = localVehiclesStr
+        ? JSON.parse(localVehiclesStr)
+        : [];
+
+      const deletedPlatesStr = await AsyncStorage.getItem(
+        'mock_deleted_vehicle_plates',
+      );
+      const deletedPlates: string[] = deletedPlatesStr
+        ? JSON.parse(deletedPlatesStr)
+        : [];
 
       const baseVehicles = [
         { licensePlate: 'AB123CD', status: 'approved' },
@@ -87,23 +107,35 @@ export default function VehicleOwnerProfile() {
         { licensePlate: 'HJ321OP', status: 'approved' },
         { licensePlate: 'E2E-990T', status: 'pending' },
         { licensePlate: 'RJ456KL', status: 'rejected' },
-      ].filter(v => !deletedPlates.includes(v.licensePlate));
+      ].filter((v) => !deletedPlates.includes(v.licensePlate));
 
       const mergedVehCount = [
         ...localVehicles,
-        ...baseVehicles.filter(mv => !localVehicles.some(lv => lv.licensePlate === mv.licensePlate))
+        ...baseVehicles.filter(
+          (mv) =>
+            !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
+        ),
       ].length;
 
       setUnitsCount(mergedVehCount);
 
       // Contar conductores
-      const localDriversStr = await AsyncStorage.getItem('mock_cooperative_drivers');
-      const localDrivers: MockDriver[] = localDriversStr ? JSON.parse(localDriversStr) : [];
-      
+      const localDriversStr = await AsyncStorage.getItem(
+        'mock_cooperative_drivers',
+      );
+      const localDrivers: MockDriver[] = localDriversStr
+        ? JSON.parse(localDriversStr)
+        : [];
+
       const baseDriversCount = 3; // MOCK_DRIVERS_BASE has 3 elements
       const mergedDriversCount = [
         ...localDrivers,
-        ...Array(baseDriversCount).fill(0).map((_, i) => ({ nationalId: `base-${i}` })).filter(md => !localDrivers.some(ld => ld.nationalId === md.nationalId))
+        ...Array(baseDriversCount)
+          .fill(0)
+          .map((_, i) => ({ nationalId: `base-${i}` }))
+          .filter(
+            (md) => !localDrivers.some((ld) => ld.nationalId === md.nationalId),
+          ),
       ].length;
 
       setDriversCount(mergedDriversCount);
@@ -117,43 +149,56 @@ export default function VehicleOwnerProfile() {
   useFocusEffect(
     useCallback(() => {
       loadProfileData();
-    }, [loadProfileData])
+    }, [loadProfileData]),
   );
 
   const handleLogout = () => {
-    Alert.alert('Cerrar Sesión', '¿Estás seguro de que deseas cerrar sesión de tu cuenta de Socio?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar Sesión',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setLoggingOut(true);
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que deseas cerrar sesión de tu cuenta de Socio?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: async () => {
             try {
-              await sigOutAccount();
-            } catch (authError) {
-              console.warn('[Profile] Error al cerrar sesión de Firebase (offline):', authError);
+              setLoggingOut(true);
+              try {
+                await sigOutAccount();
+              } catch (authError) {
+                console.warn(
+                  '[Profile] Error al cerrar sesión de Firebase (offline):',
+                  authError,
+                );
+              }
+              await clearGoFareToken();
+              try {
+                await SecureStore.deleteItemAsync('savedEmail');
+                await SecureStore.deleteItemAsync('savedPassword');
+                await AsyncStorage.removeItem('gofare_cached_user_profile');
+                await AsyncStorage.removeItem('temp_auth');
+                await AsyncStorage.removeItem('user_role');
+              } catch (err) {
+                console.warn(
+                  '[Profile] Error deleting credentials/cache:',
+                  err,
+                );
+              }
+              router.replace('/login');
+            } catch (error) {
+              console.error('Error al cerrar sesión:', error);
+              Alert.alert(
+                'Error',
+                'No se pudo cerrar sesión. Intenta de nuevo.',
+              );
+            } finally {
+              setLoggingOut(false);
             }
-            await clearGoFareToken();
-            try {
-              await SecureStore.deleteItemAsync('savedEmail');
-              await SecureStore.deleteItemAsync('savedPassword');
-              await AsyncStorage.removeItem('gofare_cached_user_profile');
-              await AsyncStorage.removeItem('temp_auth');
-              await AsyncStorage.removeItem('user_role');
-            } catch (err) {
-              console.warn('[Profile] Error deleting credentials/cache:', err);
-            }
-            router.replace('/login');
-          } catch (error) {
-            console.error('Error al cerrar sesión:', error);
-            Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
-          } finally {
-            setLoggingOut(false);
-          }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   if (loading) {
@@ -173,12 +218,20 @@ export default function VehicleOwnerProfile() {
         <Text style={styles.headerTitle}>Perfil de Socio</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{name.split(' ').map(n => n[0]).join('')}</Text>
+              <Text style={styles.avatarText}>
+                {name
+                  .split(' ')
+                  .map((n) => n[0])
+                  .join('')}
+              </Text>
             </View>
           </View>
           <Text style={styles.profileName}>{name}</Text>
@@ -208,13 +261,23 @@ export default function VehicleOwnerProfile() {
           <Text style={styles.statsCardTitle}>Resumen de Flota</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statCol}>
-              <Ionicons name="bus-outline" size={24} color={tokens.colors.primary} style={{ marginBottom: 4 }} />
+              <Ionicons
+                name="bus-outline"
+                size={24}
+                color={tokens.colors.primary}
+                style={{ marginBottom: 4 }}
+              />
               <Text style={styles.statValue}>{unitsCount}</Text>
               <Text style={styles.statLabel}>Unidades</Text>
             </View>
             <View style={styles.dividerCol} />
             <View style={styles.statCol}>
-              <Ionicons name="people-outline" size={24} color={tokens.colors.primary} style={{ marginBottom: 4 }} />
+              <Ionicons
+                name="people-outline"
+                size={24}
+                color={tokens.colors.primary}
+                style={{ marginBottom: 4 }}
+              />
               <Text style={styles.statValue}>{driversCount}</Text>
               <Text style={styles.statLabel}>Conductores</Text>
             </View>
@@ -239,22 +302,37 @@ export default function VehicleOwnerProfile() {
         <Text style={styles.sectionTitle}>Configuración</Text>
         <Pressable style={styles.menuItem}>
           <View style={styles.menuIconWrapper}>
-            <Ionicons name="notifications-outline" size={20} color={tokens.colors.primary} />
+            <Ionicons
+              name="notifications-outline"
+              size={20}
+              color={tokens.colors.primary}
+            />
           </View>
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>Notificaciones de Flota</Text>
-            <Text style={styles.menuSubtitle}>Alertas de viajes y transferencias</Text>
+            <Text style={styles.menuSubtitle}>
+              Alertas de viajes y transferencias
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </Pressable>
 
-        <Pressable style={styles.menuItem} onPress={() => router.push('/security')}>
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => router.push('/security')}
+        >
           <View style={styles.menuIconWrapper}>
-            <Ionicons name="shield-checkmark-outline" size={20} color={tokens.colors.primary} />
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={20}
+              color={tokens.colors.primary}
+            />
           </View>
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>Seguridad y Huella</Text>
-            <Text style={styles.menuSubtitle}>Configurar bloqueo biométrico</Text>
+            <Text style={styles.menuSubtitle}>
+              Configurar bloqueo biométrico
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </Pressable>
@@ -266,9 +344,18 @@ export default function VehicleOwnerProfile() {
           disabled={loggingOut}
         >
           {loggingOut ? (
-            <ActivityIndicator size="small" color="#DC2626" style={{ marginRight: 8 }} />
+            <ActivityIndicator
+              size="small"
+              color="#DC2626"
+              style={{ marginRight: 8 }}
+            />
           ) : (
-            <Ionicons name="log-out-outline" size={22} color="#DC2626" style={{ marginRight: 8 }} />
+            <Ionicons
+              name="log-out-outline"
+              size={22}
+              color="#DC2626"
+              style={{ marginRight: 8 }}
+            />
           )}
           <Text style={styles.logoutText}>
             {loggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión'}

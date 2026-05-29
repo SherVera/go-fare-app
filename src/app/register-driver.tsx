@@ -95,7 +95,8 @@ export default function RegisterDriverScreen() {
       console.error('[RegisterDriver] Error submitting request:', error);
       Alert.alert(
         'Error',
-        error.message || 'Ocurrió un error al enviar tu solicitud. Intenta de nuevo más tarde.',
+        error.message ||
+          'Ocurrió un error al enviar tu solicitud. Intenta de nuevo más tarde.',
       );
     } finally {
       setLoading(false);
@@ -123,15 +124,26 @@ export default function RegisterDriverScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.infoBanner}>
-            <Ionicons name="information-circle-outline" size={24} color="#0F766E" />
+            <Ionicons
+              name="information-circle-outline"
+              size={24}
+              color="#0F766E"
+            />
             <Text style={styles.infoText}>
-              Ingresa los datos de tu licencia de conducir y contacto de emergencia para registrarte como conductor en la plataforma. Evaluaremos tu solicitud en la brevedad.
+              Ingresa los datos de tu licencia de conducir y contacto de
+              emergencia para registrarte como conductor en la plataforma.
+              Evaluaremos tu solicitud en la brevedad.
             </Text>
           </View>
 
           {/* Número de Licencia */}
           <Text style={styles.inputLabel}>NÚMERO DE LICENCIA</Text>
-          <View style={[styles.inputCard, errors.licenseNumber && styles.inputCardError]}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.licenseNumber && styles.inputCardError,
+            ]}
+          >
             <Ionicons
               name="card-outline"
               size={20}
@@ -147,11 +159,18 @@ export default function RegisterDriverScreen() {
               editable={!loading}
             />
           </View>
-          {errors.licenseNumber && <Text style={styles.errorText}>{errors.licenseNumber}</Text>}
+          {errors.licenseNumber && (
+            <Text style={styles.errorText}>{errors.licenseNumber}</Text>
+          )}
 
           {/* Tipo de Licencia */}
           <Text style={styles.inputLabel}>GRADO / TIPO DE LICENCIA</Text>
-          <View style={[styles.inputCard, errors.licenseType && styles.inputCardError]}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.licenseType && styles.inputCardError,
+            ]}
+          >
             <Ionicons
               name="options-outline"
               size={20}
@@ -167,11 +186,18 @@ export default function RegisterDriverScreen() {
               editable={!loading}
             />
           </View>
-          {errors.licenseType && <Text style={styles.errorText}>{errors.licenseType}</Text>}
+          {errors.licenseType && (
+            <Text style={styles.errorText}>{errors.licenseType}</Text>
+          )}
 
           {/* Años de Experiencia */}
           <Text style={styles.inputLabel}>AÑOS DE EXPERIENCIA</Text>
-          <View style={[styles.inputCard, errors.experienceYears && styles.inputCardError]}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.experienceYears && styles.inputCardError,
+            ]}
+          >
             <Ionicons
               name="time-outline"
               size={20}
@@ -188,11 +214,18 @@ export default function RegisterDriverScreen() {
               editable={!loading}
             />
           </View>
-          {errors.experienceYears && <Text style={styles.errorText}>{errors.experienceYears}</Text>}
+          {errors.experienceYears && (
+            <Text style={styles.errorText}>{errors.experienceYears}</Text>
+          )}
 
           {/* Teléfono de Emergencia */}
           <Text style={styles.inputLabel}>TELÉFONO DE EMERGENCIA</Text>
-          <View style={[styles.inputCard, errors.emergencyPhone && styles.inputCardError]}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.emergencyPhone && styles.inputCardError,
+            ]}
+          >
             <Ionicons
               name="call-outline"
               size={20}
@@ -209,7 +242,9 @@ export default function RegisterDriverScreen() {
               editable={!loading}
             />
           </View>
-          {errors.emergencyPhone && <Text style={styles.errorText}>{errors.emergencyPhone}</Text>}
+          {errors.emergencyPhone && (
+            <Text style={styles.errorText}>{errors.emergencyPhone}</Text>
+          )}
 
           {/* Botón de Envío */}
           <Pressable

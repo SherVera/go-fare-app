@@ -1,13 +1,13 @@
 import {
   AuthorizationStatus,
   FirebaseMessagingTypes,
+  getInitialNotification as getInitialNotificationModular,
   getMessaging,
   getToken,
   onMessage,
   onNotificationOpenedApp,
   onTokenRefresh,
   requestPermission,
-  getInitialNotification as getInitialNotificationModular,
 } from '@react-native-firebase/messaging';
 import { Platform } from 'react-native';
 

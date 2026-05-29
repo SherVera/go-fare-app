@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -13,7 +14,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tokens } from '@/theme/tokens';
 
 interface ValidatedTicket {
@@ -39,14 +39,17 @@ export default function DriverHistoryScreen() {
       if (storedStr) {
         const list: ValidatedTicket[] = JSON.parse(storedStr);
         setValidations(list);
-        
+
         // Calcular ganancias dinámicas de este turno
-        const sum = list.reduce((acc, item) => acc + (Number(item.fare) || 0), 0);
-        setTotalEarnings(630.00 + sum); // 630.00 base + acumulado local
+        const sum = list.reduce(
+          (acc, item) => acc + (Number(item.fare) || 0),
+          0,
+        );
+        setTotalEarnings(630.0 + sum); // 630.00 base + acumulado local
         setTotalCount(42 + list.length); // 42 base + acumulado local
       } else {
         setValidations([]);
-        setTotalEarnings(630.00);
+        setTotalEarnings(630.0);
         setTotalCount(42);
       }
     } catch (err) {
@@ -60,7 +63,7 @@ export default function DriverHistoryScreen() {
   useFocusEffect(
     useCallback(() => {
       loadValidations();
-    }, [loadValidations])
+    }, [loadValidations]),
   );
 
   const onRefresh = () => {
@@ -92,7 +95,12 @@ export default function DriverHistoryScreen() {
               {item.route}
             </Text>
             <View style={styles.metaRow}>
-              <Ionicons name="time-outline" size={12} color="#64748B" style={{ marginRight: 4 }} />
+              <Ionicons
+                name="time-outline"
+                size={12}
+                color="#64748B"
+                style={{ marginRight: 4 }}
+              />
               <Text style={styles.metaText}>
                 {item.date} • {item.time}
               </Text>
@@ -169,7 +177,8 @@ export default function DriverHistoryScreen() {
             </View>
             <Text style={styles.emptyTitle}>Ningún cobro registrado aún</Text>
             <Text style={styles.emptySubtitle}>
-              Cuando valides los códigos QR de los pasajeros, sus boletos aparecerán listados cronológicamente aquí.
+              Cuando valides los códigos QR de los pasajeros, sus boletos
+              aparecerán listados cronológicamente aquí.
             </Text>
           </View>
         }

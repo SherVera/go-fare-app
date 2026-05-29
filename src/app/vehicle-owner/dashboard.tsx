@@ -1,21 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tokens } from '@/theme/tokens';
 
 interface MockVehicle {
@@ -80,7 +80,8 @@ const MOCK_VEHICLES: MockVehicle[] = [
     cooperativeName: 'Cooperativa Caracas Move R.L.',
     status: 'rejected',
     createdAt: '22/05/2026',
-    adminNotes: 'El documento de propiedad (título del vehículo) cargado está borroso y no se puede leer la matrícula oficial. Por favor, realiza una nueva solicitud con fotos nítidas del título de propiedad del vehículo y la revisión de tránsito vigente.',
+    adminNotes:
+      'El documento de propiedad (título del vehículo) cargado está borroso y no se puede leer la matrícula oficial. Por favor, realiza una nueva solicitud con fotos nítidas del título de propiedad del vehículo y la revisión de tránsito vigente.',
   },
 ];
 
@@ -93,7 +94,7 @@ const formatDate = (dateStr: string | Date) => {
   }
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) return String(dateStr);
-  
+
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const year = date.getFullYear();
@@ -103,41 +104,60 @@ const formatDate = (dateStr: string | Date) => {
 export default function VehicleOwnerDashboard() {
   const router = useRouter();
   const [filter, setFilter] = useState<FilterType>('all');
-  const [selectedVehicle, setSelectedVehicle] = useState<MockVehicle | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<MockVehicle | null>(
+    null,
+  );
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   const [vehicles, setVehicles] = useState<MockVehicle[]>(MOCK_VEHICLES);
-  const [cooperative, setCooperative] = useState<{ name: string; rif: string }>({
-    name: 'Cooperativa Caracas Move R.L.',
-    rif: 'RIF: J-304598124',
-  });
+  const [cooperative, setCooperative] = useState<{ name: string; rif: string }>(
+    {
+      name: 'Cooperativa Caracas Move R.L.',
+      rif: 'RIF: J-304598124',
+    },
+  );
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
       // 1. Cargar vehículos guardados y eliminados localmente
-      const localVehiclesStr = await AsyncStorage.getItem('mock_vehicle_requests');
-      const localVehicles: MockVehicle[] = localVehiclesStr ? JSON.parse(localVehiclesStr) : [];
-      
-      const deletedPlatesStr = await AsyncStorage.getItem('mock_deleted_vehicle_plates');
-      const deletedPlates: string[] = deletedPlatesStr ? JSON.parse(deletedPlatesStr) : [];
-      
+      const localVehiclesStr = await AsyncStorage.getItem(
+        'mock_vehicle_requests',
+      );
+      const localVehicles: MockVehicle[] = localVehiclesStr
+        ? JSON.parse(localVehiclesStr)
+        : [];
+
+      const deletedPlatesStr = await AsyncStorage.getItem(
+        'mock_deleted_vehicle_plates',
+      );
+      const deletedPlates: string[] = deletedPlatesStr
+        ? JSON.parse(deletedPlatesStr)
+        : [];
+
       // Combinar los predeterminados de MOCK_VEHICLES con los guardados localmente
       // Evitamos duplicar por placa/licencia y filtramos las eliminadas
       const merged = [
         ...localVehicles,
-        ...MOCK_VEHICLES.filter(mv => !localVehicles.some(lv => lv.licensePlate === mv.licensePlate))
-      ].filter(v => !deletedPlates.includes(v.licensePlate));
-      
+        ...MOCK_VEHICLES.filter(
+          (mv) =>
+            !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
+        ),
+      ].filter((v) => !deletedPlates.includes(v.licensePlate));
+
       setVehicles(merged);
 
       // 2. Cargar cooperativa seleccionada localmente si existe
-      const coopStr = await AsyncStorage.getItem('mock_vehicle_owner_cooperative');
+      const coopStr = await AsyncStorage.getItem(
+        'mock_vehicle_owner_cooperative',
+      );
       if (coopStr) {
         const coopData = JSON.parse(coopStr);
         setCooperative({
           name: coopData.businessName,
-          rif: coopData.idNumber.startsWith('RIF:') ? coopData.idNumber : `RIF: ${coopData.idNumber}`,
+          rif: coopData.idNumber.startsWith('RIF:')
+            ? coopData.idNumber
+            : `RIF: ${coopData.idNumber}`,
         });
       }
     } catch (err) {
@@ -150,7 +170,7 @@ export default function VehicleOwnerDashboard() {
   useFocusEffect(
     useCallback(() => {
       loadData();
-    }, [loadData])
+    }, [loadData]),
   );
 
   const onRefresh = useCallback(() => {
@@ -242,22 +262,30 @@ export default function VehicleOwnerDashboard() {
         <View style={styles.statsContainer}>
           {/* Total */}
           <View style={styles.statBox}>
-            <Text style={[styles.statNum, { color: tokens.colors.primary }]}>{totalUnits}</Text>
+            <Text style={[styles.statNum, { color: tokens.colors.primary }]}>
+              {totalUnits}
+            </Text>
             <Text style={styles.statLabel}>Total Unidades</Text>
           </View>
           {/* Aprobadas */}
           <View style={styles.statBox}>
-            <Text style={[styles.statNum, { color: '#16A34A' }]}>{approvedUnits}</Text>
+            <Text style={[styles.statNum, { color: '#16A34A' }]}>
+              {approvedUnits}
+            </Text>
             <Text style={styles.statLabel}>Aprobadas</Text>
           </View>
           {/* Pendientes */}
           <View style={styles.statBox}>
-            <Text style={[styles.statNum, { color: '#D97706' }]}>{pendingUnits}</Text>
+            <Text style={[styles.statNum, { color: '#D97706' }]}>
+              {pendingUnits}
+            </Text>
             <Text style={styles.statLabel}>Pendientes</Text>
           </View>
           {/* Rechazadas */}
           <View style={styles.statBox}>
-            <Text style={[styles.statNum, { color: '#DC2626' }]}>{rejectedUnits}</Text>
+            <Text style={[styles.statNum, { color: '#DC2626' }]}>
+              {rejectedUnits}
+            </Text>
             <Text style={styles.statLabel}>Rechazadas</Text>
           </View>
         </View>
@@ -269,25 +297,35 @@ export default function VehicleOwnerDashboard() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filtersScroll}
           >
-            {(['all', 'approved', 'pending', 'rejected'] as const).map((type) => {
-              const isActive = filter === type;
-              let label = 'Todos';
-              if (type === 'approved') label = 'Aprobados';
-              if (type === 'pending') label = 'Pendientes';
-              if (type === 'rejected') label = 'Rechazados';
+            {(['all', 'approved', 'pending', 'rejected'] as const).map(
+              (type) => {
+                const isActive = filter === type;
+                let label = 'Todos';
+                if (type === 'approved') label = 'Aprobados';
+                if (type === 'pending') label = 'Pendientes';
+                if (type === 'rejected') label = 'Rechazados';
 
-              return (
-                <Pressable
-                  key={type}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
-                  onPress={() => setFilter(type)}
-                >
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                return (
+                  <Pressable
+                    key={type}
+                    style={[
+                      styles.filterChip,
+                      isActive && styles.filterChipActive,
+                    ]}
+                    onPress={() => setFilter(type)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        isActive && styles.filterChipTextActive,
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              },
+            )}
           </ScrollView>
         </View>
 
@@ -295,10 +333,16 @@ export default function VehicleOwnerDashboard() {
         <Text style={styles.sectionTitle}>Tus Unidades</Text>
         {filteredVehicles.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="car-sport-outline" size={64} color="#8594AB" style={{ marginBottom: 12 }} />
+            <Ionicons
+              name="car-sport-outline"
+              size={64}
+              color="#8594AB"
+              style={{ marginBottom: 12 }}
+            />
             <Text style={styles.emptyTitle}>No hay vehículos</Text>
             <Text style={styles.emptySubtitle}>
-              No se encontraron vehículos en esta categoría. Puedes registrar uno presionando el botón inferior.
+              No se encontraron vehículos en esta categoría. Puedes registrar
+              uno presionando el botón inferior.
             </Text>
           </View>
         ) : (
@@ -310,20 +354,42 @@ export default function VehicleOwnerDashboard() {
                 key={vehicle.uuid}
                 style={({ pressed }) => [
                   styles.vehicleCard,
-                  pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] }
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
                 ]}
-                onPress={() => router.push(`/vehicle-owner/${vehicle.uuid}` as any)}
+                onPress={() =>
+                  router.push(`/vehicle-owner/${vehicle.uuid}` as any)
+                }
               >
                 <View style={styles.vehicleHeader}>
                   <View style={styles.vehicleTitleRow}>
-                    <Ionicons name="car" size={22} color={tokens.colors.primary} style={{ marginRight: 8 }} />
+                    <Ionicons
+                      name="car"
+                      size={22}
+                      color={tokens.colors.primary}
+                      style={{ marginRight: 8 }}
+                    />
                     <Text style={styles.vehicleName}>
                       {vehicle.vehicleMake} {vehicle.vehicleModel}
                     </Text>
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
-                    <Ionicons name={statusInfo.icon} size={14} color={statusInfo.text} style={{ marginRight: 4 }} />
-                    <Text style={[styles.statusBadgeText, { color: statusInfo.text }]}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: statusInfo.bg },
+                    ]}
+                  >
+                    <Ionicons
+                      name={statusInfo.icon}
+                      size={14}
+                      color={statusInfo.text}
+                      style={{ marginRight: 4 }}
+                    />
+                    <Text
+                      style={[
+                        styles.statusBadgeText,
+                        { color: statusInfo.text },
+                      ]}
+                    >
                       {statusInfo.label}
                     </Text>
                   </View>
@@ -332,22 +398,35 @@ export default function VehicleOwnerDashboard() {
                 <View style={styles.vehicleDetails}>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>PLACA / MATRÍCULA</Text>
-                    <Text style={styles.detailValue}>{vehicle.licensePlate}</Text>
+                    <Text style={styles.detailValue}>
+                      {vehicle.licensePlate}
+                    </Text>
                   </View>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>AÑO</Text>
-                    <Text style={styles.detailValue}>{vehicle.vehicleYear}</Text>
+                    <Text style={styles.detailValue}>
+                      {vehicle.vehicleYear}
+                    </Text>
                   </View>
                   <View style={styles.detailItem}>
                     <Text style={styles.detailLabel}>REGISTRADO EL</Text>
-                    <Text style={styles.detailValue}>{formatDate(vehicle.createdAt)}</Text>
+                    <Text style={styles.detailValue}>
+                      {formatDate(vehicle.createdAt)}
+                    </Text>
                   </View>
                 </View>
 
                 {vehicle.status === 'rejected' && vehicle.adminNotes && (
                   <View style={styles.actionBtn}>
-                    <Ionicons name="warning-outline" size={16} color="#DC2626" style={{ marginRight: 6 }} />
-                    <Text style={styles.actionBtnText}>Ver Motivo de Rechazo</Text>
+                    <Ionicons
+                      name="warning-outline"
+                      size={16}
+                      color="#DC2626"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.actionBtnText}>
+                      Ver Motivo de Rechazo
+                    </Text>
                   </View>
                 )}
               </Pressable>
@@ -383,7 +462,12 @@ export default function VehicleOwnerDashboard() {
             {/* Cabecera Modal */}
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
-                <Ionicons name="alert-circle" size={24} color="#DC2626" style={{ marginRight: 8 }} />
+                <Ionicons
+                  name="alert-circle"
+                  size={24}
+                  color="#DC2626"
+                  style={{ marginRight: 8 }}
+                />
                 <Text style={styles.modalTitle}>Solicitud Rechazada</Text>
               </View>
               <Pressable onPress={() => setIsModalVisible(false)} hitSlop={10}>
@@ -398,23 +482,36 @@ export default function VehicleOwnerDashboard() {
                   {selectedVehicle.vehicleMake} {selectedVehicle.vehicleModel}
                 </Text>
                 <Text style={styles.modalUnitMeta}>
-                  Placa: {selectedVehicle.licensePlate} • Año: {selectedVehicle.vehicleYear}
+                  Placa: {selectedVehicle.licensePlate} • Año:{' '}
+                  {selectedVehicle.vehicleYear}
                 </Text>
               </View>
             )}
 
             {/* Nota de Administración */}
-            <Text style={styles.modalLabel}>OBSERVACIONES DE ADMINISTRACIÓN:</Text>
-            <ScrollView style={styles.modalNotesScroll} showsVerticalScrollIndicator={true}>
+            <Text style={styles.modalLabel}>
+              OBSERVACIONES DE ADMINISTRACIÓN:
+            </Text>
+            <ScrollView
+              style={styles.modalNotesScroll}
+              showsVerticalScrollIndicator={true}
+            >
               <Text style={styles.modalNotes}>
-                {selectedVehicle?.adminNotes || 'No hay observaciones adicionales registradas.'}
+                {selectedVehicle?.adminNotes ||
+                  'No hay observaciones adicionales registradas.'}
               </Text>
             </ScrollView>
 
             <View style={styles.modalTipBox}>
-              <Ionicons name="bulb-outline" size={18} color="#D97706" style={{ marginRight: 8 }} />
+              <Ionicons
+                name="bulb-outline"
+                size={18}
+                color="#D97706"
+                style={{ marginRight: 8 }}
+              />
               <Text style={styles.modalTipText}>
-                Puedes volver a realizar una solicitud de registro para esta unidad corrigiendo los puntos indicados anteriormente.
+                Puedes volver a realizar una solicitud de registro para esta
+                unidad corrigiendo los puntos indicados anteriormente.
               </Text>
             </View>
 

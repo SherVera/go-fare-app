@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,9 +16,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getTicketByQr, validateTicketByQr } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
-import { validateTicketByQr, getTicketByQr } from '@/lib/api';
 
 interface RouteOption {
   id: string;
@@ -26,9 +26,9 @@ interface RouteOption {
 }
 
 const ROUTE_OPTIONS: RouteOption[] = [
-  { id: 'r1', name: 'Ruta 201: Chacaíto - El Hatillo', fare: 15.00 },
-  { id: 'r2', name: 'Ruta L1: Propatria - Palo Verde', fare: 20.00 },
-  { id: 'r3', name: 'Ruta 102: Plaza Venezuela - Baruta', fare: 12.00 },
+  { id: 'r1', name: 'Ruta 201: Chacaíto - El Hatillo', fare: 15.0 },
+  { id: 'r2', name: 'Ruta L1: Propatria - Palo Verde', fare: 20.0 },
+  { id: 'r3', name: 'Ruta 102: Plaza Venezuela - Baruta', fare: 12.0 },
 ];
 
 export default function DriverScanScreen() {
@@ -36,13 +36,15 @@ export default function DriverScanScreen() {
   const [isEnServicio, setIsEnServicio] = useState(false);
   const [activeRoute, setActiveRoute] = useState<RouteOption>(ROUTE_OPTIONS[0]);
   const [loading, setLoading] = useState(true);
-  
+
   // Input code
   const [qrCodeInput, setQrCodeInput] = useState('');
   const [processing, setProcessing] = useState(false);
 
   // Success / Error States
-  const [scanResult, setScanResult] = useState<'success' | 'error' | null>(null);
+  const [scanResult, setScanResult] = useState<'success' | 'error' | null>(
+    null,
+  );
   const [resultMessage, setResultMessage] = useState('');
   const [resultDetails, setResultDetails] = useState<{
     passengerName?: string;
@@ -61,7 +63,7 @@ export default function DriverScanScreen() {
 
       const routeId = await AsyncStorage.getItem('driver_active_route_id');
       if (routeId) {
-        const found = ROUTE_OPTIONS.find(r => r.id === routeId);
+        const found = ROUTE_OPTIONS.find((r) => r.id === routeId);
         if (found) setActiveRoute(found);
       }
     } catch (err) {
@@ -79,7 +81,10 @@ export default function DriverScanScreen() {
     if (processing) return;
     const sanitizedCode = code.trim();
     if (!sanitizedCode) {
-      Alert.alert('Código Requerido', 'Por favor, ingresa el código del boleto.');
+      Alert.alert(
+        'Código Requerido',
+        'Por favor, ingresa el código del boleto.',
+      );
       return;
     }
 
@@ -90,14 +95,17 @@ export default function DriverScanScreen() {
       // 1. Intentar validar el boleto real en el backend
       console.log('[Scan] Validating real ticket:', sanitizedCode);
       const ticket = await validateTicketByQr(sanitizedCode);
-      
+
       // Registrar cobro exitoso
       const validationRecord = {
         id: `val-${Date.now()}`,
         code: sanitizedCode,
         fare: ticket.price || activeRoute.fare,
         route: ticket.route || activeRoute.name,
-        time: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
+        time: new Date().toLocaleTimeString('es-VE', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
         date: new Date().toLocaleDateString('es-VE'),
         passengerName: 'Pasajero Verificado',
       };
@@ -106,7 +114,10 @@ export default function DriverScanScreen() {
       const localListStr = await AsyncStorage.getItem('mock_validated_tickets');
       const localList = localListStr ? JSON.parse(localListStr) : [];
       localList.unshift(validationRecord);
-      await AsyncStorage.setItem('mock_validated_tickets', JSON.stringify(localList));
+      await AsyncStorage.setItem(
+        'mock_validated_tickets',
+        JSON.stringify(localList),
+      );
 
       setResultDetails({
         passengerName: 'Pasajero Registrado',
@@ -118,29 +129,45 @@ export default function DriverScanScreen() {
       setResultMessage('¡Boleto Validado con Éxito!');
       setScanResult('success');
       setQrCodeInput('');
-
     } catch (err: any) {
-      console.warn('[Scan] Real validation failed (using fallback/simulator):', err.message || err);
+      console.warn(
+        '[Scan] Real validation failed (using fallback/simulator):',
+        err.message || err,
+      );
 
       // 2. Fallback de Simulación en caso de error de red o para códigos especiales de simulación
       const codeUpper = sanitizedCode.toUpperCase();
-      
-      if (codeUpper.startsWith('MOCK-VALID') || codeUpper === 'OK' || codeUpper.startsWith('TICKET-MOCK')) {
-        const fareValue = codeUpper.includes('20') ? 20.00 : 15.00;
+
+      if (
+        codeUpper.startsWith('MOCK-VALID') ||
+        codeUpper === 'OK' ||
+        codeUpper.startsWith('TICKET-MOCK')
+      ) {
+        const fareValue = codeUpper.includes('20') ? 20.0 : 15.0;
         const validationRecord = {
           id: `val-${Date.now()}`,
           code: sanitizedCode,
           fare: fareValue,
           route: activeRoute.name,
-          time: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
+          time: new Date().toLocaleTimeString('es-VE', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
           date: new Date().toLocaleDateString('es-VE'),
-          passengerName: codeUpper.includes('CARLOS') ? 'Carlos Pérez' : 'Rafael Castellano',
+          passengerName: codeUpper.includes('CARLOS')
+            ? 'Carlos Pérez'
+            : 'Rafael Castellano',
         };
 
-        const localListStr = await AsyncStorage.getItem('mock_validated_tickets');
+        const localListStr = await AsyncStorage.getItem(
+          'mock_validated_tickets',
+        );
         const localList = localListStr ? JSON.parse(localListStr) : [];
         localList.unshift(validationRecord);
-        await AsyncStorage.setItem('mock_validated_tickets', JSON.stringify(localList));
+        await AsyncStorage.setItem(
+          'mock_validated_tickets',
+          JSON.stringify(localList),
+        );
 
         setResultDetails({
           passengerName: validationRecord.passengerName,
@@ -156,8 +183,12 @@ export default function DriverScanScreen() {
         // Mostrar error real o simulado
         let errorMsg = err.message || 'Código de boleto inválido o inactivo.';
         if (codeUpper.startsWith('USED') || codeUpper === 'USADO') {
-          errorMsg = 'El boleto ya ha sido validado anteriormente (Código: USED-TICKET).';
-        } else if (codeUpper.startsWith('EXPIRED') || codeUpper === 'EXPIRADO') {
+          errorMsg =
+            'El boleto ya ha sido validado anteriormente (Código: USED-TICKET).';
+        } else if (
+          codeUpper.startsWith('EXPIRED') ||
+          codeUpper === 'EXPIRADO'
+        ) {
           errorMsg = 'El boleto ha expirado o su validez temporal finalizó.';
         } else if (codeUpper.startsWith('SALDO') || codeUpper === 'NO-MONEY') {
           errorMsg = 'El pasajero no cuenta con saldo suficiente en su cuenta.';
@@ -166,7 +197,10 @@ export default function DriverScanScreen() {
         setResultMessage(errorMsg);
         setResultDetails({
           code: sanitizedCode,
-          time: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
+          time: new Date().toLocaleTimeString('es-VE', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
         });
         setScanResult('error');
       }
@@ -175,7 +209,9 @@ export default function DriverScanScreen() {
     }
   };
 
-  const handleSimulateQuickScan = (type: 'valid_15' | 'valid_20' | 'used' | 'expired' | 'no_money') => {
+  const handleSimulateQuickScan = (
+    type: 'valid_15' | 'valid_20' | 'used' | 'expired' | 'no_money',
+  ) => {
     let code = 'MOCK-VALID-15';
     if (type === 'valid_20') code = 'MOCK-VALID-20-CARLOS';
     if (type === 'used') code = 'USED-BOLETO';
@@ -213,12 +249,13 @@ export default function DriverScanScreen() {
           </View>
           <Text style={styles.offlineTitle}>Turno Fuera de Servicio</Text>
           <Text style={styles.offlineSubtitle}>
-            Debes iniciar tu turno de trabajo ("En Servicio") en la pestaña de Inicio para poder cobrar a los pasajeros.
+            Debes iniciar tu turno de trabajo ("En Servicio") en la pestaña de
+            Inicio para poder cobrar a los pasajeros.
           </Text>
           <Pressable
             style={({ pressed }) => [
               styles.offlineBtn,
-              pressed && { opacity: 0.9 }
+              pressed && { opacity: 0.9 },
             ]}
             onPress={() => router.push('/driver/dashboard')}
           >
@@ -239,15 +276,25 @@ export default function DriverScanScreen() {
       </View>
 
       {scanResult === null ? (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Info Banner */}
           <View style={styles.infoBanner}>
-            <Ionicons name="information-circle-outline" size={24} color="#0369A1" />
+            <Ionicons
+              name="information-circle-outline"
+              size={24}
+              color="#0369A1"
+            />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Text style={styles.infoTitle}>TARIFA DE LA RUTA</Text>
               <Text style={styles.infoText}>
-                {activeRoute.name} • <Text style={{ fontWeight: 'bold' }}>{activeRoute.fare.toFixed(2)} Bs</Text>
+                {activeRoute.name} •{' '}
+                <Text style={{ fontWeight: 'bold' }}>
+                  {activeRoute.fare.toFixed(2)} Bs
+                </Text>
               </Text>
             </View>
           </View>
@@ -261,18 +308,25 @@ export default function DriverScanScreen() {
                 <View style={[styles.corner, styles.topRight]} />
                 <View style={[styles.corner, styles.bottomLeft]} />
                 <View style={[styles.corner, styles.bottomRight]} />
-                
+
                 {/* Línea roja/verde de escaneo */}
                 <View style={styles.scanningLine} />
               </View>
-              <Text style={styles.scannerPrompt}>Escanea el código QR del pasajero</Text>
+              <Text style={styles.scannerPrompt}>
+                Escanea el código QR del pasajero
+              </Text>
             </View>
           </View>
 
           {/* Validador Manual */}
           <Text style={styles.inputLabel}>INGRESO MANUAL DE CÓDIGO</Text>
           <View style={styles.inputCard}>
-            <Ionicons name="qr-code-outline" size={20} color="#8594AB" style={{ marginRight: 12 }} />
+            <Ionicons
+              name="qr-code-outline"
+              size={20}
+              color="#8594AB"
+              style={{ marginRight: 12 }}
+            />
             <TextInput
               style={styles.input}
               placeholder="Ingresa código o ID del boleto..."
@@ -301,28 +355,48 @@ export default function DriverScanScreen() {
               style={styles.simBtnSuccess}
               onPress={() => handleSimulateQuickScan('valid_15')}
             >
-              <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.simBtnText}>Válido (Bs 15)</Text>
             </Pressable>
             <Pressable
               style={styles.simBtnSuccess}
               onPress={() => handleSimulateQuickScan('valid_20')}
             >
-              <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.simBtnText}>Válido (Bs 20)</Text>
             </Pressable>
             <Pressable
               style={styles.simBtnError}
               onPress={() => handleSimulateQuickScan('used')}
             >
-              <Ionicons name="alert-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Ionicons
+                name="alert-circle-outline"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.simBtnText}>Ya Usado</Text>
             </Pressable>
             <Pressable
               style={styles.simBtnError}
               onPress={() => handleSimulateQuickScan('expired')}
             >
-              <Ionicons name="close-circle-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Ionicons
+                name="close-circle-outline"
+                size={16}
+                color="#FFFFFF"
+                style={{ marginRight: 6 }}
+              />
               <Text style={styles.simBtnText}>Expirado</Text>
             </Pressable>
           </View>
@@ -332,20 +406,43 @@ export default function DriverScanScreen() {
         </ScrollView>
       ) : (
         /* PANTALLA RESULTADO DEL ESCANEO (ÉXITO / ERROR) */
-        <View style={[styles.resultContainer, scanResult === 'success' ? styles.bgSuccess : styles.bgError]}>
+        <View
+          style={[
+            styles.resultContainer,
+            scanResult === 'success' ? styles.bgSuccess : styles.bgError,
+          ]}
+        >
           <View style={styles.resultCard}>
-            <View style={[styles.resultIconWrapper, scanResult === 'success' ? styles.iconSuccessBg : styles.iconErrorBg]}>
+            <View
+              style={[
+                styles.resultIconWrapper,
+                scanResult === 'success'
+                  ? styles.iconSuccessBg
+                  : styles.iconErrorBg,
+              ]}
+            >
               <Ionicons
-                name={scanResult === 'success' ? 'checkmark-circle' : 'alert-circle'}
+                name={
+                  scanResult === 'success' ? 'checkmark-circle' : 'alert-circle'
+                }
                 size={72}
                 color={scanResult === 'success' ? '#16A34A' : '#DC2626'}
               />
             </View>
-            
-            <Text style={[styles.resultTitle, scanResult === 'success' ? { color: '#16A34A' } : { color: '#DC2626' }]}>
-              {scanResult === 'success' ? 'Validación Exitosa' : 'Validación Fallida'}
+
+            <Text
+              style={[
+                styles.resultTitle,
+                scanResult === 'success'
+                  ? { color: '#16A34A' }
+                  : { color: '#DC2626' },
+              ]}
+            >
+              {scanResult === 'success'
+                ? 'Validación Exitosa'
+                : 'Validación Fallida'}
             </Text>
-            
+
             <Text style={styles.resultMessageText}>{resultMessage}</Text>
 
             <View style={styles.resultDetailsCard}>
@@ -353,17 +450,26 @@ export default function DriverScanScreen() {
                 <>
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>PASAJERO</Text>
-                    <Text style={styles.detailValue}>{resultDetails.passengerName}</Text>
+                    <Text style={styles.detailValue}>
+                      {resultDetails.passengerName}
+                    </Text>
                   </View>
                   <View style={styles.detailDivider} />
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>RUTA</Text>
-                    <Text style={styles.detailValue}>{resultDetails.route}</Text>
+                    <Text style={styles.detailValue}>
+                      {resultDetails.route}
+                    </Text>
                   </View>
                   <View style={styles.detailDivider} />
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>TARIFA COBRADA</Text>
-                    <Text style={[styles.detailValue, { color: '#16A34A', fontWeight: 'bold' }]}>
+                    <Text
+                      style={[
+                        styles.detailValue,
+                        { color: '#16A34A', fontWeight: 'bold' },
+                      ]}
+                    >
                       {resultDetails.fare?.toFixed(2)} Bs
                     </Text>
                   </View>
@@ -371,22 +477,28 @@ export default function DriverScanScreen() {
               ) : (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>MOTIVO</Text>
-                  <Text style={[styles.detailValue, { color: '#DC2626' }]}>Código de Boleto Inadecuado o Rechazado por Servidor</Text>
+                  <Text style={[styles.detailValue, { color: '#DC2626' }]}>
+                    Código de Boleto Inadecuado o Rechazado por Servidor
+                  </Text>
                 </View>
               )}
 
               <View style={styles.detailDivider} />
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>CÓDIGO DE ESCANEO</Text>
-                <Text style={styles.detailValueMono}>{resultDetails?.code || qrCodeInput}</Text>
+                <Text style={styles.detailValueMono}>
+                  {resultDetails?.code || qrCodeInput}
+                </Text>
               </View>
             </View>
 
             <Pressable
               style={({ pressed }) => [
                 styles.dismissBtn,
-                scanResult === 'success' ? { backgroundColor: '#16A34A' } : { backgroundColor: '#DC2626' },
-                pressed && { opacity: 0.9 }
+                scanResult === 'success'
+                  ? { backgroundColor: '#16A34A' }
+                  : { backgroundColor: '#DC2626' },
+                pressed && { opacity: 0.9 },
               ]}
               onPress={resetResult}
             >

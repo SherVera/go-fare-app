@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { StatusBar } from 'expo-status-bar';
 import { useFocusEffect } from 'expo-router';
-import React, { useEffect, useState, useCallback } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -20,10 +20,10 @@ import type {
   TripSummary,
 } from '@/interfaces';
 import {
-  getBackendProfile,
-  getUserTickets,
-  getFareAccountByUserId,
   getAccountTransactions,
+  getBackendProfile,
+  getFareAccountByUserId,
+  getUserTickets,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
@@ -61,7 +61,8 @@ export default function TripsScreen() {
             const userTxs = await getAccountTransactions(account.id);
             userTxs.sort(
               (a, b) =>
-                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime(),
             );
             setTransactions(userTxs);
           }
@@ -80,7 +81,7 @@ export default function TripsScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchTicketsData();
-    }, [fetchTicketsData])
+    }, [fetchTicketsData]),
   );
 
   const handleRefresh = () => {
@@ -177,18 +178,34 @@ export default function TripsScreen() {
         {/* ── SEGMENTED CONTROL ── */}
         <View style={styles.segmentContainer}>
           <Pressable
-            style={[styles.segmentBtn, activeTab === 'trips' && styles.segmentBtnActive]}
+            style={[
+              styles.segmentBtn,
+              activeTab === 'trips' && styles.segmentBtnActive,
+            ]}
             onPress={() => setActiveTab('trips')}
           >
-            <Text style={[styles.segmentText, activeTab === 'trips' && styles.segmentTextActive]}>
+            <Text
+              style={[
+                styles.segmentText,
+                activeTab === 'trips' && styles.segmentTextActive,
+              ]}
+            >
               Viajes
             </Text>
           </Pressable>
           <Pressable
-            style={[styles.segmentBtn, activeTab === 'transactions' && styles.segmentBtnActive]}
+            style={[
+              styles.segmentBtn,
+              activeTab === 'transactions' && styles.segmentBtnActive,
+            ]}
             onPress={() => setActiveTab('transactions')}
           >
-            <Text style={[styles.segmentText, activeTab === 'transactions' && styles.segmentTextActive]}>
+            <Text
+              style={[
+                styles.segmentText,
+                activeTab === 'transactions' && styles.segmentTextActive,
+              ]}
+            >
               Transacciones
             </Text>
           </Pressable>
@@ -260,7 +277,8 @@ export default function TripsScreen() {
               <View style={styles.noTripsContainer}>
                 <Ionicons name="bus-outline" size={48} color="#9CA3AF" />
                 <Text style={styles.noTripsText}>
-                  No se encontraron boletos ni viajes registrados en este período.
+                  No se encontraron boletos ni viajes registrados en este
+                  período.
                 </Text>
               </View>
             ) : (
@@ -312,7 +330,11 @@ export default function TripsScreen() {
                           <Text
                             style={[
                               styles.badgeText,
-                              { color: isUsed ? '#6B7280' : tokens.colors.primary },
+                              {
+                                color: isUsed
+                                  ? '#6B7280'
+                                  : tokens.colors.primary,
+                              },
                             ]}
                           >
                             {isUsed ? 'COMPLETADO' : 'ACTIVO'}
@@ -376,7 +398,8 @@ export default function TripsScreen() {
               <View style={styles.noTripsContainer}>
                 <Ionicons name="card-outline" size={48} color="#9CA3AF" />
                 <Text style={styles.noTripsText}>
-                  No se encontraron recargas ni transacciones registradas en este período.
+                  No se encontraron recargas ni transacciones registradas en
+                  este período.
                 </Text>
               </View>
             ) : (
@@ -408,11 +431,21 @@ export default function TripsScreen() {
                         {isCredit ? 'Recarga de Saldo' : 'Débito por Viaje'}
                       </Text>
                       <Text style={styles.tripSubtitle}>
-                        {tx.description || (isCredit ? 'Saldo adicionado' : 'Pago por viaje en bus')}
+                        {tx.description ||
+                          (isCredit
+                            ? 'Saldo adicionado'
+                            : 'Pago por viaje en bus')}
                       </Text>
-                      <Text style={[styles.tripSubtitle, { marginTop: 4 }]}>{formattedDate}</Text>
+                      <Text style={[styles.tripSubtitle, { marginTop: 4 }]}>
+                        {formattedDate}
+                      </Text>
                     </View>
-                    <View style={[styles.priceContainer, { minWidth: 70, alignItems: 'flex-end' }]}>
+                    <View
+                      style={[
+                        styles.priceContainer,
+                        { minWidth: 70, alignItems: 'flex-end' },
+                      ]}
+                    >
                       <Text
                         style={{
                           fontSize: 15,
@@ -420,7 +453,10 @@ export default function TripsScreen() {
                           color: isCredit ? '#10B981' : '#EF4444',
                         }}
                       >
-                        {isCredit ? '+' : '-'} Bs. {Number(tx.amount || 0).toFixed(2).replace('.', ',')}
+                        {isCredit ? '+' : '-'} Bs.{' '}
+                        {Number(tx.amount || 0)
+                          .toFixed(2)
+                          .replace('.', ',')}
                       </Text>
                     </View>
                   </View>

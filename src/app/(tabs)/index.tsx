@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
-import React, { useEffect, useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -24,7 +25,6 @@ import {
 } from '@/lib/api';
 import { auth, getDocument } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HomeDashboard() {
   const router = useRouter();
@@ -97,12 +97,23 @@ export default function HomeDashboard() {
 
       setUserProfile(updatedProfile);
       // Guardar en la caché local
-      await AsyncStorage.setItem('gofare_cached_user_profile', JSON.stringify(updatedProfile));
+      await AsyncStorage.setItem(
+        'gofare_cached_user_profile',
+        JSON.stringify(updatedProfile),
+      );
 
       // Sincronizar el rol del usuario para evitar desvíos o incoherencias
-      const isOwner = (backendUser as any).roles?.some((role: any) => role.name === 'transport_owner');
-      const isDriver = (backendUser as any).roles?.some((role: any) => role.name === 'driver');
-      const newRole = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
+      const isOwner = (backendUser as any).roles?.some(
+        (role: any) => role.name === 'transport_owner',
+      );
+      const isDriver = (backendUser as any).roles?.some(
+        (role: any) => role.name === 'driver',
+      );
+      const newRole = isOwner
+        ? 'transport_owner'
+        : isDriver
+          ? 'driver'
+          : 'passenger';
       await AsyncStorage.setItem('user_role', newRole);
 
       if (isOwner) {
@@ -113,7 +124,10 @@ export default function HomeDashboard() {
         router.replace('/driver/dashboard' as any);
       }
     } catch (error: any) {
-      console.log('[Home] Error al obtener datos del backend:', error.message || error);
+      console.log(
+        '[Home] Error al obtener datos del backend:',
+        error.message || error,
+      );
       // Si el error es de autorización (Unauthorized), no hacemos fallback a Firestore
       if (error?.message === 'Unauthorized') {
         return;
@@ -125,18 +139,20 @@ export default function HomeDashboard() {
           setUserProfile(legacyData as UserProfile);
         }
       } catch (fbError: any) {
-        console.log('[Home] Error en fallback de Firestore:', fbError.message || fbError);
+        console.log(
+          '[Home] Error en fallback de Firestore:',
+          fbError.message || fbError,
+        );
       }
     }
     setLoading(false);
     setRefreshing(false);
   }, []);
 
-
   useFocusEffect(
     useCallback(() => {
       fetchUserData();
-    }, [fetchUserData])
+    }, [fetchUserData]),
   );
 
   const onRefresh = () => {

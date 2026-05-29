@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +13,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tokens } from '@/theme/tokens';
 
 interface MockVehicle {
@@ -28,16 +28,19 @@ interface MockVehicle {
   tripsCount?: number;
 }
 
-const VEHICLES_BASE_EARNINGS: Record<string, { earnings: number; trips: number }> = {
-  '1': { earnings: 3240.00, trips: 216 },
-  '2': { earnings: 1890.00, trips: 126 },
-  '3': { earnings: 840.00, trips: 56 },
+const VEHICLES_BASE_EARNINGS: Record<
+  string,
+  { earnings: number; trips: number }
+> = {
+  '1': { earnings: 3240.0, trips: 216 },
+  '2': { earnings: 1890.0, trips: 126 },
+  '3': { earnings: 840.0, trips: 56 },
 };
 
 export default function VehicleOwnerEarnings() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [totalEarnings, setTotalEarnings] = useState(5970.00);
+  const [totalEarnings, setTotalEarnings] = useState(5970.0);
   const [totalTrips, setTotalTrips] = useState(398);
   const [activeUnitsCount, setActiveUnitsCount] = useState(3);
 
@@ -46,16 +49,20 @@ export default function VehicleOwnerEarnings() {
       setLoading(true);
       const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
       const localVehicles: MockVehicle[] = localStr ? JSON.parse(localStr) : [];
-      
-      const deletedPlatesStr = await AsyncStorage.getItem('mock_deleted_vehicle_plates');
-      const deletedPlates: string[] = deletedPlatesStr ? JSON.parse(deletedPlatesStr) : [];
+
+      const deletedPlatesStr = await AsyncStorage.getItem(
+        'mock_deleted_vehicle_plates',
+      );
+      const deletedPlates: string[] = deletedPlatesStr
+        ? JSON.parse(deletedPlatesStr)
+        : [];
 
       // Lista base filtrada de eliminados
       const baseApproved = [
         { uuid: '1', licensePlate: 'AB123CD', status: 'approved' },
         { uuid: '2', licensePlate: 'XY987ZT', status: 'approved' },
         { uuid: '3', licensePlate: 'HJ321OP', status: 'approved' },
-      ].filter(v => !deletedPlates.includes(v.licensePlate));
+      ].filter((v) => !deletedPlates.includes(v.licensePlate));
 
       // Combinar
       let totalE = 0;
@@ -65,10 +72,18 @@ export default function VehicleOwnerEarnings() {
       // Calcular para los base aprobados que no fueron borrados
       for (const baseV of baseApproved) {
         // Ver si hay versión en AsyncStorage con más ganancias
-        const localCopy = localVehicles.find(lv => lv.licensePlate === baseV.licensePlate);
-        const e = localCopy?.totalEarnings !== undefined ? localCopy.totalEarnings : (VEHICLES_BASE_EARNINGS[baseV.uuid]?.earnings ?? 0);
-        const t = localCopy?.tripsCount !== undefined ? localCopy.tripsCount : (VEHICLES_BASE_EARNINGS[baseV.uuid]?.trips ?? 0);
-        
+        const localCopy = localVehicles.find(
+          (lv) => lv.licensePlate === baseV.licensePlate,
+        );
+        const e =
+          localCopy?.totalEarnings !== undefined
+            ? localCopy.totalEarnings
+            : (VEHICLES_BASE_EARNINGS[baseV.uuid]?.earnings ?? 0);
+        const t =
+          localCopy?.tripsCount !== undefined
+            ? localCopy.tripsCount
+            : (VEHICLES_BASE_EARNINGS[baseV.uuid]?.trips ?? 0);
+
         totalE += e;
         totalT += t;
         count++;
@@ -76,11 +91,13 @@ export default function VehicleOwnerEarnings() {
 
       // Calcular para los nuevos agregados aprobados
       const localApprovedOnly = localVehicles.filter(
-        lv => lv.status === 'approved' && !['AB123CD', 'XY987ZT', 'HJ321OP'].includes(lv.licensePlate)
+        (lv) =>
+          lv.status === 'approved' &&
+          !['AB123CD', 'XY987ZT', 'HJ321OP'].includes(lv.licensePlate),
       );
 
       for (const lv of localApprovedOnly) {
-        totalE += lv.totalEarnings !== undefined ? lv.totalEarnings : 450.00;
+        totalE += lv.totalEarnings !== undefined ? lv.totalEarnings : 450.0;
         totalT += lv.tripsCount !== undefined ? lv.tripsCount : 30;
         count++;
       }
@@ -101,7 +118,10 @@ export default function VehicleOwnerEarnings() {
 
   const handleRequestPayout = () => {
     if (totalEarnings <= 0) {
-      Alert.alert('Saldo Insuficiente', 'No tienes ingresos disponibles para solicitar liquidación.');
+      Alert.alert(
+        'Saldo Insuficiente',
+        'No tienes ingresos disponibles para solicitar liquidación.',
+      );
       return;
     }
 
@@ -121,13 +141,13 @@ export default function VehicleOwnerEarnings() {
                   text: 'Entendido',
                   onPress: () => {
                     setTotalEarnings(0);
-                  }
-                }
-              ]
+                  },
+                },
+              ],
             );
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -142,11 +162,41 @@ export default function VehicleOwnerEarnings() {
   ];
 
   const recentTx = [
-    { id: 'tx1', time: 'Hace 2 min', vehicle: 'Toyota Coaster (AB123CD)', route: 'Ruta 201', amount: 15.00 },
-    { id: 'tx2', time: 'Hace 12 min', vehicle: 'Hyundai County (HJ321OP)', route: 'Ruta 201', amount: 15.00 },
-    { id: 'tx3', time: 'Hace 18 min', vehicle: 'Encava ENT-610 (XY987ZT)', route: 'Ruta L1', amount: 20.00 },
-    { id: 'tx4', time: 'Hace 45 min', vehicle: 'Toyota Coaster (AB123CD)', route: 'Ruta 201', amount: 15.00 },
-    { id: 'tx5', time: 'Hace 1 hora', vehicle: 'Encava ENT-610 (XY987ZT)', route: 'Ruta L1', amount: 20.00 },
+    {
+      id: 'tx1',
+      time: 'Hace 2 min',
+      vehicle: 'Toyota Coaster (AB123CD)',
+      route: 'Ruta 201',
+      amount: 15.0,
+    },
+    {
+      id: 'tx2',
+      time: 'Hace 12 min',
+      vehicle: 'Hyundai County (HJ321OP)',
+      route: 'Ruta 201',
+      amount: 15.0,
+    },
+    {
+      id: 'tx3',
+      time: 'Hace 18 min',
+      vehicle: 'Encava ENT-610 (XY987ZT)',
+      route: 'Ruta L1',
+      amount: 20.0,
+    },
+    {
+      id: 'tx4',
+      time: 'Hace 45 min',
+      vehicle: 'Toyota Coaster (AB123CD)',
+      route: 'Ruta 201',
+      amount: 15.0,
+    },
+    {
+      id: 'tx5',
+      time: 'Hace 1 hora',
+      vehicle: 'Encava ENT-610 (XY987ZT)',
+      route: 'Ruta L1',
+      amount: 20.0,
+    },
   ];
 
   if (loading) {
@@ -160,18 +210,21 @@ export default function VehicleOwnerEarnings() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Ingresos de Flota</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* balance card */}
         <View style={styles.balanceCard}>
           <Text style={styles.balanceLabel}>SALDO DISPONIBLE</Text>
           <Text style={styles.balanceValue}>{totalEarnings.toFixed(2)} Bs</Text>
-          
+
           <View style={styles.metaRow}>
             <View style={styles.metaCol}>
               <Text style={styles.metaLabel}>VIAJES TOTALES</Text>
@@ -193,7 +246,12 @@ export default function VehicleOwnerEarnings() {
             onPress={handleRequestPayout}
             disabled={totalEarnings <= 0}
           >
-            <Ionicons name="card" size={20} color={tokens.colors.primary} style={{ marginRight: 8 }} />
+            <Ionicons
+              name="card"
+              size={20}
+              color={tokens.colors.primary}
+              style={{ marginRight: 8 }}
+            />
             <Text style={styles.payoutBtnText}>Cobrar Ingresos Acumulados</Text>
           </Pressable>
         </View>
@@ -205,10 +263,17 @@ export default function VehicleOwnerEarnings() {
             {weeklyData.map((data, idx) => (
               <View key={idx} style={styles.chartCol}>
                 <View style={styles.chartBarOuter}>
-                  <View style={[styles.chartBarInner, { height: data.height as any }]} />
+                  <View
+                    style={[
+                      styles.chartBarInner,
+                      { height: data.height as any },
+                    ]}
+                  />
                 </View>
                 <Text style={styles.chartDayText}>{data.day}</Text>
-                <Text style={styles.chartValText}>{data.amount.split(' ')[0]}</Text>
+                <Text style={styles.chartValText}>
+                  {data.amount.split(' ')[0]}
+                </Text>
               </View>
             ))}
           </View>
@@ -224,7 +289,9 @@ export default function VehicleOwnerEarnings() {
               </View>
               <View style={styles.txDetails}>
                 <Text style={styles.txVehicleName}>{tx.vehicle}</Text>
-                <Text style={styles.txRoute}>{tx.route} • {tx.time}</Text>
+                <Text style={styles.txRoute}>
+                  {tx.route} • {tx.time}
+                </Text>
               </View>
               <Text style={styles.txAmount}>+{tx.amount.toFixed(2)} Bs</Text>
             </View>

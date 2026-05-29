@@ -98,7 +98,6 @@ export async function syncWithBackend(
   return response;
 }
 
-
 function sanitizeNumericFields(data: any): any {
   if (!data) return data;
   if (Array.isArray(data)) {
@@ -113,7 +112,11 @@ function sanitizeNumericFields(data: any): any {
         }
       }
     }
-    if ('balance' in copy && copy.balance !== undefined && copy.balance !== null) {
+    if (
+      'balance' in copy &&
+      copy.balance !== undefined &&
+      copy.balance !== null
+    ) {
       copy.balance = Number(copy.balance);
     }
     if ('price' in copy && copy.price !== undefined && copy.price !== null) {
@@ -418,7 +421,11 @@ export async function validateTicketByQr(
 export const MOCK_COOPERATIVES = [
   { uuid: 'coop-1', name: 'Cooperativa Caracas Move R.L.', rif: 'J-304598124' },
   { uuid: 'coop-2', name: 'Línea de Transporte Chacao', rif: 'J-401234567' },
-  { uuid: 'coop-3', name: 'Asociación de Conductores La India', rif: 'J-298765432' },
+  {
+    uuid: 'coop-3',
+    name: 'Asociación de Conductores La India',
+    rif: 'J-298765432',
+  },
   { uuid: 'coop-4', name: 'Cooperativa Metrópolis', rif: 'J-311223344' },
 ];
 
@@ -432,10 +439,13 @@ export async function submitVehicleOwnerRequest(requestData: {
   try {
     await AsyncStorage.setItem(
       'mock_vehicle_owner_cooperative',
-      JSON.stringify(requestData)
+      JSON.stringify(requestData),
     );
   } catch (storageErr) {
-    console.warn('[API] Error al guardar cooperativa de dueño localmente:', storageErr);
+    console.warn(
+      '[API] Error al guardar cooperativa de dueño localmente:',
+      storageErr,
+    );
   }
 
   try {
@@ -444,7 +454,10 @@ export async function submitVehicleOwnerRequest(requestData: {
       body: JSON.stringify(requestData),
     });
   } catch (error) {
-    console.warn('[API] submitVehicleOwnerRequest falló en backend (se usará mock local):', error);
+    console.warn(
+      '[API] submitVehicleOwnerRequest falló en backend (se usará mock local):',
+      error,
+    );
     return { success: true, mocked: true };
   }
 }
@@ -463,10 +476,12 @@ export async function submitVehicleRequest(requestData: {
   try {
     const existingStr = await AsyncStorage.getItem('mock_vehicle_requests');
     const existing = existingStr ? JSON.parse(existingStr) : [];
-    
+
     let coopName = 'Particular / Ninguna';
     if (requestData.cooperativeUuid) {
-      const found = MOCK_COOPERATIVES.find(c => c.uuid === requestData.cooperativeUuid);
+      const found = MOCK_COOPERATIVES.find(
+        (c) => c.uuid === requestData.cooperativeUuid,
+      );
       if (found) coopName = found.name;
     }
 
@@ -482,7 +497,10 @@ export async function submitVehicleRequest(requestData: {
     };
 
     existing.unshift(newRequest);
-    await AsyncStorage.setItem('mock_vehicle_requests', JSON.stringify(existing));
+    await AsyncStorage.setItem(
+      'mock_vehicle_requests',
+      JSON.stringify(existing),
+    );
   } catch (storageErr) {
     console.warn('[API] Error al guardar vehículo localmente:', storageErr);
   }
@@ -493,7 +511,10 @@ export async function submitVehicleRequest(requestData: {
       body: JSON.stringify(requestData),
     });
   } catch (error) {
-    console.warn('[API] submitVehicleRequest falló en backend (se guardó localmente como simulado):', error);
+    console.warn(
+      '[API] submitVehicleRequest falló en backend (se guardó localmente como simulado):',
+      error,
+    );
     return { success: true, mocked: true };
   }
 }
@@ -524,4 +545,3 @@ export async function submitDriverRequest(requestData: {
     body: JSON.stringify(requestData),
   });
 }
-

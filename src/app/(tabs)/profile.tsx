@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -22,15 +24,11 @@ import type {
 import { clearGoFareToken, getBackendProfile } from '@/lib/api';
 import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 
 export default function ProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const router = useRouter();
-
-
 
   const fetchUserData = useCallback(async () => {
     const user = auth.currentUser;
@@ -66,8 +64,7 @@ export default function ProfileScreen() {
             'Usuario',
           idNumber: legacyData?.idNumber || 'V-00000000',
           email: backendUser.email,
-          phoneNumber:
-            backendUser.phoneNumber || legacyData?.phoneNumber || '',
+          phoneNumber: backendUser.phoneNumber || legacyData?.phoneNumber || '',
           balance: legacyData?.balance ?? 0,
           photoURL:
             backendUser.profilePhoto ||
@@ -78,13 +75,24 @@ export default function ProfileScreen() {
         };
 
         setUserProfile(updatedProfile);
-        
+
         // Guardar en la caché local y sincronizar rol
-        await AsyncStorage.setItem('gofare_cached_user_profile', JSON.stringify(updatedProfile));
-        
-        const isOwner = (backendUser as any).roles?.some((role: any) => role.name === 'transport_owner');
-        const isDriver = (backendUser as any).roles?.some((role: any) => role.name === 'driver');
-        const newRole = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
+        await AsyncStorage.setItem(
+          'gofare_cached_user_profile',
+          JSON.stringify(updatedProfile),
+        );
+
+        const isOwner = (backendUser as any).roles?.some(
+          (role: any) => role.name === 'transport_owner',
+        );
+        const isDriver = (backendUser as any).roles?.some(
+          (role: any) => role.name === 'driver',
+        );
+        const newRole = isOwner
+          ? 'transport_owner'
+          : isDriver
+            ? 'driver'
+            : 'passenger';
         await AsyncStorage.setItem('user_role', newRole);
 
         if (isOwner) {
@@ -95,7 +103,10 @@ export default function ProfileScreen() {
           router.replace('/driver/dashboard' as any);
         }
       } catch (error: any) {
-        console.log('[Profile] Error al obtener datos del backend:', error.message || error);
+        console.log(
+          '[Profile] Error al obtener datos del backend:',
+          error.message || error,
+        );
         if (error?.message === 'Unauthorized') {
           return;
         }
@@ -105,10 +116,16 @@ export default function ProfileScreen() {
           if (legacyData) {
             const fbProfile = legacyData as UserProfile;
             setUserProfile(fbProfile);
-            await AsyncStorage.setItem('gofare_cached_user_profile', JSON.stringify(fbProfile));
+            await AsyncStorage.setItem(
+              'gofare_cached_user_profile',
+              JSON.stringify(fbProfile),
+            );
           }
         } catch (fbError: any) {
-          console.log('[Profile] Error en fallback de Firestore:', fbError.message || fbError);
+          console.log(
+            '[Profile] Error en fallback de Firestore:',
+            fbError.message || fbError,
+          );
         }
       }
     }
@@ -117,7 +134,7 @@ export default function ProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchUserData();
-    }, [fetchUserData])
+    }, [fetchUserData]),
   );
 
   // Tarjetas de información — tipadas con ProfileInfoCard[]
@@ -197,7 +214,10 @@ export default function ProfileScreen() {
             try {
               await sigOutAccount();
             } catch (authError) {
-              console.warn('[Profile] Error al cerrar sesión de Firebase (offline):', authError);
+              console.warn(
+                '[Profile] Error al cerrar sesión de Firebase (offline):',
+                authError,
+              );
             }
             await clearGoFareToken();
             try {
@@ -207,7 +227,10 @@ export default function ProfileScreen() {
               await AsyncStorage.removeItem('temp_auth');
               await AsyncStorage.removeItem('user_role');
             } catch (err) {
-              console.warn('[Profile] Error deleting saved credentials/cache:', err);
+              console.warn(
+                '[Profile] Error deleting saved credentials/cache:',
+                err,
+              );
             }
           } catch (error) {
             console.error('Error al cerrar sesión:', error);
@@ -299,8 +322,6 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </Pressable>
         ))}
-
-
 
         {/* ── LOGOUT BUTTON ── */}
         <Pressable

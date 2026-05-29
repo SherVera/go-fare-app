@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -24,9 +24,9 @@ import {
 } from '@/lib/api';
 import {
   createUser,
-  signIn,
   sendVerificationEmail,
   setDocument,
+  signIn,
   sigOutAccount,
   updateUser,
 } from '@/lib/firebase';
@@ -37,9 +37,9 @@ export default function RegisterScreen() {
   const { role } = useLocalSearchParams<{ role?: string }>();
   // Estado del formulario — tipado por RegisterFormState
   const [fullName, setFullName] = useState<RegisterFormState['fullName']>('');
-  const [registrationRole, setRegistrationRole] = useState<'passenger' | 'driver'>(
-    role === 'driver' || role === 'passenger' ? role : 'passenger'
-  );
+  const [registrationRole, setRegistrationRole] = useState<
+    'passenger' | 'driver'
+  >(role === 'driver' || role === 'passenger' ? role : 'passenger');
   const [idNumber, setIdNumber] = useState<RegisterFormState['idNumber']>('');
   const [email, setEmail] = useState<RegisterFormState['email']>('');
   const [password, setPassword] = useState<RegisterFormState['password']>('');
@@ -93,7 +93,8 @@ export default function RegisterScreen() {
       newErrors.email = 'Por favor, ingresa un correo electrónico válido.';
     }
     if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(trimmedPhoneNumber)) {
-      newErrors.phoneNumber = 'Por favor, ingresa un número de teléfono válido (ej. 04120000000).';
+      newErrors.phoneNumber =
+        'Por favor, ingresa un número de teléfono válido (ej. 04120000000).';
     }
     if (trimmedPassword.length < 6) {
       newErrors.password = 'La contraseña debe tener al menos 6 caracteres.';
@@ -145,7 +146,9 @@ export default function RegisterScreen() {
 
       // 4. Sincronizar o crear cuenta de tarifa
       try {
-        const { user: backendUser } = await loginWithFirebaseToken(credentials.idToken);
+        const { user: backendUser } = await loginWithFirebaseToken(
+          credentials.idToken,
+        );
         await createFareAccount(backendUser.id);
       } catch (backendError: any) {
         console.error(
@@ -183,9 +186,11 @@ export default function RegisterScreen() {
       ) {
         serverErrors.email = 'El correo electrónico ya está registrado.';
       } else if (error.code === 'auth/invalid-email') {
-        serverErrors.email = 'El correo electrónico tiene un formato incorrecto.';
+        serverErrors.email =
+          'El correo electrónico tiene un formato incorrecto.';
       } else if (error.code === 'auth/weak-password') {
-        serverErrors.password = 'La contraseña es muy débil (mínimo 6 caracteres).';
+        serverErrors.password =
+          'La contraseña es muy débil (mínimo 6 caracteres).';
       } else if (
         errorMsg.toLowerCase().includes('teléfono') ||
         errorMsg.toLowerCase().includes('phone') ||
@@ -196,10 +201,7 @@ export default function RegisterScreen() {
         Alert.alert('Error', 'Error de red. Revisa tu conexión a internet.');
       } else if (error.code === 'auth/internal-error') {
         if (__DEV__) {
-          console.error(
-            '[register] auth/internal-error:',
-            error,
-          );
+          console.error('[register] auth/internal-error:', error);
         }
         Alert.alert(
           'Error de registro',
@@ -403,7 +405,8 @@ export default function RegisterScreen() {
               <Text
                 style={[
                   styles.roleButtonText,
-                  registrationRole === 'passenger' && styles.roleButtonTextActive,
+                  registrationRole === 'passenger' &&
+                    styles.roleButtonTextActive,
                 ]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
@@ -439,8 +442,14 @@ export default function RegisterScreen() {
           </View>
 
           <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>
-          <View style={[styles.inputCard, errors.fullName && styles.inputCardError]}>
-            <Ionicons name="person-outline" size={20} color={errors.fullName ? '#EF4444' : '#3072ffe7'} />
+          <View
+            style={[styles.inputCard, errors.fullName && styles.inputCardError]}
+          >
+            <Ionicons
+              name="person-outline"
+              size={20}
+              color={errors.fullName ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -450,7 +459,7 @@ export default function RegisterScreen() {
               onChangeText={(text) => {
                 setFullName(text);
                 if (errors.fullName) {
-                  setErrors(prev => ({ ...prev, fullName: undefined }));
+                  setErrors((prev) => ({ ...prev, fullName: undefined }));
                 }
               }}
               selectionColor={tokens.colors.primary}
@@ -462,8 +471,14 @@ export default function RegisterScreen() {
           )}
 
           <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
-          <View style={[styles.inputCard, errors.idNumber && styles.inputCardError]}>
-            <Text style={[styles.prefix, errors.idNumber && { color: '#EF4444' }]}>V-</Text>
+          <View
+            style={[styles.inputCard, errors.idNumber && styles.inputCardError]}
+          >
+            <Text
+              style={[styles.prefix, errors.idNumber && { color: '#EF4444' }]}
+            >
+              V-
+            </Text>
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -474,7 +489,7 @@ export default function RegisterScreen() {
               onChangeText={(text) => {
                 setIdNumber(text);
                 if (errors.idNumber) {
-                  setErrors(prev => ({ ...prev, idNumber: undefined }));
+                  setErrors((prev) => ({ ...prev, idNumber: undefined }));
                 }
               }}
               maxLength={10}
@@ -487,8 +502,17 @@ export default function RegisterScreen() {
           )}
 
           <Text style={styles.inputLabel}>TELÉFONO</Text>
-          <View style={[styles.inputCard, errors.phoneNumber && styles.inputCardError]}>
-            <Ionicons name="call-outline" size={20} color={errors.phoneNumber ? '#EF4444' : '#3072ffe7'} />
+          <View
+            style={[
+              styles.inputCard,
+              errors.phoneNumber && styles.inputCardError,
+            ]}
+          >
+            <Ionicons
+              name="call-outline"
+              size={20}
+              color={errors.phoneNumber ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -499,7 +523,7 @@ export default function RegisterScreen() {
               onChangeText={(text) => {
                 setPhoneNumber(text);
                 if (errors.phoneNumber) {
-                  setErrors(prev => ({ ...prev, phoneNumber: undefined }));
+                  setErrors((prev) => ({ ...prev, phoneNumber: undefined }));
                 }
               }}
               maxLength={11}
@@ -512,8 +536,14 @@ export default function RegisterScreen() {
           )}
 
           <Text style={styles.inputLabel}>CORREO ELECTRÓNICO</Text>
-          <View style={[styles.inputCard, errors.email && styles.inputCardError]}>
-            <Ionicons name="mail-outline" size={20} color={errors.email ? '#EF4444' : '#3072ffe7'} />
+          <View
+            style={[styles.inputCard, errors.email && styles.inputCardError]}
+          >
+            <Ionicons
+              name="mail-outline"
+              size={20}
+              color={errors.email ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -525,20 +555,24 @@ export default function RegisterScreen() {
               onChangeText={(text) => {
                 setEmail(text);
                 if (errors.email) {
-                  setErrors(prev => ({ ...prev, email: undefined }));
+                  setErrors((prev) => ({ ...prev, email: undefined }));
                 }
               }}
               selectionColor={tokens.colors.primary}
               editable={!loading}
             />
           </View>
-          {errors.email && (
-            <Text style={styles.errorText}>{errors.email}</Text>
-          )}
+          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
           <Text style={styles.inputLabel}>CONTRASEÑA</Text>
-          <View style={[styles.inputCard, errors.password && styles.inputCardError]}>
-            <Ionicons name="lock-closed-outline" size={20} color={errors.password ? '#EF4444' : '#3072ffe7'} />
+          <View
+            style={[styles.inputCard, errors.password && styles.inputCardError]}
+          >
+            <Ionicons
+              name="lock-closed-outline"
+              size={20}
+              color={errors.password ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -549,7 +583,7 @@ export default function RegisterScreen() {
               onChangeText={(text) => {
                 setPassword(text);
                 if (errors.password) {
-                  setErrors(prev => ({ ...prev, password: undefined }));
+                  setErrors((prev) => ({ ...prev, password: undefined }));
                 }
               }}
               selectionColor={tokens.colors.primary}

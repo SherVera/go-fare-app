@@ -8,10 +8,11 @@ import {
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import 'react-native-reanimated';
 
+import { Ionicons } from '@expo/vector-icons';
 import {
   Outfit_400Regular,
   Outfit_500Medium,
@@ -21,7 +22,24 @@ import {
 } from '@expo-google-fonts/outfit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import { clearBackendJwt, syncWithBackend, getGoFareToken, clearGoFareToken, getBackendProfile } from '@/lib/api';
+import * as LocalAuthentication from 'expo-local-authentication';
+import {
+  AppState,
+  AppStateStatus,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  clearBackendJwt,
+  clearGoFareToken,
+  getBackendProfile,
+  getGoFareToken,
+  syncWithBackend,
+} from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
 import {
   auth,
@@ -29,10 +47,6 @@ import {
   listenToAuthState,
   sigOutAccount,
 } from '@/lib/firebase';
-import { AppState, AppStateStatus, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import * as LocalAuthentication from 'expo-local-authentication';
 import {
   getFcmToken,
   getInitialNotification,
@@ -72,7 +86,8 @@ export default function RootLayout() {
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
       if (hasHardware && isEnrolled) {
-        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+        const types =
+          await LocalAuthentication.supportedAuthenticationTypesAsync();
         if (
           types.includes(
             LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
@@ -169,7 +184,9 @@ export default function RootLayout() {
 
       if (nextAppState === 'active') {
         if (isAuthenticatingRef.current) {
-          console.log('[Layout] Active transition ignored: currently authenticating');
+          console.log(
+            '[Layout] Active transition ignored: currently authenticating',
+          );
           return;
         }
 
@@ -180,7 +197,7 @@ export default function RootLayout() {
               '[Layout] Triggering biometric lock. wasInBackground:',
               wasInBackground.current,
               'isLocked:',
-              isLockedRef.current
+              isLockedRef.current,
             );
             wasInBackground.current = false;
             setIsLocked(true);
@@ -288,10 +305,16 @@ export default function RootLayout() {
           const backendUser = await getBackendProfile();
           if (backendUser && active) {
             const roles = (backendUser as any).roles || [];
-            const isOwner = roles.some((role: any) => role.name === 'transport_owner');
+            const isOwner = roles.some(
+              (role: any) => role.name === 'transport_owner',
+            );
             const isDriver = roles.some((role: any) => role.name === 'driver');
-            const newRole = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
-            
+            const newRole = isOwner
+              ? 'transport_owner'
+              : isDriver
+                ? 'driver'
+                : 'passenger';
+
             if (newRole !== cachedRole) {
               console.log('[Layout] User role updated from backend:', newRole);
               await AsyncStorage.setItem('user_role', newRole);
@@ -301,7 +324,10 @@ export default function RootLayout() {
             }
           }
         } catch (backendErr: any) {
-          console.warn('[Layout] Error verifying role with backend in background:', backendErr.message || backendErr);
+          console.warn(
+            '[Layout] Error verifying role with backend in background:',
+            backendErr.message || backendErr,
+          );
           if (!cachedRole && active) {
             setUserRole('passenger');
           }
@@ -381,7 +407,7 @@ export default function RootLayout() {
 
     if (phase === 'signed_in') {
       const onGate = !s0 || publicAuthRoutes.has(s0) || s0 === 'onboarding';
-      
+
       if (onGate) {
         if (userRole === 'transport_owner') {
           router.replace('/vehicle-owner/dashboard' as any);

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +17,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tokens } from '@/theme/tokens';
 
 interface MockDriver {
@@ -109,32 +109,53 @@ export default function VehicleOwnerDrivers() {
   const [name, setName] = useState('');
   const [nationalId, setNationalId] = useState('');
   const [phone, setPhone] = useState('');
-  const [formErrors, setFormErrors] = useState<{ name?: string; nationalId?: string; phone?: string }>({});
+  const [formErrors, setFormErrors] = useState<{
+    name?: string;
+    nationalId?: string;
+    phone?: string;
+  }>({});
 
   const loadDriversData = useCallback(async () => {
     try {
       setLoading(true);
       // 1. Cargar vehículos de AsyncStorage
-      const localVehiclesStr = await AsyncStorage.getItem('mock_vehicle_requests');
-      const localVehicles: MockVehicle[] = localVehiclesStr ? JSON.parse(localVehiclesStr) : [];
-      
-      const deletedPlatesStr = await AsyncStorage.getItem('mock_deleted_vehicle_plates');
-      const deletedPlates: string[] = deletedPlatesStr ? JSON.parse(deletedPlatesStr) : [];
+      const localVehiclesStr = await AsyncStorage.getItem(
+        'mock_vehicle_requests',
+      );
+      const localVehicles: MockVehicle[] = localVehiclesStr
+        ? JSON.parse(localVehiclesStr)
+        : [];
+
+      const deletedPlatesStr = await AsyncStorage.getItem(
+        'mock_deleted_vehicle_plates',
+      );
+      const deletedPlates: string[] = deletedPlatesStr
+        ? JSON.parse(deletedPlatesStr)
+        : [];
 
       const mergedVehicles = [
         ...localVehicles,
-        ...MOCK_VEHICLES_BASE.filter(mv => !localVehicles.some(lv => lv.licensePlate === mv.licensePlate))
-      ].filter(v => !deletedPlates.includes(v.licensePlate));
-      
+        ...MOCK_VEHICLES_BASE.filter(
+          (mv) =>
+            !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
+        ),
+      ].filter((v) => !deletedPlates.includes(v.licensePlate));
+
       setVehicles(mergedVehicles);
 
       // 2. Cargar conductores locales de AsyncStorage
-      const localDriversStr = await AsyncStorage.getItem('mock_cooperative_drivers');
-      const localDrivers: MockDriver[] = localDriversStr ? JSON.parse(localDriversStr) : [];
-      
+      const localDriversStr = await AsyncStorage.getItem(
+        'mock_cooperative_drivers',
+      );
+      const localDrivers: MockDriver[] = localDriversStr
+        ? JSON.parse(localDriversStr)
+        : [];
+
       const mergedDrivers = [
         ...localDrivers,
-        ...MOCK_DRIVERS_BASE.filter(md => !localDrivers.some(ld => ld.nationalId === md.nationalId))
+        ...MOCK_DRIVERS_BASE.filter(
+          (md) => !localDrivers.some((ld) => ld.nationalId === md.nationalId),
+        ),
       ];
 
       setDrivers(mergedDrivers);
@@ -148,11 +169,13 @@ export default function VehicleOwnerDrivers() {
   useFocusEffect(
     useCallback(() => {
       loadDriversData();
-    }, [loadDriversData])
+    }, [loadDriversData]),
   );
 
   const getDriverAssignment = (driverId: string) => {
-    const assignedVehicle = vehicles.find(v => v.assignedDriver?.id === driverId);
+    const assignedVehicle = vehicles.find(
+      (v) => v.assignedDriver?.id === driverId,
+    );
     if (assignedVehicle) {
       return `${assignedVehicle.vehicleMake} ${assignedVehicle.vehicleModel} (${assignedVehicle.licensePlate})`;
     }
@@ -173,13 +196,23 @@ export default function VehicleOwnerDrivers() {
     if (!validateForm()) return;
 
     try {
-      const localDriversStr = await AsyncStorage.getItem('mock_cooperative_drivers');
-      const localDrivers: MockDriver[] = localDriversStr ? JSON.parse(localDriversStr) : [];
+      const localDriversStr = await AsyncStorage.getItem(
+        'mock_cooperative_drivers',
+      );
+      const localDrivers: MockDriver[] = localDriversStr
+        ? JSON.parse(localDriversStr)
+        : [];
 
       // Validar duplicado por cédula
-      const isDuplicated = drivers.some(d => d.nationalId.trim().toUpperCase() === nationalId.trim().toUpperCase());
+      const isDuplicated = drivers.some(
+        (d) =>
+          d.nationalId.trim().toUpperCase() === nationalId.trim().toUpperCase(),
+      );
       if (isDuplicated) {
-        Alert.alert('Cédula Duplicada', 'Ya existe un conductor registrado con esta cédula de identidad.');
+        Alert.alert(
+          'Cédula Duplicada',
+          'Ya existe un conductor registrado con esta cédula de identidad.',
+        );
         return;
       }
 
@@ -192,27 +225,39 @@ export default function VehicleOwnerDrivers() {
       };
 
       const updated = [newDriver, ...localDrivers];
-      await AsyncStorage.setItem('mock_cooperative_drivers', JSON.stringify(updated));
-      
+      await AsyncStorage.setItem(
+        'mock_cooperative_drivers',
+        JSON.stringify(updated),
+      );
+
       // Limpiar campos y cerrar modal
       setName('');
       setNationalId('');
       setPhone('');
       setFormErrors({});
       setIsModalVisible(false);
-      
-      Alert.alert('Registro Exitoso', `El conductor ${newDriver.name} ha sido agregado al directorio.`);
+
+      Alert.alert(
+        'Registro Exitoso',
+        `El conductor ${newDriver.name} ha sido agregado al directorio.`,
+      );
       loadDriversData();
     } catch (err) {
       console.error('[Drivers] Error registering driver:', err);
-      Alert.alert('Error', 'Ocurrió un error al registrar el conductor. Intente de nuevo.');
+      Alert.alert(
+        'Error',
+        'Ocurrió un error al registrar el conductor. Intente de nuevo.',
+      );
     }
   };
 
-  const filteredDrivers = drivers.filter(d => {
+  const filteredDrivers = drivers.filter((d) => {
     const term = searchText.trim().toLowerCase();
     if (!term) return true;
-    return d.name.toLowerCase().includes(term) || d.nationalId.toLowerCase().includes(term);
+    return (
+      d.name.toLowerCase().includes(term) ||
+      d.nationalId.toLowerCase().includes(term)
+    );
   });
 
   if (loading) {
@@ -233,7 +278,12 @@ export default function VehicleOwnerDrivers() {
       </View>
 
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color="#8594AB" style={styles.searchIcon} />
+        <Ionicons
+          name="search-outline"
+          size={20}
+          color="#8594AB"
+          style={styles.searchIcon}
+        />
         <TextInput
           style={styles.searchInput}
           placeholder="Buscar conductor por nombre o cédula..."
@@ -256,9 +306,16 @@ export default function VehicleOwnerDrivers() {
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Ionicons name="people-outline" size={64} color="#8594AB" style={{ marginBottom: 12 }} />
+            <Ionicons
+              name="people-outline"
+              size={64}
+              color="#8594AB"
+              style={{ marginBottom: 12 }}
+            />
             <Text style={styles.emptyTitle}>Sin resultados</Text>
-            <Text style={styles.emptySubtitle}>No se encontraron conductores registrados en la cooperativa.</Text>
+            <Text style={styles.emptySubtitle}>
+              No se encontraron conductores registrados en la cooperativa.
+            </Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -269,12 +326,17 @@ export default function VehicleOwnerDrivers() {
               <View style={styles.driverMainRow}>
                 <View style={styles.driverAvatar}>
                   <Text style={styles.driverAvatarText}>
-                    {item.name.split(' ').map(n => n[0]).join('')}
+                    {item.name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')}
                   </Text>
                 </View>
                 <View style={styles.driverDetails}>
                   <Text style={styles.driverName}>{item.name}</Text>
-                  <Text style={styles.driverMeta}>Cédula: {item.nationalId}</Text>
+                  <Text style={styles.driverMeta}>
+                    Cédula: {item.nationalId}
+                  </Text>
                   <Text style={styles.driverMeta}>Teléfono: {item.phone}</Text>
                 </View>
                 <View style={styles.statusPill}>
@@ -286,14 +348,21 @@ export default function VehicleOwnerDrivers() {
               <View style={styles.divider} />
 
               <View style={styles.assignmentRow}>
-                <Ionicons 
-                  name={assignment ? 'bus-outline' : 'alert-circle-outline'} 
-                  size={16} 
-                  color={assignment ? tokens.colors.primary : '#D97706'} 
-                  style={{ marginRight: 6 }} 
+                <Ionicons
+                  name={assignment ? 'bus-outline' : 'alert-circle-outline'}
+                  size={16}
+                  color={assignment ? tokens.colors.primary : '#D97706'}
+                  style={{ marginRight: 6 }}
                 />
-                <Text style={[styles.assignmentText, assignment ? { color: '#1E293B' } : { color: '#D97706' }]}>
-                  {assignment ? `Operando: ${assignment}` : 'Disponible (Sin unidad asignada)'}
+                <Text
+                  style={[
+                    styles.assignmentText,
+                    assignment ? { color: '#1E293B' } : { color: '#D97706' },
+                  ]}
+                >
+                  {assignment
+                    ? `Operando: ${assignment}`
+                    : 'Disponible (Sin unidad asignada)'}
                 </Text>
               </View>
             </View>
@@ -330,11 +399,24 @@ export default function VehicleOwnerDrivers() {
               </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalForm} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              contentContainerStyle={styles.modalForm}
+              keyboardShouldPersistTaps="handled"
+            >
               {/* Nombre */}
               <Text style={styles.inputLabel}>NOMBRE Y APELLIDO</Text>
-              <View style={[styles.inputCard, formErrors.name && styles.inputCardError]}>
-                <Ionicons name="person-outline" size={20} color="#8594AB" style={{ marginRight: 10 }} />
+              <View
+                style={[
+                  styles.inputCard,
+                  formErrors.name && styles.inputCardError,
+                ]}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color="#8594AB"
+                  style={{ marginRight: 10 }}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Ej. Pedro Pérez"
@@ -342,16 +424,29 @@ export default function VehicleOwnerDrivers() {
                   value={name}
                   onChangeText={(val) => {
                     setName(val);
-                    if (formErrors.name) setFormErrors(p => ({ ...p, name: undefined }));
+                    if (formErrors.name)
+                      setFormErrors((p) => ({ ...p, name: undefined }));
                   }}
                 />
               </View>
-              {formErrors.name && <Text style={styles.errorText}>{formErrors.name}</Text>}
+              {formErrors.name && (
+                <Text style={styles.errorText}>{formErrors.name}</Text>
+              )}
 
               {/* Cédula */}
               <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
-              <View style={[styles.inputCard, formErrors.nationalId && styles.inputCardError]}>
-                <Ionicons name="id-card-outline" size={20} color="#8594AB" style={{ marginRight: 10 }} />
+              <View
+                style={[
+                  styles.inputCard,
+                  formErrors.nationalId && styles.inputCardError,
+                ]}
+              >
+                <Ionicons
+                  name="id-card-outline"
+                  size={20}
+                  color="#8594AB"
+                  style={{ marginRight: 10 }}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Ej. V-12345678"
@@ -359,16 +454,29 @@ export default function VehicleOwnerDrivers() {
                   value={nationalId}
                   onChangeText={(val) => {
                     setNationalId(val);
-                    if (formErrors.nationalId) setFormErrors(p => ({ ...p, nationalId: undefined }));
+                    if (formErrors.nationalId)
+                      setFormErrors((p) => ({ ...p, nationalId: undefined }));
                   }}
                 />
               </View>
-              {formErrors.nationalId && <Text style={styles.errorText}>{formErrors.nationalId}</Text>}
+              {formErrors.nationalId && (
+                <Text style={styles.errorText}>{formErrors.nationalId}</Text>
+              )}
 
               {/* Teléfono */}
               <Text style={styles.inputLabel}>TELÉFONO MÓVIL</Text>
-              <View style={[styles.inputCard, formErrors.phone && styles.inputCardError]}>
-                <Ionicons name="call-outline" size={20} color="#8594AB" style={{ marginRight: 10 }} />
+              <View
+                style={[
+                  styles.inputCard,
+                  formErrors.phone && styles.inputCardError,
+                ]}
+              >
+                <Ionicons
+                  name="call-outline"
+                  size={20}
+                  color="#8594AB"
+                  style={{ marginRight: 10 }}
+                />
                 <TextInput
                   style={styles.input}
                   placeholder="Ej. 0412-5556677"
@@ -377,16 +485,19 @@ export default function VehicleOwnerDrivers() {
                   value={phone}
                   onChangeText={(val) => {
                     setPhone(val);
-                    if (formErrors.phone) setFormErrors(p => ({ ...p, phone: undefined }));
+                    if (formErrors.phone)
+                      setFormErrors((p) => ({ ...p, phone: undefined }));
                   }}
                 />
               </View>
-              {formErrors.phone && <Text style={styles.errorText}>{formErrors.phone}</Text>}
+              {formErrors.phone && (
+                <Text style={styles.errorText}>{formErrors.phone}</Text>
+              )}
 
               <Pressable
                 style={({ pressed }) => [
                   styles.submitBtn,
-                  pressed && { opacity: 0.9 }
+                  pressed && { opacity: 0.9 },
                 ]}
                 onPress={handleRegisterDriver}
               >

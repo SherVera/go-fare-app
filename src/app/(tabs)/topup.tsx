@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -29,7 +29,7 @@ import { tokens } from '@/theme/tokens';
 
 export default function TopupScreen() {
   const router = useRouter();
-  
+
   // Estado del formulario
   const [amount, setAmount] = useState<TopupFormState['amount']>('50');
   const [selectedQuickAmount, setSelectedQuickAmount] =
@@ -37,12 +37,16 @@ export default function TopupScreen() {
   const [selectedMethod, setSelectedMethod] =
     useState<TopupFormState['selectedMethod']>('pago_movil');
 
-  const [fareAccount, setFareAccount] = useState<BackendFareAccount | null>(null);
+  const [fareAccount, setFareAccount] = useState<BackendFareAccount | null>(
+    null,
+  );
   const [loadingBalance, setLoadingBalance] = useState(true);
-  
+
   // Estados para el Modal de Pago
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentStep, setPaymentStep] = useState<'details' | 'processing' | 'success'>('details');
+  const [paymentStep, setPaymentStep] = useState<
+    'details' | 'processing' | 'success'
+  >('details');
 
   // Pago Móvil Form
   const [pmBank, setPmBank] = useState('Banesco');
@@ -65,7 +69,7 @@ export default function TopupScreen() {
       if (backendUser) {
         // Pre-llenar teléfono del perfil para Pago Móvil
         setPmPhone(backendUser.phoneNumber || '');
-        
+
         let account;
         try {
           account = await getFareAccountByUserId(backendUser.id);
@@ -111,7 +115,7 @@ export default function TopupScreen() {
     setCardExpiry('');
     setCardCvv('');
     setCryptoTxHash('');
-    
+
     setPaymentStep('details');
     setShowPaymentModal(true);
   };
@@ -121,29 +125,47 @@ export default function TopupScreen() {
     // Validaciones específicas
     if (selectedMethod === 'pago_movil') {
       if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(pmPhone.trim())) {
-        Alert.alert('Atención', 'Por favor, ingresa un número de teléfono de Pago Móvil válido (11 dígitos).');
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa un número de teléfono de Pago Móvil válido (11 dígitos).',
+        );
         return;
       }
       if (!/^\d{5,10}$/.test(pmIdNumber.trim())) {
-        Alert.alert('Atención', 'Por favor, ingresa una cédula de identidad válida.');
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa una cédula de identidad válida.',
+        );
         return;
       }
     } else if (selectedMethod === 'tarjeta') {
       if (cardHolder.trim().length < 3) {
-        Alert.alert('Atención', 'Por favor, ingresa el nombre del titular de la tarjeta.');
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa el nombre del titular de la tarjeta.',
+        );
         return;
       }
       const cleanCard = cardNumber.replace(/\s+/g, '');
       if (cleanCard.length < 15 || cleanCard.length > 16) {
-        Alert.alert('Atención', 'Por favor, ingresa un número de tarjeta de crédito/débito válido.');
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa un número de tarjeta de crédito/débito válido.',
+        );
         return;
       }
       if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) {
-        Alert.alert('Atención', 'Por favor, ingresa una fecha de vencimiento válida (MM/AA).');
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa una fecha de vencimiento válida (MM/AA).',
+        );
         return;
       }
       if (cardCvv.trim().length < 3 || cardCvv.trim().length > 4) {
-        Alert.alert('Atención', 'Por favor, ingresa un código de seguridad (CVV) válido.');
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa un código de seguridad (CVV) válido.',
+        );
         return;
       }
     }
@@ -153,7 +175,7 @@ export default function TopupScreen() {
 
     try {
       setPaymentStep('processing');
-      
+
       // Delay artificial para simular procesamiento bancario/pasarela (UX Premium)
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
@@ -165,7 +187,10 @@ export default function TopupScreen() {
       setPaymentStep('success');
     } catch (error: any) {
       console.error('[TopUp] Error performing recharge:', error);
-      Alert.alert('Error de Pago', error.message || 'No se pudo procesar la transacción bancaria.');
+      Alert.alert(
+        'Error de Pago',
+        error.message || 'No se pudo procesar la transacción bancaria.',
+      );
       setPaymentStep('details');
     }
   };
@@ -395,10 +420,7 @@ export default function TopupScreen() {
         </View>
 
         {/* ── PAY BUTTON ── */}
-        <Pressable
-          style={styles.mainButton}
-          onPress={handleOpenDetails}
-        >
+        <Pressable style={styles.mainButton} onPress={handleOpenDetails}>
           <Text style={styles.mainButtonText}>Pagar ahora</Text>
         </Pressable>
 
@@ -420,10 +442,15 @@ export default function TopupScreen() {
             {paymentStep !== 'processing' && (
               <View style={styles.modalHeader}>
                 <Text style={styles.modalSheetTitle}>
-                  {paymentStep === 'details' ? 'Detalles de Pago' : 'Comprobante de Recarga'}
+                  {paymentStep === 'details'
+                    ? 'Detalles de Pago'
+                    : 'Comprobante de Recarga'}
                 </Text>
                 {paymentStep === 'details' && (
-                  <Pressable onPress={() => setShowPaymentModal(false)} hitSlop={10}>
+                  <Pressable
+                    onPress={() => setShowPaymentModal(false)}
+                    hitSlop={10}
+                  >
                     <Ionicons name="close" size={24} color="#6B7280" />
                   </Pressable>
                 )}
@@ -432,32 +459,55 @@ export default function TopupScreen() {
 
             {/* PASO 1: Ingreso de detalles */}
             {paymentStep === 'details' && (
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
                 {selectedMethod === 'pago_movil' && (
                   <View style={styles.formContainer}>
                     <Text style={styles.infoBox}>
-                      Realice el Pago Móvil a los siguientes datos antes de confirmar: {'\n'}
-                      <Text style={{ fontWeight: 'bold' }}>Banco: Banesco • RIF: J-48291048 • Teléfono: 0412-5551234</Text>
+                      Realice el Pago Móvil a los siguientes datos antes de
+                      confirmar: {'\n'}
+                      <Text style={{ fontWeight: 'bold' }}>
+                        Banco: Banesco • RIF: J-48291048 • Teléfono:
+                        0412-5551234
+                      </Text>
                     </Text>
 
                     <Text style={styles.modalInputLabel}>BANCO EMISOR</Text>
                     <View style={styles.bankPickerRow}>
-                      {['Banesco', 'Mercantil', 'Provincial', 'Venezuela'].map((b) => (
-                        <Pressable
-                          key={b}
-                          style={[styles.bankBubble, pmBank === b && styles.bankBubbleActive]}
-                          onPress={() => setPmBank(b)}
-                        >
-                          <Text style={[styles.bankBubbleText, pmBank === b && styles.bankBubbleTextActive]}>
-                            {b}
-                          </Text>
-                        </Pressable>
-                      ))}
+                      {['Banesco', 'Mercantil', 'Provincial', 'Venezuela'].map(
+                        (b) => (
+                          <Pressable
+                            key={b}
+                            style={[
+                              styles.bankBubble,
+                              pmBank === b && styles.bankBubbleActive,
+                            ]}
+                            onPress={() => setPmBank(b)}
+                          >
+                            <Text
+                              style={[
+                                styles.bankBubbleText,
+                                pmBank === b && styles.bankBubbleTextActive,
+                              ]}
+                            >
+                              {b}
+                            </Text>
+                          </Pressable>
+                        ),
+                      )}
                     </View>
 
-                    <Text style={styles.modalInputLabel}>TELÉFONO PAGO MÓVIL</Text>
+                    <Text style={styles.modalInputLabel}>
+                      TELÉFONO PAGO MÓVIL
+                    </Text>
                     <View style={styles.modalInputCard}>
-                      <Ionicons name="call-outline" size={20} color={tokens.colors.primary} />
+                      <Ionicons
+                        name="call-outline"
+                        size={20}
+                        color={tokens.colors.primary}
+                      />
                       <View style={styles.modalInputDivider} />
                       <TextInput
                         style={styles.modalInput}
@@ -470,9 +520,15 @@ export default function TopupScreen() {
                       />
                     </View>
 
-                    <Text style={styles.modalInputLabel}>CÉDULA DE IDENTIDAD</Text>
+                    <Text style={styles.modalInputLabel}>
+                      CÉDULA DE IDENTIDAD
+                    </Text>
                     <View style={styles.modalInputCard}>
-                      <Ionicons name="card-outline" size={20} color={tokens.colors.primary} />
+                      <Ionicons
+                        name="card-outline"
+                        size={20}
+                        color={tokens.colors.primary}
+                      />
                       <View style={styles.modalInputDivider} />
                       <TextInput
                         style={styles.modalInput}
@@ -485,9 +541,15 @@ export default function TopupScreen() {
                       />
                     </View>
 
-                    <Text style={styles.modalInputLabel}>NÚMERO DE REFERENCIA (ÚLTIMOS 6 DÍGITOS)</Text>
+                    <Text style={styles.modalInputLabel}>
+                      NÚMERO DE REFERENCIA (ÚLTIMOS 6 DÍGITOS)
+                    </Text>
                     <View style={styles.modalInputCard}>
-                      <Ionicons name="receipt-outline" size={20} color={tokens.colors.primary} />
+                      <Ionicons
+                        name="receipt-outline"
+                        size={20}
+                        color={tokens.colors.primary}
+                      />
                       <View style={styles.modalInputDivider} />
                       <TextInput
                         style={styles.modalInput}
@@ -504,9 +566,15 @@ export default function TopupScreen() {
 
                 {selectedMethod === 'tarjeta' && (
                   <View style={styles.formContainer}>
-                    <Text style={styles.modalInputLabel}>NOMBRE EN LA TARJETA</Text>
+                    <Text style={styles.modalInputLabel}>
+                      NOMBRE EN LA TARJETA
+                    </Text>
                     <View style={styles.modalInputCard}>
-                      <Ionicons name="person-outline" size={20} color="#10B981" />
+                      <Ionicons
+                        name="person-outline"
+                        size={20}
+                        color="#10B981"
+                      />
                       <View style={styles.modalInputDivider} />
                       <TextInput
                         style={styles.modalInput}
@@ -518,7 +586,9 @@ export default function TopupScreen() {
                       />
                     </View>
 
-                    <Text style={styles.modalInputLabel}>NÚMERO DE TARJETA</Text>
+                    <Text style={styles.modalInputLabel}>
+                      NÚMERO DE TARJETA
+                    </Text>
                     <View style={styles.modalInputCard}>
                       <Ionicons name="card-outline" size={20} color="#10B981" />
                       <View style={styles.modalInputDivider} />
@@ -533,7 +603,12 @@ export default function TopupScreen() {
                       />
                     </View>
 
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <View
+                      style={{
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                      }}
+                    >
                       <View style={{ width: '48%' }}>
                         <Text style={styles.modalInputLabel}>VENCIMIENTO</Text>
                         <View style={styles.modalInputCard}>
@@ -568,10 +643,16 @@ export default function TopupScreen() {
                 )}
 
                 {selectedMethod === 'cripto' && (
-                  <View style={[styles.formContainer, { alignItems: 'center' }]}>
+                  <View
+                    style={[styles.formContainer, { alignItems: 'center' }]}
+                  >
                     <Text style={styles.binanceTitle}>USDT • Binance Pay</Text>
                     <View style={styles.qrContainer}>
-                      <MaterialCommunityIcons name="qrcode" size={140} color="#A855F7" />
+                      <MaterialCommunityIcons
+                        name="qrcode"
+                        size={140}
+                        color="#A855F7"
+                      />
                     </View>
 
                     <View style={styles.payIdRow}>
@@ -579,13 +660,27 @@ export default function TopupScreen() {
                       <Text style={styles.payIdValue}>28491048</Text>
                       <Pressable
                         style={styles.copyBtn}
-                        onPress={() => Alert.alert('Copiado', 'Binance Pay ID copiado al portapapeles.')}
+                        onPress={() =>
+                          Alert.alert(
+                            'Copiado',
+                            'Binance Pay ID copiado al portapapeles.',
+                          )
+                        }
                       >
-                        <Ionicons name="copy-outline" size={16} color="#A855F7" />
+                        <Ionicons
+                          name="copy-outline"
+                          size={16}
+                          color="#A855F7"
+                        />
                       </Pressable>
                     </View>
 
-                    <Text style={[styles.modalInputLabel, { alignSelf: 'flex-start', marginTop: 24 }]}>
+                    <Text
+                      style={[
+                        styles.modalInputLabel,
+                        { alignSelf: 'flex-start', marginTop: 24 },
+                      ]}
+                    >
                       CÓDIGO DE TRANSACCIÓN / HASH (USDT)
                     </Text>
                     <View style={styles.modalInputCard}>
@@ -604,8 +699,13 @@ export default function TopupScreen() {
                 )}
 
                 {/* Botón de confirmar en modal */}
-                <Pressable style={styles.modalPayBtn} onPress={handleConfirmPayment}>
-                  <Text style={styles.modalPayBtnText}>Confirmar y Recargar</Text>
+                <Pressable
+                  style={styles.modalPayBtn}
+                  onPress={handleConfirmPayment}
+                >
+                  <Text style={styles.modalPayBtnText}>
+                    Confirmar y Recargar
+                  </Text>
                 </Pressable>
               </ScrollView>
             )}
@@ -613,10 +713,17 @@ export default function TopupScreen() {
             {/* PASO 2: Procesando */}
             {paymentStep === 'processing' && (
               <View style={styles.processingContainer}>
-                <ActivityIndicator size="large" color={tokens.colors.primary} style={{ marginBottom: 20 }} />
-                <Text style={styles.processingTitle}>Procesando Pago Seguro...</Text>
+                <ActivityIndicator
+                  size="large"
+                  color={tokens.colors.primary}
+                  style={{ marginBottom: 20 }}
+                />
+                <Text style={styles.processingTitle}>
+                  Procesando Pago Seguro...
+                </Text>
                 <Text style={styles.processingSubtitle}>
-                  Validando los fondos y actualizando tu billetera digital GoFare.
+                  Validando los fondos y actualizando tu billetera digital
+                  GoFare.
                 </Text>
               </View>
             )}
@@ -624,15 +731,30 @@ export default function TopupScreen() {
             {/* PASO 3: Éxito */}
             {paymentStep === 'success' && (
               <View style={styles.successContainer}>
-                <Ionicons name="checkmark-circle" size={80} color="#10B981" style={{ marginBottom: 16 }} />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={80}
+                  color="#10B981"
+                  style={{ marginBottom: 16 }}
+                />
                 <Text style={styles.successTitle}>¡Recarga Exitosa!</Text>
-                <Text style={styles.successSubtitle}>Los fondos han sido acreditados a tu cuenta de tarifa.</Text>
+                <Text style={styles.successSubtitle}>
+                  Los fondos han sido acreditados a tu cuenta de tarifa.
+                </Text>
 
                 <View style={styles.receiptCard}>
                   <View style={styles.receiptRow}>
                     <Text style={styles.receiptLabel}>Monto Acreditado</Text>
-                    <Text style={[styles.receiptValue, { color: tokens.colors.primary, fontWeight: 'bold' }]}>
-                      Bs. {parseFloat(amount.replace(',', '.')).toFixed(2).replace('.', ',')}
+                    <Text
+                      style={[
+                        styles.receiptValue,
+                        { color: tokens.colors.primary, fontWeight: 'bold' },
+                      ]}
+                    >
+                      Bs.{' '}
+                      {parseFloat(amount.replace(',', '.'))
+                        .toFixed(2)
+                        .replace('.', ',')}
                     </Text>
                   </View>
                   <View style={styles.receiptRow}>
@@ -663,7 +785,10 @@ export default function TopupScreen() {
                   </View>
                 </View>
 
-                <Pressable style={styles.receiptCloseBtn} onPress={handleCloseSuccess}>
+                <Pressable
+                  style={styles.receiptCloseBtn}
+                  onPress={handleCloseSuccess}
+                >
                   <Text style={styles.receiptCloseBtnText}>Entendido</Text>
                 </Pressable>
               </View>
@@ -1160,4 +1285,3 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 });
-

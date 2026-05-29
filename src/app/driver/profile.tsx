@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useFocusEffect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,11 +14,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
-import { tokens } from '@/theme/tokens';
-import { getBackendProfile, clearGoFareToken } from '@/lib/api';
+import { clearGoFareToken, getBackendProfile } from '@/lib/api';
 import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function DriverProfileScreen() {
   const router = useRouter();
@@ -26,9 +26,11 @@ export default function DriverProfileScreen() {
   const [email, setEmail] = useState('conductor@example.com');
   const [phone, setPhone] = useState('No registrado');
   const [license, setLicense] = useState('V-12345678');
-  
+
   // Coop / Vehicle info
-  const [cooperative, setCooperative] = useState('Cooperativa Caracas Move R.L.');
+  const [cooperative, setCooperative] = useState(
+    'Cooperativa Caracas Move R.L.',
+  );
   const [vehicle, setVehicle] = useState('Encava ENT-610 - XY987ZT');
 
   const loadProfileData = useCallback(async () => {
@@ -38,12 +40,21 @@ export default function DriverProfileScreen() {
       if (user) {
         try {
           const backendUser = await getBackendProfile();
-          setName(backendUser.displayName || `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() || 'Conductor');
+          setName(
+            backendUser.displayName ||
+              `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+              'Conductor',
+          );
           setEmail(backendUser.email);
           setPhone(backendUser.phoneNumber || 'No registrado');
         } catch (apiErr) {
-          console.warn('[DriverProfile] API error, falling back to Firebase/Firestore:', apiErr);
-          const legacyData = await getDocument(`users/${user.uid}`).catch(() => null);
+          console.warn(
+            '[DriverProfile] API error, falling back to Firebase/Firestore:',
+            apiErr,
+          );
+          const legacyData = await getDocument(`users/${user.uid}`).catch(
+            () => null,
+          );
           if (legacyData) {
             setName(legacyData.fullName || 'Conductor');
             setEmail(legacyData.email || user.email || 'conductor@example.com');
@@ -54,12 +65,13 @@ export default function DriverProfileScreen() {
       }
 
       // Cargar info de cooperativa si existiera local
-      const coopStr = await AsyncStorage.getItem('mock_vehicle_owner_cooperative');
+      const coopStr = await AsyncStorage.getItem(
+        'mock_vehicle_owner_cooperative',
+      );
       if (coopStr) {
         const coopData = JSON.parse(coopStr);
         setCooperative(coopData.businessName);
       }
-
     } catch (err) {
       console.warn('[DriverProfile] Error loading data:', err);
     } finally {
@@ -70,52 +82,65 @@ export default function DriverProfileScreen() {
   useFocusEffect(
     useCallback(() => {
       loadProfileData();
-    }, [loadProfileData])
+    }, [loadProfileData]),
   );
 
   const handleLogout = () => {
-    Alert.alert('Cerrar Sesión', '¿Estás seguro de que deseas finalizar tu turno y cerrar sesión?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar Sesión',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setLoggingOut(true);
-            
-            // Apagar servicio del chofer primero
-            await AsyncStorage.setItem('driver_service_status', 'inactive');
-
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que deseas finalizar tu turno y cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: async () => {
             try {
-              await sigOutAccount();
-            } catch (authError) {
-              console.warn('[DriverProfile] Firebase signOut error (using offline cleanup):', authError);
-            }
-            
-            await clearGoFareToken();
+              setLoggingOut(true);
 
-            try {
-              await SecureStore.deleteItemAsync('savedEmail');
-              await SecureStore.deleteItemAsync('savedPassword');
-              await AsyncStorage.removeItem('gofare_cached_user_profile');
-              await AsyncStorage.removeItem('temp_auth');
-              await AsyncStorage.removeItem('user_role');
-              // Mantener limpia la lista local de boletos validados si el chofer lo requiere,
-              // pero la dejamos persistente en AsyncStorage para que no pierda su historial entre cierres de sesión
-            } catch (err) {
-              console.warn('[DriverProfile] Error clearing local caches:', err);
-            }
+              // Apagar servicio del chofer primero
+              await AsyncStorage.setItem('driver_service_status', 'inactive');
 
-            router.replace('/login');
-          } catch (error) {
-            console.error('[DriverProfile] Error logging out:', error);
-            Alert.alert('Error', 'No se pudo cerrar sesión. Inténtalo de nuevo.');
-          } finally {
-            setLoggingOut(false);
-          }
+              try {
+                await sigOutAccount();
+              } catch (authError) {
+                console.warn(
+                  '[DriverProfile] Firebase signOut error (using offline cleanup):',
+                  authError,
+                );
+              }
+
+              await clearGoFareToken();
+
+              try {
+                await SecureStore.deleteItemAsync('savedEmail');
+                await SecureStore.deleteItemAsync('savedPassword');
+                await AsyncStorage.removeItem('gofare_cached_user_profile');
+                await AsyncStorage.removeItem('temp_auth');
+                await AsyncStorage.removeItem('user_role');
+                // Mantener limpia la lista local de boletos validados si el chofer lo requiere,
+                // pero la dejamos persistente en AsyncStorage para que no pierda su historial entre cierres de sesión
+              } catch (err) {
+                console.warn(
+                  '[DriverProfile] Error clearing local caches:',
+                  err,
+                );
+              }
+
+              router.replace('/login');
+            } catch (error) {
+              console.error('[DriverProfile] Error logging out:', error);
+              Alert.alert(
+                'Error',
+                'No se pudo cerrar sesión. Inténtalo de nuevo.',
+              );
+            } finally {
+              setLoggingOut(false);
+            }
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const getInitials = (fullName: string) => {
@@ -144,7 +169,10 @@ export default function DriverProfileScreen() {
         <Text style={styles.headerTitle}>Mi Perfil</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
@@ -201,24 +229,39 @@ export default function DriverProfileScreen() {
 
         {/* Settings options list */}
         <Text style={styles.sectionTitle}>Configuración</Text>
-        <Pressable style={styles.menuItem} onPress={() => router.push('/security')}>
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => router.push('/security')}
+        >
           <View style={styles.menuIconWrapper}>
-            <Ionicons name="shield-checkmark-outline" size={20} color={tokens.colors.primary} />
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={20}
+              color={tokens.colors.primary}
+            />
           </View>
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>Seguridad y Bloqueo</Text>
-            <Text style={styles.menuSubtitle}>Configurar huella o datos biométricos</Text>
+            <Text style={styles.menuSubtitle}>
+              Configurar huella o datos biométricos
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </Pressable>
 
         <Pressable style={styles.menuItem}>
           <View style={styles.menuIconWrapper}>
-            <Ionicons name="notifications-outline" size={20} color={tokens.colors.primary} />
+            <Ionicons
+              name="notifications-outline"
+              size={20}
+              color={tokens.colors.primary}
+            />
           </View>
           <View style={styles.menuInfo}>
             <Text style={styles.menuTitle}>Notificaciones</Text>
-            <Text style={styles.menuSubtitle}>Ajustar alertas de turnos y pasajes</Text>
+            <Text style={styles.menuSubtitle}>
+              Ajustar alertas de turnos y pasajes
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </Pressable>
@@ -230,9 +273,18 @@ export default function DriverProfileScreen() {
           disabled={loggingOut}
         >
           {loggingOut ? (
-            <ActivityIndicator size="small" color="#DC2626" style={{ marginRight: 8 }} />
+            <ActivityIndicator
+              size="small"
+              color="#DC2626"
+              style={{ marginRight: 8 }}
+            />
           ) : (
-            <Ionicons name="log-out-outline" size={22} color="#DC2626" style={{ marginRight: 8 }} />
+            <Ionicons
+              name="log-out-outline"
+              size={22}
+              color="#DC2626"
+              style={{ marginRight: 8 }}
+            />
           )}
           <Text style={styles.logoutText}>
             {loggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión'}

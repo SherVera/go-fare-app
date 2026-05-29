@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { submitVehicleRequest, getCooperatives } from '@/lib/api';
+import { getCooperatives, submitVehicleRequest } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 interface FormFields {
@@ -77,7 +77,11 @@ export default function RegisterVehicleScreen() {
     const yearNum = parseInt(form.vehicleYear, 10);
     if (!form.vehicleYear.trim()) {
       newErrors.vehicleYear = 'El año del vehículo es requerido';
-    } else if (isNaN(yearNum) || yearNum < 1900 || yearNum > new Date().getFullYear() + 2) {
+    } else if (
+      isNaN(yearNum) ||
+      yearNum < 1900 ||
+      yearNum > new Date().getFullYear() + 2
+    ) {
       newErrors.vehicleYear = `El año debe estar entre 1900 y ${new Date().getFullYear() + 2}`;
     }
 
@@ -116,7 +120,8 @@ export default function RegisterVehicleScreen() {
       console.error('[RegisterVehicle] Error submitting request:', error);
       Alert.alert(
         'Error',
-        error.message || 'Ocurrió un error al enviar tu solicitud. Intenta de nuevo más tarde.',
+        error.message ||
+          'Ocurrió un error al enviar tu solicitud. Intenta de nuevo más tarde.',
       );
     } finally {
       setLoading(false);
@@ -130,7 +135,9 @@ export default function RegisterVehicleScreen() {
     }
   };
 
-  const selectedCoopName = cooperatives.find((c) => c.uuid === form.cooperativeUuid)?.name || 'Ninguna (Particular)';
+  const selectedCoopName =
+    cooperatives.find((c) => c.uuid === form.cooperativeUuid)?.name ||
+    'Ninguna (Particular)';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -147,15 +154,26 @@ export default function RegisterVehicleScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.infoBanner}>
-            <Ionicons name="information-circle-outline" size={24} color="#0369A1" />
+            <Ionicons
+              name="information-circle-outline"
+              size={24}
+              color="#0369A1"
+            />
             <Text style={styles.infoText}>
-              Completa el formulario para registrar un vehículo en tu flota. Una vez aprobada la solicitud por administración, la unidad estará disponible para operar.
+              Completa el formulario para registrar un vehículo en tu flota. Una
+              vez aprobada la solicitud por administración, la unidad estará
+              disponible para operar.
             </Text>
           </View>
 
           {/* Marca del Vehículo */}
           <Text style={styles.inputLabel}>MARCA DEL VEHÍCULO</Text>
-          <View style={[styles.inputCard, errors.vehicleMake && styles.inputCardError]}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.vehicleMake && styles.inputCardError,
+            ]}
+          >
             <Ionicons
               name="car-outline"
               size={20}
@@ -171,11 +189,18 @@ export default function RegisterVehicleScreen() {
               editable={!loading}
             />
           </View>
-          {errors.vehicleMake && <Text style={styles.errorText}>{errors.vehicleMake}</Text>}
+          {errors.vehicleMake && (
+            <Text style={styles.errorText}>{errors.vehicleMake}</Text>
+          )}
 
           {/* Modelo del Vehículo */}
           <Text style={styles.inputLabel}>MODELO DEL VEHÍCULO</Text>
-          <View style={[styles.inputCard, errors.vehicleModel && styles.inputCardError]}>
+          <View
+            style={[
+              styles.inputCard,
+              errors.vehicleModel && styles.inputCardError,
+            ]}
+          >
             <Ionicons
               name="options-outline"
               size={20}
@@ -191,13 +216,20 @@ export default function RegisterVehicleScreen() {
               editable={!loading}
             />
           </View>
-          {errors.vehicleModel && <Text style={styles.errorText}>{errors.vehicleModel}</Text>}
+          {errors.vehicleModel && (
+            <Text style={styles.errorText}>{errors.vehicleModel}</Text>
+          )}
 
           <View style={styles.rowFields}>
             {/* Año */}
             <View style={{ flex: 1, marginRight: 8 }}>
               <Text style={styles.inputLabel}>AÑO</Text>
-              <View style={[styles.inputCard, errors.vehicleYear && styles.inputCardError]}>
+              <View
+                style={[
+                  styles.inputCard,
+                  errors.vehicleYear && styles.inputCardError,
+                ]}
+              >
                 <TextInput
                   style={styles.input}
                   placeholder="Ej. 2018"
@@ -209,13 +241,20 @@ export default function RegisterVehicleScreen() {
                   editable={!loading}
                 />
               </View>
-              {errors.vehicleYear && <Text style={styles.errorText}>{errors.vehicleYear}</Text>}
+              {errors.vehicleYear && (
+                <Text style={styles.errorText}>{errors.vehicleYear}</Text>
+              )}
             </View>
 
             {/* Placa */}
             <View style={{ flex: 1, marginLeft: 8 }}>
               <Text style={styles.inputLabel}>PLACA / MATRÍCULA</Text>
-              <View style={[styles.inputCard, errors.licensePlate && styles.inputCardError]}>
+              <View
+                style={[
+                  styles.inputCard,
+                  errors.licensePlate && styles.inputCardError,
+                ]}
+              >
                 <TextInput
                   style={styles.input}
                   placeholder="Ej. AB123CD"
@@ -226,7 +265,9 @@ export default function RegisterVehicleScreen() {
                   editable={!loading}
                 />
               </View>
-              {errors.licensePlate && <Text style={styles.errorText}>{errors.licensePlate}</Text>}
+              {errors.licensePlate && (
+                <Text style={styles.errorText}>{errors.licensePlate}</Text>
+              )}
             </View>
           </View>
 
@@ -241,16 +282,30 @@ export default function RegisterVehicleScreen() {
             }}
             disabled={loading}
           >
-            <Ionicons name="business-outline" size={20} color="#8594AB" style={styles.inputIcon} />
+            <Ionicons
+              name="business-outline"
+              size={20}
+              color="#8594AB"
+              style={styles.inputIcon}
+            />
             <Text style={styles.dropdownButtonText}>{selectedCoopName}</Text>
-            <Ionicons name={showCoopDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#8594AB" />
+            <Ionicons
+              name={showCoopDropdown ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color="#8594AB"
+            />
           </Pressable>
 
           {showCoopDropdown && (
             <View style={styles.dropdownContainer}>
               {/* Buscador / Combobox */}
               <View style={styles.searchInputContainer}>
-                <Ionicons name="search-outline" size={18} color="#8594AB" style={styles.searchIcon} />
+                <Ionicons
+                  name="search-outline"
+                  size={18}
+                  color="#8594AB"
+                  style={styles.searchIcon}
+                />
                 <TextInput
                   style={styles.searchInput}
                   placeholder="Buscar cooperativa por nombre o RIF..."
@@ -274,13 +329,22 @@ export default function RegisterVehicleScreen() {
               >
                 {/* Opción Particular siempre disponible */}
                 <Pressable
-                  style={[styles.dropdownItem, form.cooperativeUuid === '' && styles.dropdownItemActive]}
+                  style={[
+                    styles.dropdownItem,
+                    form.cooperativeUuid === '' && styles.dropdownItemActive,
+                  ]}
                   onPress={() => {
                     updateField('cooperativeUuid', '');
                     setShowCoopDropdown(false);
                   }}
                 >
-                  <Text style={[styles.dropdownItemText, form.cooperativeUuid === '' && styles.dropdownItemTextActive]}>
+                  <Text
+                    style={[
+                      styles.dropdownItemText,
+                      form.cooperativeUuid === '' &&
+                        styles.dropdownItemTextActive,
+                    ]}
+                  >
                     Ninguna (Particular)
                   </Text>
                 </Pressable>
@@ -298,13 +362,23 @@ export default function RegisterVehicleScreen() {
                   .map((coop) => (
                     <Pressable
                       key={coop.uuid}
-                      style={[styles.dropdownItem, form.cooperativeUuid === coop.uuid && styles.dropdownItemActive]}
+                      style={[
+                        styles.dropdownItem,
+                        form.cooperativeUuid === coop.uuid &&
+                          styles.dropdownItemActive,
+                      ]}
                       onPress={() => {
                         updateField('cooperativeUuid', coop.uuid);
                         setShowCoopDropdown(false);
                       }}
                     >
-                      <Text style={[styles.dropdownItemText, form.cooperativeUuid === coop.uuid && styles.dropdownItemTextActive]}>
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          form.cooperativeUuid === coop.uuid &&
+                            styles.dropdownItemTextActive,
+                        ]}
+                      >
                         {coop.name} ({coop.rif})
                       </Text>
                     </Pressable>
@@ -320,7 +394,9 @@ export default function RegisterVehicleScreen() {
                   );
                 }).length === 0 && (
                   <View style={styles.noResultsContainer}>
-                    <Text style={styles.noResultsText}>No se encontraron cooperativas</Text>
+                    <Text style={styles.noResultsText}>
+                      No se encontraron cooperativas
+                    </Text>
                   </View>
                 )}
               </ScrollView>

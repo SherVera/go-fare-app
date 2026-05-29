@@ -32,7 +32,8 @@ export default function SecurityScreen() {
         setHasBiometricsHardware(hasHardware);
 
         if (hasHardware) {
-          const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
+          const types =
+            await LocalAuthentication.supportedAuthenticationTypesAsync();
           if (
             types.includes(
               LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
@@ -105,7 +106,10 @@ export default function SecurityScreen() {
         await SecureStore.deleteItemAsync('savedEmail');
         await SecureStore.deleteItemAsync('savedPassword');
       } catch (err) {
-        console.warn('[Security] Error deleting saved credentials on toggle off:', err);
+        console.warn(
+          '[Security] Error deleting saved credentials on toggle off:',
+          err,
+        );
       }
     }
   };
@@ -113,7 +117,10 @@ export default function SecurityScreen() {
   const handleChangePassword = async () => {
     const userEmail = auth.currentUser?.email;
     if (!userEmail) {
-      Alert.alert('Error', 'No se pudo encontrar el correo de tu cuenta activa.');
+      Alert.alert(
+        'Error',
+        'No se pudo encontrar el correo de tu cuenta activa.',
+      );
       return;
     }
 
@@ -130,17 +137,23 @@ export default function SecurityScreen() {
               await sentResetEmail(userEmail);
               Alert.alert(
                 'Correo Enviado',
-                'Se ha enviado un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.'
+                'Se ha enviado un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada.',
               );
             } catch (error: any) {
-              console.error('[Security] Error sending reset password email:', error);
-              Alert.alert('Error', error.message || 'No se pudo enviar el correo de recuperación.');
+              console.error(
+                '[Security] Error sending reset password email:',
+                error,
+              );
+              Alert.alert(
+                'Error',
+                error.message || 'No se pudo enviar el correo de recuperación.',
+              );
             } finally {
               setSendingEmail(false);
             }
-          }
-        }
-      ]
+          },
+        },
+      ],
     );
   };
 
@@ -160,10 +173,16 @@ export default function SecurityScreen() {
           <View style={styles.card}>
             <View style={styles.row}>
               <View style={styles.iconWrapper}>
-                <Ionicons name="finger-print" size={24} color={tokens.colors.primary} />
+                <Ionicons
+                  name="finger-print"
+                  size={24}
+                  color={tokens.colors.primary}
+                />
               </View>
               <View style={styles.textContainer}>
-                <Text style={styles.cardTitle}>Bloqueo con {biometricsType}</Text>
+                <Text style={styles.cardTitle}>
+                  Bloqueo con {biometricsType}
+                </Text>
                 <Text style={styles.cardSubtitle}>
                   Solicitar biometría al abrir o regresar a la app
                 </Text>
@@ -220,13 +239,17 @@ export default function SecurityScreen() {
         <View style={[styles.card, { opacity: 0.6 }]}>
           <View style={styles.row}>
             <View style={styles.iconWrapper}>
-              <Ionicons name="shield-checkmark" size={22} color={tokens.colors.primary} />
+              <Ionicons
+                name="shield-checkmark"
+                size={22}
+                color={tokens.colors.primary}
+              />
             </View>
             <View style={styles.textContainer}>
-              <Text style={styles.cardTitle}>Autenticación de Dos Factores (2FA)</Text>
-              <Text style={styles.cardSubtitle}>
-                Próximamente disponible
+              <Text style={styles.cardTitle}>
+                Autenticación de Dos Factores (2FA)
               </Text>
+              <Text style={styles.cardSubtitle}>Próximamente disponible</Text>
             </View>
             <Switch
               value={false}
@@ -241,12 +264,17 @@ export default function SecurityScreen() {
         <View style={styles.card}>
           <View style={styles.row}>
             <View style={styles.iconWrapper}>
-              <Ionicons name="phone-portrait" size={22} color={tokens.colors.primary} />
+              <Ionicons
+                name="phone-portrait"
+                size={22}
+                color={tokens.colors.primary}
+              />
             </View>
             <View style={styles.textContainer}>
               <Text style={styles.cardTitle}>Este Dispositivo</Text>
               <Text style={styles.cardSubtitle}>
-                {Platform.OS === 'ios' ? 'Apple iPhone' : 'Android Device'} • Sesión activa
+                {Platform.OS === 'ios' ? 'Apple iPhone' : 'Android Device'} •
+                Sesión activa
               </Text>
             </View>
             <View style={styles.activeBadge}>
@@ -254,7 +282,6 @@ export default function SecurityScreen() {
             </View>
           </View>
         </View>
-
       </ScrollView>
     </SafeAreaView>
   );

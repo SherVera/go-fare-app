@@ -16,15 +16,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
+  clearGoFareToken,
   createFareAccount,
+  getCooperatives,
   loginWithFirebaseToken,
   registerWithEmail,
   submitVehicleOwnerRequest,
-  clearGoFareToken,
-  getCooperatives,
 } from '@/lib/api';
-import { tokens } from '@/theme/tokens';
 import { sigOutAccount } from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function RegisterVehicleOwnerScreen() {
   const router = useRouter();
@@ -112,7 +112,8 @@ export default function RegisterVehicleOwnerScreen() {
 
     // ── Validaciones Datos de Propietario/Comercio ──
     if (!selectedCooperativeUuid) {
-      newErrors.businessName = 'Debes seleccionar una cooperativa o agencia registrada.';
+      newErrors.businessName =
+        'Debes seleccionar una cooperativa o agencia registrada.';
     }
 
     setErrors(newErrors);
@@ -121,7 +122,10 @@ export default function RegisterVehicleOwnerScreen() {
 
   const handleRegisterAndSubmit = async () => {
     if (!validate()) {
-      Alert.alert('Formulario Incompleto', 'Por favor corrige los errores resaltados en el formulario.');
+      Alert.alert(
+        'Formulario Incompleto',
+        'Por favor corrige los errores resaltados en el formulario.',
+      );
       return;
     }
 
@@ -144,7 +148,10 @@ export default function RegisterVehicleOwnerScreen() {
         const result = await loginWithFirebaseToken(credentials.idToken);
         backendUser = result.user;
       } catch (authError: any) {
-        console.error('[RegisterVehicleOwner] Error en intercambio de token:', authError);
+        console.error(
+          '[RegisterVehicleOwner] Error en intercambio de token:',
+          authError,
+        );
         Alert.alert(
           'Error de Sincronización',
           'El usuario fue creado pero no se pudo iniciar sesión para subir la solicitud: ' +
@@ -158,7 +165,10 @@ export default function RegisterVehicleOwnerScreen() {
       try {
         await createFareAccount(backendUser.id);
       } catch (fareError) {
-        console.warn('[RegisterVehicleOwner] Error creando cuenta de tarifa:', fareError);
+        console.warn(
+          '[RegisterVehicleOwner] Error creando cuenta de tarifa:',
+          fareError,
+        );
       }
 
       // 4. Subir la solicitud de afiliación de dueño de vehículo
@@ -168,7 +178,10 @@ export default function RegisterVehicleOwnerScreen() {
           idNumber: ownerIdNumber.trim(),
         });
       } catch (requestError: any) {
-        console.error('[RegisterVehicleOwner] Error guardando solicitud de socio:', requestError);
+        console.error(
+          '[RegisterVehicleOwner] Error guardando solicitud de socio:',
+          requestError,
+        );
         Alert.alert(
           'Solicitud Pendiente',
           'Tu cuenta fue creada pero hubo un error al registrar los datos del propietario: ' +
@@ -191,14 +204,18 @@ export default function RegisterVehicleOwnerScreen() {
       ) {
         serverErrors.email = 'El correo electrónico ya está registrado.';
       } else if (error.code === 'auth/invalid-email') {
-        serverErrors.email = 'El correo electrónico tiene un formato incorrecto.';
+        serverErrors.email =
+          'El correo electrónico tiene un formato incorrecto.';
       } else if (
         errorMsg.toLowerCase().includes('teléfono') ||
         errorMsg.toLowerCase().includes('phone')
       ) {
         serverErrors.phoneNumber = 'El número de teléfono ya está registrado.';
       } else {
-        Alert.alert('Error', error.message || 'Ocurrió un error al procesar tu registro.');
+        Alert.alert(
+          'Error',
+          error.message || 'Ocurrió un error al procesar tu registro.',
+        );
       }
       setErrors(serverErrors);
     } finally {
@@ -212,7 +229,10 @@ export default function RegisterVehicleOwnerScreen() {
       await sigOutAccount();
       await clearGoFareToken();
     } catch (err) {
-      console.warn('[RegisterVehicleOwner] Error al cerrar sesión al finalizar:', err);
+      console.warn(
+        '[RegisterVehicleOwner] Error al cerrar sesión al finalizar:',
+        err,
+      );
     }
     router.replace('/landing');
   };
@@ -228,7 +248,10 @@ export default function RegisterVehicleOwnerScreen() {
         >
           <ScreenHeader title="Solicitud Enviada" onBack={handleFinishFlow} />
           <ScrollView
-            contentContainerStyle={[styles.scroll, { justifyContent: 'center' }]}
+            contentContainerStyle={[
+              styles.scroll,
+              { justifyContent: 'center' },
+            ]}
             bounces={false}
             showsVerticalScrollIndicator={false}
           >
@@ -245,12 +268,25 @@ export default function RegisterVehicleOwnerScreen() {
             </View>
 
             <View style={[styles.titleBlock, { alignItems: 'center' }]}>
-              <Text style={[styles.titleDark, { textAlign: 'center' }]}>Solicitud en</Text>
-              <Text style={[styles.titleBlue, { textAlign: 'center' }]}>Revisión</Text>
-              <Text style={[styles.subtitle, { textAlign: 'center', marginTop: 12 }]}>
-                Tu solicitud de registro como Dueño de Vehículo ha sido enviada con éxito.
-                {"\n\n"}
-                El administrador del sistema revisará y verificará tus datos comerciales. Una vez aprobada la solicitud, se habilitará tu cuenta y recibirás tus credenciales para acceder a tu panel de dueño de vehículo.
+              <Text style={[styles.titleDark, { textAlign: 'center' }]}>
+                Solicitud en
+              </Text>
+              <Text style={[styles.titleBlue, { textAlign: 'center' }]}>
+                Revisión
+              </Text>
+              <Text
+                style={[
+                  styles.subtitle,
+                  { textAlign: 'center', marginTop: 12 },
+                ]}
+              >
+                Tu solicitud de registro como Dueño de Vehículo ha sido enviada
+                con éxito.
+                {'\n\n'}
+                El administrador del sistema revisará y verificará tus datos
+                comerciales. Una vez aprobada la solicitud, se habilitará tu
+                cuenta y recibirás tus credenciales para acceder a tu panel de
+                dueño de vehículo.
               </Text>
             </View>
 
@@ -270,7 +306,9 @@ export default function RegisterVehicleOwnerScreen() {
               />
             </Pressable>
 
-            <Text style={styles.footerLegal}>CARACAS MOVE • REGISTRO DE SOCIO</Text>
+            <Text style={styles.footerLegal}>
+              CARACAS MOVE • REGISTRO DE SOCIO
+            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -297,7 +335,8 @@ export default function RegisterVehicleOwnerScreen() {
             <Text style={styles.titleDark}>Registro de</Text>
             <Text style={styles.titleBlue}>Dueño de Vehículo</Text>
             <Text style={styles.subtitle}>
-              Crea tu cuenta de socio y envía tu solicitud de afiliación para revisión administrativa.
+              Crea tu cuenta de socio y envía tu solicitud de afiliación para
+              revisión administrativa.
             </Text>
           </View>
 
@@ -307,8 +346,14 @@ export default function RegisterVehicleOwnerScreen() {
 
           {/* Nombre Completo */}
           <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>
-          <View style={[styles.inputCard, errors.fullName && styles.inputCardError]}>
-            <Ionicons name="person-outline" size={20} color={errors.fullName ? '#EF4444' : '#3072ffe7'} />
+          <View
+            style={[styles.inputCard, errors.fullName && styles.inputCardError]}
+          >
+            <Ionicons
+              name="person-outline"
+              size={20}
+              color={errors.fullName ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -317,17 +362,26 @@ export default function RegisterVehicleOwnerScreen() {
               value={fullName}
               onChangeText={(text) => {
                 setFullName(text);
-                if (errors.fullName) setErrors((prev) => ({ ...prev, fullName: undefined }));
+                if (errors.fullName)
+                  setErrors((prev) => ({ ...prev, fullName: undefined }));
               }}
               editable={!loading}
             />
           </View>
-          {errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
+          {errors.fullName && (
+            <Text style={styles.errorText}>{errors.fullName}</Text>
+          )}
 
           {/* Cédula */}
           <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
-          <View style={[styles.inputCard, errors.idNumber && styles.inputCardError]}>
-            <Text style={[styles.prefix, errors.idNumber && { color: '#EF4444' }]}>V-</Text>
+          <View
+            style={[styles.inputCard, errors.idNumber && styles.inputCardError]}
+          >
+            <Text
+              style={[styles.prefix, errors.idNumber && { color: '#EF4444' }]}
+            >
+              V-
+            </Text>
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -337,18 +391,30 @@ export default function RegisterVehicleOwnerScreen() {
               value={idNumber}
               onChangeText={(text) => {
                 setIdNumber(text);
-                if (errors.idNumber) setErrors((prev) => ({ ...prev, idNumber: undefined }));
+                if (errors.idNumber)
+                  setErrors((prev) => ({ ...prev, idNumber: undefined }));
               }}
               maxLength={10}
               editable={!loading}
             />
           </View>
-          {errors.idNumber && <Text style={styles.errorText}>{errors.idNumber}</Text>}
+          {errors.idNumber && (
+            <Text style={styles.errorText}>{errors.idNumber}</Text>
+          )}
 
           {/* Teléfono */}
           <Text style={styles.inputLabel}>TELÉFONO</Text>
-          <View style={[styles.inputCard, errors.phoneNumber && styles.inputCardError]}>
-            <Ionicons name="call-outline" size={20} color={errors.phoneNumber ? '#EF4444' : '#3072ffe7'} />
+          <View
+            style={[
+              styles.inputCard,
+              errors.phoneNumber && styles.inputCardError,
+            ]}
+          >
+            <Ionicons
+              name="call-outline"
+              size={20}
+              color={errors.phoneNumber ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -358,18 +424,27 @@ export default function RegisterVehicleOwnerScreen() {
               value={phoneNumber}
               onChangeText={(text) => {
                 setPhoneNumber(text);
-                if (errors.phoneNumber) setErrors((prev) => ({ ...prev, phoneNumber: undefined }));
+                if (errors.phoneNumber)
+                  setErrors((prev) => ({ ...prev, phoneNumber: undefined }));
               }}
               maxLength={11}
               editable={!loading}
             />
           </View>
-          {errors.phoneNumber && <Text style={styles.errorText}>{errors.phoneNumber}</Text>}
+          {errors.phoneNumber && (
+            <Text style={styles.errorText}>{errors.phoneNumber}</Text>
+          )}
 
           {/* Correo */}
           <Text style={styles.inputLabel}>CORREO ELECTRÓNICO</Text>
-          <View style={[styles.inputCard, errors.email && styles.inputCardError]}>
-            <Ionicons name="mail-outline" size={20} color={errors.email ? '#EF4444' : '#3072ffe7'} />
+          <View
+            style={[styles.inputCard, errors.email && styles.inputCardError]}
+          >
+            <Ionicons
+              name="mail-outline"
+              size={20}
+              color={errors.email ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -380,7 +455,8 @@ export default function RegisterVehicleOwnerScreen() {
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
-                if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                if (errors.email)
+                  setErrors((prev) => ({ ...prev, email: undefined }));
               }}
               editable={!loading}
             />
@@ -389,8 +465,14 @@ export default function RegisterVehicleOwnerScreen() {
 
           {/* Contraseña */}
           <Text style={styles.inputLabel}>CONTRASEÑA</Text>
-          <View style={[styles.inputCard, errors.password && styles.inputCardError]}>
-            <Ionicons name="lock-closed-outline" size={20} color={errors.password ? '#EF4444' : '#3072ffe7'} />
+          <View
+            style={[styles.inputCard, errors.password && styles.inputCardError]}
+          >
+            <Ionicons
+              name="lock-closed-outline"
+              size={20}
+              color={errors.password ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -400,24 +482,41 @@ export default function RegisterVehicleOwnerScreen() {
               value={password}
               onChangeText={(text) => {
                 setPassword(text);
-                if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                if (errors.password)
+                  setErrors((prev) => ({ ...prev, password: undefined }));
               }}
               editable={!loading}
             />
-            <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={10}>
-              <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color="#8594AB" />
+            <Pressable
+              onPress={() => setShowPassword(!showPassword)}
+              hitSlop={10}
+            >
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={22}
+                color="#8594AB"
+              />
             </Pressable>
           </View>
-          {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+          {errors.password && (
+            <Text style={styles.errorText}>{errors.password}</Text>
+          )}
 
           {/* ───── SECCIÓN 2: DATOS DEL ASOCIADO / NEGOCIO ───── */}
-          <Text style={[styles.sectionDividerText, { marginTop: 24 }]}>2. DATOS DE AFILIACIÓN COMERCIAL</Text>
+          <Text style={[styles.sectionDividerText, { marginTop: 24 }]}>
+            2. DATOS DE AFILIACIÓN COMERCIAL
+          </Text>
           <View style={styles.sectionLine} />
 
           {/* Seleccionar Cooperativa / Agencia */}
-          <Text style={styles.inputLabel}>SELECCIONA TU COOPERATIVA / AGENCIA</Text>
+          <Text style={styles.inputLabel}>
+            SELECCIONA TU COOPERATIVA / AGENCIA
+          </Text>
           <Pressable
-            style={[styles.dropdownButton, errors.businessName && styles.dropdownButtonError]}
+            style={[
+              styles.dropdownButton,
+              errors.businessName && styles.dropdownButtonError,
+            ]}
             onPress={() => {
               const nextState = !showCoopDropdown;
               setShowCoopDropdown(nextState);
@@ -425,25 +524,42 @@ export default function RegisterVehicleOwnerScreen() {
             }}
             disabled={loading}
           >
-            <Ionicons name="business-outline" size={20} color={errors.businessName ? '#EF4444' : '#3072ffe7'} />
+            <Ionicons
+              name="business-outline"
+              size={20}
+              color={errors.businessName ? '#EF4444' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
-            <Text style={[
-              styles.dropdownButtonText,
-              !selectedCooperativeUuid && { color: '#B8C4D4' }
-            ]}>
-              {selectedCooperativeUuid 
-                ? `${businessName} (${ownerIdNumber})` 
+            <Text
+              style={[
+                styles.dropdownButtonText,
+                !selectedCooperativeUuid && { color: '#B8C4D4' },
+              ]}
+            >
+              {selectedCooperativeUuid
+                ? `${businessName} (${ownerIdNumber})`
                 : 'Selecciona una cooperativa registrada...'}
             </Text>
-            <Ionicons name={showCoopDropdown ? 'chevron-up' : 'chevron-down'} size={20} color="#8594AB" />
+            <Ionicons
+              name={showCoopDropdown ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color="#8594AB"
+            />
           </Pressable>
-          {errors.businessName && <Text style={styles.errorText}>{errors.businessName}</Text>}
+          {errors.businessName && (
+            <Text style={styles.errorText}>{errors.businessName}</Text>
+          )}
 
           {showCoopDropdown && (
             <View style={styles.dropdownContainer}>
               {/* Buscador / Combobox */}
               <View style={styles.searchInputContainer}>
-                <Ionicons name="search-outline" size={18} color="#8594AB" style={styles.searchIcon} />
+                <Ionicons
+                  name="search-outline"
+                  size={18}
+                  color="#8594AB"
+                  style={styles.searchIcon}
+                />
                 <TextInput
                   style={styles.searchInput}
                   placeholder="Buscar cooperativa por nombre o RIF..."
@@ -480,7 +596,8 @@ export default function RegisterVehicleOwnerScreen() {
                       key={coop.uuid}
                       style={[
                         styles.dropdownItem,
-                        selectedCooperativeUuid === coop.uuid && styles.dropdownItemActive
+                        selectedCooperativeUuid === coop.uuid &&
+                          styles.dropdownItemActive,
                       ]}
                       onPress={() => {
                         setSelectedCooperativeUuid(coop.uuid);
@@ -488,14 +605,20 @@ export default function RegisterVehicleOwnerScreen() {
                         setOwnerIdNumber(coop.rif);
                         setShowCoopDropdown(false);
                         if (errors.businessName) {
-                          setErrors((prev) => ({ ...prev, businessName: undefined }));
+                          setErrors((prev) => ({
+                            ...prev,
+                            businessName: undefined,
+                          }));
                         }
                       }}
                     >
-                      <Text style={[
-                        styles.dropdownItemText,
-                        selectedCooperativeUuid === coop.uuid && styles.dropdownItemTextActive
-                      ]}>
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          selectedCooperativeUuid === coop.uuid &&
+                            styles.dropdownItemTextActive,
+                        ]}
+                      >
                         {coop.name} ({coop.rif})
                       </Text>
                     </Pressable>
@@ -511,7 +634,9 @@ export default function RegisterVehicleOwnerScreen() {
                   );
                 }).length === 0 && (
                   <View style={styles.noResultsContainer}>
-                    <Text style={styles.noResultsText}>No se encontraron cooperativas</Text>
+                    <Text style={styles.noResultsText}>
+                      No se encontraron cooperativas
+                    </Text>
                   </View>
                 )}
               </ScrollView>
@@ -533,12 +658,19 @@ export default function RegisterVehicleOwnerScreen() {
             ) : (
               <>
                 <Text style={styles.ctaText}>Enviar Solicitud</Text>
-                <Ionicons name="checkmark-circle-outline" size={20} color="#fff" style={{ marginLeft: 10 }} />
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={20}
+                  color="#fff"
+                  style={{ marginLeft: 10 }}
+                />
               </>
             )}
           </Pressable>
 
-          <Text style={styles.footerLegal}>CARACAS MOVE • REGISTRO DE SOCIO</Text>
+          <Text style={styles.footerLegal}>
+            CARACAS MOVE • REGISTRO DE SOCIO
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

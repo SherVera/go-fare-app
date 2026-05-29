@@ -1,6 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import * as SecureStore from 'expo-secure-store';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,10 +20,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import type { LoginFormState } from '@/interfaces';
 import {
-  syncWithBackend,
   createFareAccount,
   getFareAccountByUserId,
   loginWithFirebaseToken,
+  syncWithBackend,
 } from '@/lib/api';
 import {
   sendVerificationEmail,
@@ -28,15 +31,12 @@ import {
   signInWithGoogle,
   sigOutAccount,
 } from '@/lib/firebase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tokens } from '@/theme/tokens';
-import * as SecureStore from 'expo-secure-store';
-import * as LocalAuthentication from 'expo-local-authentication';
 
 export default function LoginScreen() {
   const router = useRouter();
   // Estado del formulario — tipado por LoginFormState
-  const [email, setEmail] = useState<LoginFormState['email']>( '');
+  const [email, setEmail] = useState<LoginFormState['email']>('');
   const [password, setPassword] = useState<LoginFormState['password']>('');
   const [showPassword, setShowPassword] =
     useState<LoginFormState['showPassword']>(false);
@@ -54,12 +54,27 @@ export default function LoginScreen() {
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
 
-        if (savedEmail && savedPassword && savedPref === 'true' && hasHardware && isEnrolled) {
+        if (
+          savedEmail &&
+          savedPassword &&
+          savedPref === 'true' &&
+          hasHardware &&
+          isEnrolled
+        ) {
           setHasSavedCredentials(true);
-          const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-          if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-            setBiometricsType(Platform.OS === 'ios' ? 'FaceID' : 'Reconocimiento Facial');
-          } else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
+          const types =
+            await LocalAuthentication.supportedAuthenticationTypesAsync();
+          if (
+            types.includes(
+              LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+            )
+          ) {
+            setBiometricsType(
+              Platform.OS === 'ios' ? 'FaceID' : 'Reconocimiento Facial',
+            );
+          } else if (
+            types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)
+          ) {
             setBiometricsType('Huella Dactilar');
           }
         }
@@ -101,14 +116,19 @@ export default function LoginScreen() {
             try {
               await createFareAccount(backendUser.id);
             } catch (createError) {
-              console.warn('[Login] Error al crear la cuenta de tarifa:', createError);
+              console.warn(
+                '[Login] Error al crear la cuenta de tarifa:',
+                createError,
+              );
             }
           }
 
           const roles = (backendUser as any).roles || [];
-          const isOwner = roles.some((role: any) => role.name === 'transport_owner');
+          const isOwner = roles.some(
+            (role: any) => role.name === 'transport_owner',
+          );
           const isDriver = roles.some((role: any) => role.name === 'driver');
-          
+
           if (isOwner) {
             await AsyncStorage.setItem('user_role', 'transport_owner');
             router.replace('/vehicle-owner/dashboard' as any);
@@ -123,7 +143,10 @@ export default function LoginScreen() {
       }
     } catch (err) {
       console.warn('[Login] Error during biometric login:', err);
-      Alert.alert('Error', 'Hubo un error al intentar autenticar con biometría.');
+      Alert.alert(
+        'Error',
+        'Hubo un error al intentar autenticar con biometría.',
+      );
     } finally {
       setLoading(false);
     }
@@ -255,7 +278,10 @@ export default function LoginScreen() {
           await SecureStore.setItemAsync('savedPassword', trimmedPassword);
         }
       } catch (storeError) {
-        console.warn('[Login] Error saving credentials to SecureStore:', storeError);
+        console.warn(
+          '[Login] Error saving credentials to SecureStore:',
+          storeError,
+        );
       }
 
       if (backendUser) {
@@ -274,9 +300,15 @@ export default function LoginScreen() {
         }
 
         const roles = (backendUser as any).roles || [];
-        const isOwner = roles.some((role: any) => role.name === 'transport_owner');
+        const isOwner = roles.some(
+          (role: any) => role.name === 'transport_owner',
+        );
         const isDriver = roles.some((role: any) => role.name === 'driver');
-        const userRole = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
+        const userRole = isOwner
+          ? 'transport_owner'
+          : isDriver
+            ? 'driver'
+            : 'passenger';
         await AsyncStorage.setItem('user_role', userRole);
 
         if (isOwner) {
@@ -449,7 +481,11 @@ export default function LoginScreen() {
             <Pressable
               style={({ pressed }) => [
                 styles.cta,
-                hasSavedCredentials && { flex: 1, marginRight: 12, marginBottom: 0 },
+                hasSavedCredentials && {
+                  flex: 1,
+                  marginRight: 12,
+                  marginBottom: 0,
+                },
                 pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
                 loading && { opacity: 0.7 },
               ]}
@@ -540,9 +576,16 @@ export default function LoginScreen() {
           </View>
 
           {/* ── LINK REGISTRO DUEÑO VEHÍCULO ── */}
-          <View style={[styles.registerContainer, { marginTop: -20, marginBottom: 28 }]}>
+          <View
+            style={[
+              styles.registerContainer,
+              { marginTop: -20, marginBottom: 28 },
+            ]}
+          >
             <Text style={styles.registerText}>¿Eres dueño de vehículo? </Text>
-            <Pressable onPress={() => router.push('/register-vehicle-owner' as any)}>
+            <Pressable
+              onPress={() => router.push('/register-vehicle-owner' as any)}
+            >
               <Text style={styles.registerLink}>Envía tu solicitud aquí</Text>
             </Pressable>
           </View>
