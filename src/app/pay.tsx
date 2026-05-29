@@ -4,15 +4,32 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { QRScanResult } from '@/interfaces';
+import {
+  createFareAccount,
+  createTicket,
+  deductAccountBalance,
+  getBackendProfile,
+  getFareAccountByUserId,
+  getTicketByQr,
+  validateTicketByQr,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function PayTripScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
@@ -20,19 +37,106 @@ export default function PayTripScreen() {
     }
   }, [permission, requestPermission]);
 
-  const handleBarCodeScanned = (result: { type: string; data: string }) => {
-    if (scanned) return;
+  const handleBarCodeScanned = async (result: {
+    type: string;
+    data: string;
+  }) => {
+    if (scanned || processing) return;
     setScanned(true);
+    setProcessing(true);
 
-    const scanResult: QRScanResult = {
-      type: result.type,
-      data: result.data,
-      scannedAt: new Date(),
-    };
+    const scannedData = result.data.trim();
 
-    Alert.alert('Código Escaneado', `Información: ${scanResult.data}`, [
-      { text: 'Aceptar', onPress: () => setScanned(false) },
-    ]);
+    try {
+      // 1. Intentar validar si es un QR de un boleto prepagado existente
+      let ticket = null;
+      try {
+        ticket = await getTicketByQr(scannedData);
+      } catch (e) {
+        // Ignoramos error: significa que no es un QR de boleto, sino un QR de autobús
+      }
+
+      if (ticket) {
+        if (ticket.status === 'used') {
+          Alert.alert(
+            'Boleto Usado',
+            'Este boleto ya ha sido validado anteriormente.',
+            [{ text: 'Aceptar', onPress: () => setScanned(false) }],
+          );
+          return;
+        }
+
+        // Validar el boleto existente
+        await validateTicketByQr(scannedData);
+        Alert.alert(
+          'Boleto Validado',
+          `Boleto para la ruta "${ticket.route || 'General'}" validado con éxito. ¡Buen viaje!`,
+          [
+            {
+              text: 'Aceptar',
+              onPress: () => {
+                setScanned(false);
+                router.replace('/(tabs)/trips');
+              },
+            },
+          ],
+        );
+      } else {
+        // 2. Si no es un boleto, es pago directo por escaneo de unidad (Tarifa fija Bs. 15.00)
+        const backendUser = await getBackendProfile();
+        let fareAccount;
+        try {
+          fareAccount = await getFareAccountByUserId(backendUser.id);
+        } catch (apiErr) {
+          fareAccount = await createFareAccount(backendUser.id);
+        }
+
+        const farePrice = 15.0;
+
+        if (fareAccount.balance < farePrice) {
+          Alert.alert(
+            'Saldo Insuficiente',
+            `Tu saldo actual es Bs. ${fareAccount.balance.toFixed(2).replace('.', ',')}.\nNecesitas Bs. ${farePrice.toFixed(2).replace('.', ',')} para realizar este viaje.`,
+            [{ text: 'Aceptar', onPress: () => setScanned(false) }],
+          );
+          return;
+        }
+
+        // Cobrar boleto y crearlo en estado 'used'
+        await deductAccountBalance(fareAccount.id, farePrice);
+        await createTicket({
+          userId: backendUser.id,
+          qrCode: scannedData,
+          price: farePrice,
+          status: 'used',
+          route: scannedData, // Guardamos los datos escaneados como ruta
+        });
+
+        Alert.alert(
+          'Pago Exitoso',
+          `Se ha descontado Bs. ${farePrice.toFixed(2).replace('.', ',')} de tu saldo para el viaje en la ruta "${scannedData}".\n¡Buen viaje!`,
+          [
+            {
+              text: 'Aceptar',
+              onPress: () => {
+                setScanned(false);
+                router.replace('/(tabs)/trips');
+              },
+            },
+          ],
+        );
+      }
+    } catch (error: any) {
+      console.error('[Scanner] Error processing scan payment:', error);
+      Alert.alert(
+        'Error de Pago',
+        error.message ||
+          'No se pudo procesar el pago del viaje. Intente nuevamente.',
+        [{ text: 'Aceptar', onPress: () => setScanned(false) }],
+      );
+    } finally {
+      setProcessing(false);
+    }
   };
 
   if (!permission) {
@@ -97,8 +201,35 @@ export default function PayTripScreen() {
             <CameraView
               style={StyleSheet.absoluteFillObject}
               facing="back"
-              onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
+              onBarcodeScanned={
+                scanned || processing ? undefined : handleBarCodeScanned
+              }
             />
+            {processing && (
+              <View
+                style={[
+                  StyleSheet.absoluteFillObject,
+                  {
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    borderRadius: 24,
+                    zIndex: 10,
+                  },
+                ]}
+              >
+                <ActivityIndicator size="large" color={tokens.colors.primary} />
+                <Text
+                  style={{
+                    color: '#FFFFFF',
+                    marginTop: 12,
+                    fontFamily: tokens.typography.fontFamily.bold,
+                  }}
+                >
+                  Procesando Pago...
+                </Text>
+              </View>
+            )}
 
             {/* Corner Borders */}
             <View style={[styles.corner, styles.topLeft]} />

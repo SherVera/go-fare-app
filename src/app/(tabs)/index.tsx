@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -17,8 +17,14 @@ import { BalanceCard } from '@/components/Home/BalanceCard';
 import { MapCard } from '@/components/Home/MapCard';
 import { RouteItem } from '@/components/Home/RouteItem';
 import type { Route, UserProfile } from '@/interfaces';
+import {
+  createFareAccount,
+  getBackendProfile,
+  getFareAccountByUserId,
+} from '@/lib/api';
 import { auth, getDocument } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function HomeDashboard() {
   const router = useRouter();
@@ -27,24 +33,111 @@ export default function HomeDashboard() {
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchUserData = useCallback(async () => {
+    // 1. Cargar desde la caché local de forma instantánea
+    try {
+      const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+      if (cached) {
+        setUserProfile(JSON.parse(cached));
+      }
+    } catch (cacheErr) {
+      console.warn('[Home] Error al cargar caché del perfil:', cacheErr);
+    }
     const user = auth.currentUser;
-    if (user) {
+    if (!user) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    try {
+      // Obtener perfil y cuenta de tarifa desde el backend de GoFare
+      const backendUser = await getBackendProfile();
+      let fareAccount;
       try {
-        const data = await getDocument(`users/${user.uid}`);
-        if (data) {
-          setUserProfile(data as UserProfile);
+        fareAccount = await getFareAccountByUserId(backendUser.id);
+      } catch (_) {
+        // Si no existe la cuenta de tarifa, la creamos
+        try {
+          fareAccount = await createFareAccount(backendUser.id);
+        } catch (createError) {
+          console.error(
+            '[Home] Error al crear la cuenta de tarifa:',
+            createError,
+          );
         }
-      } catch (error) {
-        console.error('[Home] Error fetching user data:', error);
+      }
+
+      // Obtener datos legacy de Firestore para compatibilidad (carnetId, idNumber)
+      const legacyData = await getDocument(`users/${user.uid}`).catch(
+        () => null,
+      );
+      const carnetId =
+        legacyData?.carnetId ||
+        `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const updatedProfile = {
+        uid: user.uid,
+        fullName:
+          backendUser.displayName ||
+          `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+          legacyData?.fullName ||
+          'Usuario',
+        displayName:
+          backendUser.displayName ||
+          `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+          legacyData?.fullName ||
+          'Usuario',
+        idNumber: legacyData?.idNumber || 'V-00000000',
+        email: backendUser.email,
+        phoneNumber: backendUser.phoneNumber || legacyData?.phoneNumber || '',
+        balance: fareAccount?.balance ?? 0,
+        carnetId,
+        createdAt: backendUser.createdAt,
+      };
+
+      setUserProfile(updatedProfile);
+      // Guardar en la caché local
+      await AsyncStorage.setItem('gofare_cached_user_profile', JSON.stringify(updatedProfile));
+
+      // Sincronizar el rol del usuario para evitar desvíos o incoherencias
+      const isOwner = (backendUser as any).roles?.some((role: any) => role.name === 'transport_owner');
+      const isDriver = (backendUser as any).roles?.some((role: any) => role.name === 'driver');
+      const newRole = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
+      await AsyncStorage.setItem('user_role', newRole);
+
+      if (isOwner) {
+        console.log('[Home] User is transport owner, redirecting...');
+        router.replace('/vehicle-owner/dashboard' as any);
+      } else if (isDriver) {
+        console.log('[Home] User is driver, redirecting...');
+        router.replace('/driver/dashboard' as any);
+      }
+    } catch (error: any) {
+      console.log('[Home] Error al obtener datos del backend:', error.message || error);
+      // Si el error es de autorización (Unauthorized), no hacemos fallback a Firestore
+      if (error?.message === 'Unauthorized') {
+        return;
+      }
+      // Fallback a Firestore local en caso de error de conexión
+      try {
+        const legacyData = await getDocument(`users/${user.uid}`);
+        if (legacyData) {
+          setUserProfile(legacyData as UserProfile);
+        }
+      } catch (fbError: any) {
+        console.log('[Home] Error en fallback de Firestore:', fbError.message || fbError);
       }
     }
     setLoading(false);
     setRefreshing(false);
   }, []);
 
-  useEffect(() => {
-    void fetchUserData();
-  }, [fetchUserData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserData();
+    }, [fetchUserData])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -87,13 +180,7 @@ export default function HomeDashboard() {
 
       {/* ── CUSTOM HEADER ── */}
       <View style={styles.header}>
-        <Pressable style={styles.headerIcon}>
-          <Ionicons
-            name="menu-outline"
-            size={28}
-            color={tokens.colors.primary}
-          />
-        </Pressable>
+        <View style={styles.headerIcon} />
         <Text style={styles.headerTitle}>GoFair</Text>
         <Pressable style={styles.headerIcon}>
           <Ionicons

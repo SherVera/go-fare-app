@@ -32,3 +32,20 @@ export interface ForgotPasswordFormState {
   /** Email al que se envió el enlace (para mostrarlo en pantalla) */
   sentEmail: string;
 }
+
+/** DTO para el registro de usuarios en Firebase mediante el backend */
+export interface FirebaseEmailRegisterDto {
+  email: string;
+  password: string;
+  registrationRole: 'passenger' | 'driver' | 'transport_owner';
+  displayName?: string;
+  phoneNumber?: string;
+}
+
+/** DTO de respuesta con credenciales emitidas por Firebase */
+export interface FirebaseIssuedCredentialsDto {
+  idToken: string;
+  refreshToken: string;
+  expiresIn?: string;
+  localId?: string;
+}

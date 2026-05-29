@@ -1,10 +1,12 @@
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,32 +19,106 @@ import type {
   ProfileMenuItem,
   UserProfile,
 } from '@/interfaces';
+import { clearGoFareToken, getBackendProfile } from '@/lib/api';
 import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 export default function ProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [, setLoading] = useState(true);
+  const router = useRouter();
 
-  useEffect(() => {
-    const fetchUserData = async () => {
-      const user = auth.currentUser;
-      if (user) {
+
+
+  const fetchUserData = useCallback(async () => {
+    const user = auth.currentUser;
+    if (user) {
+      // 1. Cargar desde la caché local de forma instantánea
+      try {
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached) {
+          setUserProfile(JSON.parse(cached));
+        }
+      } catch (cacheErr) {
+        console.warn('[Profile] Error al cargar caché del perfil:', cacheErr);
+      }
+
+      // 2. Consultar servidor en segundo plano
+      try {
+        const backendUser = await getBackendProfile();
+        const legacyData = await getDocument(`users/${user.uid}`).catch(
+          () => null,
+        );
+
+        const updatedProfile: UserProfile = {
+          uid: user.uid,
+          fullName:
+            backendUser.displayName ||
+            `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+            legacyData?.fullName ||
+            'Usuario',
+          displayName:
+            backendUser.displayName ||
+            `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+            legacyData?.fullName ||
+            'Usuario',
+          idNumber: legacyData?.idNumber || 'V-00000000',
+          email: backendUser.email,
+          phoneNumber:
+            backendUser.phoneNumber || legacyData?.phoneNumber || '',
+          balance: legacyData?.balance ?? 0,
+          photoURL:
+            backendUser.profilePhoto ||
+            legacyData?.photoURL ||
+            'https://i.pravatar.cc/150?img=11',
+          city: legacyData?.city || 'Caracas, Venezuela',
+          createdAt: backendUser.createdAt,
+        };
+
+        setUserProfile(updatedProfile);
+        
+        // Guardar en la caché local y sincronizar rol
+        await AsyncStorage.setItem('gofare_cached_user_profile', JSON.stringify(updatedProfile));
+        
+        const isOwner = (backendUser as any).roles?.some((role: any) => role.name === 'transport_owner');
+        const isDriver = (backendUser as any).roles?.some((role: any) => role.name === 'driver');
+        const newRole = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
+        await AsyncStorage.setItem('user_role', newRole);
+
+        if (isOwner) {
+          console.log('[Profile] User is transport owner, redirecting...');
+          router.replace('/vehicle-owner/dashboard' as any);
+        } else if (isDriver) {
+          console.log('[Profile] User is driver, redirecting...');
+          router.replace('/driver/dashboard' as any);
+        }
+      } catch (error: any) {
+        console.log('[Profile] Error al obtener datos del backend:', error.message || error);
+        if (error?.message === 'Unauthorized') {
+          return;
+        }
+        // Fallback a Firestore local en caso de error
         try {
-          const data = await getDocument(`users/${user.uid}`);
-          if (data) {
-            setUserProfile(data as UserProfile);
+          const legacyData = await getDocument(`users/${user.uid}`);
+          if (legacyData) {
+            const fbProfile = legacyData as UserProfile;
+            setUserProfile(fbProfile);
+            await AsyncStorage.setItem('gofare_cached_user_profile', JSON.stringify(fbProfile));
           }
-        } catch (error) {
-          console.error('[Profile] Error fetching user data:', error);
+        } catch (fbError: any) {
+          console.log('[Profile] Error en fallback de Firestore:', fbError.message || fbError);
         }
       }
-      setLoading(false);
-    };
-
-    fetchUserData();
+    }
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserData();
+    }, [fetchUserData])
+  );
 
   // Tarjetas de información — tipadas con ProfileInfoCard[]
   const infoCards: ProfileInfoCard[] = [
@@ -77,7 +153,21 @@ export default function ProfileScreen() {
       title: 'Seguridad y Contraseña',
       subtitle: '2FA y cambio de clave',
       iconName: 'lock-closed',
-      onPress: () => {},
+      onPress: () => router.push('/security'),
+    },
+    {
+      id: 'vehicle-owner',
+      title: 'Dueño de Vehículo',
+      subtitle: 'Panel de control de tu flota',
+      iconName: 'car',
+      onPress: () => router.push('/vehicle-owner/dashboard' as any),
+    },
+    {
+      id: 'driver',
+      title: 'Trabajar como Conductor',
+      subtitle: 'Envía tu solicitud para conducir',
+      iconName: 'id-card-outline',
+      onPress: () => router.push('/register-driver' as any),
     },
     {
       id: 'notifications',
@@ -104,8 +194,21 @@ export default function ProfileScreen() {
         onPress: async () => {
           try {
             setLoggingOut(true);
-            await sigOutAccount();
-            // La navegación a /login la hace el guardián en _layout.tsx cuando la fase pasa a signed_out.
+            try {
+              await sigOutAccount();
+            } catch (authError) {
+              console.warn('[Profile] Error al cerrar sesión de Firebase (offline):', authError);
+            }
+            await clearGoFareToken();
+            try {
+              await SecureStore.deleteItemAsync('savedEmail');
+              await SecureStore.deleteItemAsync('savedPassword');
+              await AsyncStorage.removeItem('gofare_cached_user_profile');
+              await AsyncStorage.removeItem('temp_auth');
+              await AsyncStorage.removeItem('user_role');
+            } catch (err) {
+              console.warn('[Profile] Error deleting saved credentials/cache:', err);
+            }
           } catch (error) {
             console.error('Error al cerrar sesión:', error);
             Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
@@ -123,9 +226,6 @@ export default function ProfileScreen() {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        <Pressable hitSlop={10} style={styles.menuBtn}>
-          <Ionicons name="menu" size={28} color={tokens.colors.primary} />
-        </Pressable>
         <Text style={styles.headerTitle}>GoFair</Text>
         <Image
           source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
@@ -199,6 +299,8 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </Pressable>
         ))}
+
+
 
         {/* ── LOGOUT BUTTON ── */}
         <Pressable

@@ -7,6 +7,7 @@ import {
   onNotificationOpenedApp,
   onTokenRefresh,
   requestPermission,
+  getInitialNotification as getInitialNotificationModular,
 } from '@react-native-firebase/messaging';
 import { Platform } from 'react-native';
 
@@ -97,7 +98,7 @@ export const registerNotificationHandlers = ({
  */
 export const getInitialNotification =
   async (): Promise<RemoteMessage | null> => {
-    const message = await messaging.getInitialNotification();
+    const message = await getInitialNotificationModular(messaging);
     return message ?? null;
   };
 

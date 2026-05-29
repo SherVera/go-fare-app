@@ -109,6 +109,7 @@ const config: ExpoConfig = {
     '@react-native-firebase/messaging',
     '@react-native-google-signin/google-signin',
     'expo-dev-client',
+    'expo-secure-store',
   ],
   experiments: {
     typedRoutes: true,
