@@ -56,5 +56,3 @@ export const tokens = {
     sheet: 40,
   },
 } as const;
-
-export type ThemeTokens = typeof tokens;
