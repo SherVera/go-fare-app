@@ -6,13 +6,13 @@ import {
   GoogleAuthProvider,
   getAuth,
   onAuthStateChanged,
+  PhoneAuthProvider,
   sendEmailVerification,
   sendPasswordResetEmail,
   signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
   signOut,
-  updateProfile,
 } from '@react-native-firebase/auth';
 import {
   addDoc,
@@ -119,7 +119,7 @@ export const applyEmailVerificationCode = (code: string) =>
 export const updateUser = (
   user: FirebaseAuthTypes.User,
   profile: { displayName?: string | null; photoURL?: string | null },
-) => updateProfile(user, profile);
+) => user.updateProfile(profile);
 
 export const sigOutAccount = async () => {
   await AsyncStorage.removeItem('user');
@@ -256,6 +256,40 @@ export const deleteDocument = (path: string) => deleteDoc(docRefFromPath(path));
 
 export const addDocument = (path: string, data: Record<string, unknown>) => {
   return addDoc(collection(db, path), { ...data, createAt: serverTimestamp() });
+};
+
+export const sendLinkPhoneCode = (phoneNumber: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    auth.verifyPhoneNumber(phoneNumber).on(
+      'state_changed',
+      (snapshot) => {
+        if (snapshot.state === 'sent') {
+          if (snapshot.verificationId) {
+            resolve(snapshot.verificationId);
+          } else {
+            reject(new Error('No se recibió el verificationId de Firebase.'));
+          }
+        } else if (snapshot.state === 'error') {
+          reject(snapshot.error);
+        }
+      },
+      (error) => {
+        reject(error);
+      },
+    );
+  });
+};
+
+export const linkPhoneWithCredential = async (
+  verificationId: string,
+  code: string,
+): Promise<void> => {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error('No hay un usuario autenticado.');
+  }
+  const credential = PhoneAuthProvider.credential(verificationId, code);
+  await user.linkWithCredential(credential);
 };
 
 export const uploadBase64 = async (path: string, base64: string) => {

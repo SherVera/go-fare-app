@@ -26,6 +26,7 @@ import {
   syncWithBackend,
 } from '@/lib/api';
 import {
+  auth,
   sendVerificationEmail,
   signIn,
   signInWithGoogle,
@@ -215,8 +216,17 @@ export default function LoginScreen() {
         password: trimmedPassword,
       });
 
+      // Recargar el usuario para asegurarnos de tener el estado de verificación más reciente
+      try {
+        await userCredential.user.reload();
+      } catch (reloadErr) {
+        console.warn('[Login] Error al recargar el usuario:', reloadErr);
+      }
+
+      const currentUser = auth.currentUser || userCredential.user;
+
       // Bloquear acceso si el correo no ha sido verificado
-      if (!userCredential.user.emailVerified) {
+      if (!currentUser.emailVerified) {
         // Cerrar sesión para no dejar al usuario en un estado intermedio
         try {
           await sigOutAccount();
@@ -261,7 +271,7 @@ export default function LoginScreen() {
       // Correo verificado — sincronizar con backend y permitir acceso
       let backendUser;
       try {
-        const response = await syncWithBackend(userCredential.user);
+        const response = await syncWithBackend(currentUser);
         backendUser = response.user;
       } catch (backendError) {
         console.warn(

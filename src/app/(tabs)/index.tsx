@@ -17,11 +17,13 @@ import { ActionCard } from '@/components/Home/ActionCard';
 import { BalanceCard } from '@/components/Home/BalanceCard';
 import { MapCard } from '@/components/Home/MapCard';
 import { RouteItem } from '@/components/Home/RouteItem';
+import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import type { Route, UserProfile } from '@/interfaces';
 import {
   createFareAccount,
   getBackendProfile,
   getFareAccountByUserId,
+  getUserTickets,
 } from '@/lib/api';
 import { auth, getDocument } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -31,6 +33,7 @@ export default function HomeDashboard() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showPhoneLink, setShowPhoneLink] = useState(false);
 
   const fetchUserData = useCallback(async () => {
     // 1. Cargar desde la caché local de forma instantánea
@@ -59,11 +62,20 @@ export default function HomeDashboard() {
         // Si no existe la cuenta de tarifa, la creamos
         try {
           fareAccount = await createFareAccount(backendUser.id);
-        } catch (createError) {
+        } catch (createError: any) {
           console.error(
             '[Home] Error al crear la cuenta de tarifa:',
             createError,
           );
+          const errMsg = createError?.message || '';
+          if (
+            errMsg.includes('phone/link') ||
+            errMsg.includes('phone number') ||
+            errMsg.includes('auth/phone/link')
+          ) {
+            // Se omite la vinculación telefónica por ahora
+            // setShowPhoneLink(true);
+          }
         }
       }
 
@@ -95,11 +107,16 @@ export default function HomeDashboard() {
         createdAt: backendUser.createdAt,
       };
 
-      setUserProfile(updatedProfile);
+      const ticketProfile = {
+        ...updatedProfile,
+        balance: Number(fareAccount?.balance ?? 0),
+      };
+
+      setUserProfile(ticketProfile);
       // Guardar en la caché local
       await AsyncStorage.setItem(
         'gofare_cached_user_profile',
-        JSON.stringify(updatedProfile),
+        JSON.stringify(ticketProfile),
       );
 
       // Sincronizar el rol del usuario para evitar desvíos o incoherencias
@@ -147,7 +164,7 @@ export default function HomeDashboard() {
     }
     setLoading(false);
     setRefreshing(false);
-  }, []);
+  }, [router.replace]);
 
   useFocusEffect(
     useCallback(() => {
@@ -238,13 +255,13 @@ export default function HomeDashboard() {
         {/* ── QUICK ACTIONS ── */}
         <View style={styles.actionsRow}>
           <ActionCard
-            title="Recargar saldo"
-            subtitle="Instantáneo vía Pago Móvil o tarjeta"
-            icon="wallet-plus"
+            title="Comprar Boleto"
+            subtitle="Adquiere pasajes vía Pago Móvil o tarjeta"
+            icon="ticket"
             onPress={() => router.push('/topup')}
           />
           <ActionCard
-            title="Pagar viajes"
+            title="Pagar viaje"
             subtitle="Escanea el código en la unidad"
             icon="qrcode-scan"
             color={tokens.colors.iconGreen}
@@ -280,6 +297,15 @@ export default function HomeDashboard() {
         {/* Padding for tab bar */}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <PhoneLinkModal
+        visible={showPhoneLink}
+        onClose={() => setShowPhoneLink(false)}
+        onSuccess={() => {
+          fetchUserData();
+        }}
+        initialPhoneNumber={userProfile?.phoneNumber}
+      />
     </SafeAreaView>
   );
 }

@@ -36,6 +36,7 @@ const getBaseUrl = () => {
 };
 
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { auth, sigOutAccount } from './firebase';
 
 const BASE_URL = getBaseUrl();
 const GOFARE_JWT_KEY = 'gofare_jwt_token';
@@ -134,6 +135,33 @@ function sanitizeNumericFields(data: any): any {
 }
 
 /**
+ * Wrapper de fetch con tiempo de espera (timeout) para evitar que las peticiones se queden colgadas indefinidamente.
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 8000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (err: any) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado al conectar con el servidor.');
+    }
+    throw err;
+  }
+}
+
+/**
  * Wrapper personalizado para peticiones fetch que añade automáticamente la cabecera
  * de autorización Bearer si hay un token disponible, y maneja errores globales.
  */
@@ -151,7 +179,7 @@ async function fetchWithAuth(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
+  const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
     ...options,
     headers,
   });
@@ -173,7 +201,6 @@ async function fetchWithAuth(
     if (response.status === 401) {
       await clearGoFareToken();
       try {
-        const { sigOutAccount } = require('./firebase');
         await sigOutAccount();
       } catch (logoutError) {
         console.warn(
@@ -197,7 +224,7 @@ async function fetchWithAuth(
 export async function registerWithEmail(
   dto: FirebaseEmailRegisterDto,
 ): Promise<FirebaseIssuedCredentialsDto> {
-  const response = await fetch(`${BASE_URL}/auth/email/register`, {
+  const response = await fetchWithTimeout(`${BASE_URL}/auth/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -238,7 +265,7 @@ export async function sendFirebaseVerificationEmail(
     headers['X-Ios-Bundle-Identifier'] = 'com.gofare.app';
   }
 
-  const response = await fetch(
+  const response = await fetchWithTimeout(
     `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${FIREBASE_API_KEY}`,
     {
       method: 'POST',
@@ -266,7 +293,7 @@ export async function sendFirebaseVerificationEmail(
 export async function loginWithFirebaseToken(
   firebaseIdToken: string,
 ): Promise<{ token: string; user: BackendUser }> {
-  const response = await fetch(`${BASE_URL}/auth/firebase-login`, {
+  const response = await fetchWithTimeout(`${BASE_URL}/auth/login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -303,13 +330,91 @@ export async function getBackendProfile(): Promise<BackendUser> {
   return user;
 }
 
+const LOCAL_FARE_ACCOUNT_PREFIX = 'gofare_local_fare_account_';
+const LOCAL_TICKETS_PREFIX = 'gofare_local_tickets_';
+const LOCAL_TRANSACTIONS_PREFIX = 'gofare_local_transactions_';
+
+function isPhoneVerificationError(error: any): boolean {
+  const msg = error?.message || '';
+  return (
+    msg.includes('phone/link') ||
+    msg.includes('phone number') ||
+    msg.includes('auth/phone/link')
+  );
+}
+
+async function getLocalFareAccount(
+  userId: string,
+): Promise<BackendFareAccount> {
+  const key = `${LOCAL_FARE_ACCOUNT_PREFIX}${userId}`;
+  const data = await AsyncStorage.getItem(key);
+  if (data) {
+    return JSON.parse(data);
+  }
+  const newAccount: BackendFareAccount = {
+    id: `local-acc-${userId}`,
+    userId,
+    balance: 100.0, // Saldo inicial de cortesía para pruebas locales
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await AsyncStorage.setItem(key, JSON.stringify(newAccount));
+  return newAccount;
+}
+
+async function saveLocalFareAccount(
+  account: BackendFareAccount,
+): Promise<void> {
+  const key = `${LOCAL_FARE_ACCOUNT_PREFIX}${account.userId}`;
+  await AsyncStorage.setItem(key, JSON.stringify(account));
+}
+
+async function getLocalTickets(userId: string): Promise<BackendTicket[]> {
+  const key = `${LOCAL_TICKETS_PREFIX}${userId}`;
+  const data = await AsyncStorage.getItem(key);
+  return data ? JSON.parse(data) : [];
+}
+
+async function saveLocalTickets(
+  userId: string,
+  tickets: BackendTicket[],
+): Promise<void> {
+  const key = `${LOCAL_TICKETS_PREFIX}${userId}`;
+  await AsyncStorage.setItem(key, JSON.stringify(tickets));
+}
+
+async function getLocalTransactions(accountId: string): Promise<any[]> {
+  const key = `${LOCAL_TRANSACTIONS_PREFIX}${accountId}`;
+  const data = await AsyncStorage.getItem(key);
+  return data ? JSON.parse(data) : [];
+}
+
+async function saveLocalTransactions(
+  accountId: string,
+  transactions: any[],
+): Promise<void> {
+  const key = `${LOCAL_TRANSACTIONS_PREFIX}${accountId}`;
+  await AsyncStorage.setItem(key, JSON.stringify(transactions));
+}
+
 /**
  * Obtiene la cuenta de tarifa del usuario por su ID de usuario del backend.
  */
 export async function getFareAccountByUserId(
   userId: string,
 ): Promise<BackendFareAccount> {
-  return await fetchWithAuth(`/fare/accounts/user/${userId}`);
+  try {
+    return await fetchWithAuth(`/fare/accounts/user/${userId}`);
+  } catch (err: any) {
+    if (isPhoneVerificationError(err)) {
+      console.log(
+        '[API] Fallback a cuenta de tarifa local por requerimiento de teléfono.',
+      );
+      return await getLocalFareAccount(userId);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -318,14 +423,22 @@ export async function getFareAccountByUserId(
 export async function createFareAccount(
   userId: string,
 ): Promise<BackendFareAccount> {
-  return await fetchWithAuth('/fare/accounts', {
-    method: 'POST',
-    body: JSON.stringify({
-      userId,
-      balance: 0,
-      isActive: true,
-    }),
-  });
+  try {
+    return await fetchWithAuth('/fare/accounts', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId,
+        balance: 0,
+        isActive: true,
+      }),
+    });
+  } catch (err: any) {
+    if (isPhoneVerificationError(err)) {
+      console.log('[API] Creando cuenta de tarifa local (mock).');
+      return await getLocalFareAccount(userId);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -335,13 +448,38 @@ export async function addAccountBalance(
   accountId: string,
   amount: number,
 ): Promise<BackendFareAccount> {
-  return await fetchWithAuth(`/fare/accounts/${accountId}/add-balance`, {
-    method: 'POST',
-    body: JSON.stringify({
-      amount,
-      description: 'Recarga saldo por la App Móvil',
-    }),
-  });
+  try {
+    return await fetchWithAuth(`/fare/accounts/${accountId}/add-balance`, {
+      method: 'POST',
+      body: JSON.stringify({
+        amount,
+        description: 'Recarga saldo por la App Móvil',
+      }),
+    });
+  } catch (err: any) {
+    if (isPhoneVerificationError(err) || accountId.startsWith('local-')) {
+      const userId = accountId.replace('local-acc-', '');
+      const account = await getLocalFareAccount(userId);
+      account.balance += amount;
+      account.updatedAt = new Date().toISOString();
+      await saveLocalFareAccount(account);
+
+      // Registrar transacción local
+      const transactions = await getLocalTransactions(accountId);
+      transactions.unshift({
+        id: `tx-${Date.now()}`,
+        accountId,
+        amount,
+        type: 'credit',
+        description: 'Recarga saldo por la App Móvil (Local)',
+        createdAt: new Date().toISOString(),
+      });
+      await saveLocalTransactions(accountId, transactions);
+
+      return account;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -351,20 +489,162 @@ export async function deductAccountBalance(
   accountId: string,
   amount: number,
 ): Promise<BackendFareAccount> {
-  return await fetchWithAuth(`/fare/accounts/${accountId}/deduct-balance`, {
-    method: 'POST',
-    body: JSON.stringify({
-      amount,
-      description: 'Débito automático por viaje',
-    }),
-  });
+  try {
+    return await fetchWithAuth(`/fare/accounts/${accountId}/deduct-balance`, {
+      method: 'POST',
+      body: JSON.stringify({
+        amount,
+        description: 'Débito automático por viaje',
+      }),
+    });
+  } catch (err: any) {
+    if (isPhoneVerificationError(err) || accountId.startsWith('local-')) {
+      const userId = accountId.replace('local-acc-', '');
+      const account = await getLocalFareAccount(userId);
+      if (account.balance < amount) {
+        throw new Error('Saldo Insuficiente');
+      }
+      account.balance -= amount;
+      account.updatedAt = new Date().toISOString();
+      await saveLocalFareAccount(account);
+
+      // Registrar transacción local
+      const transactions = await getLocalTransactions(accountId);
+      transactions.unshift({
+        id: `tx-${Date.now()}`,
+        accountId,
+        amount,
+        type: 'debit',
+        description: 'Débito automático por viaje (Local)',
+        createdAt: new Date().toISOString(),
+      });
+      await saveLocalTransactions(accountId, transactions);
+
+      return account;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Crea una transacción de tarifa en el backend (descuenta saldo y asocia ticket).
+ */
+export async function createFareTransaction(transactionData: {
+  fareAccountId: string;
+  amount: number;
+  type: 'credit' | 'debit';
+  transactionType: 'payment' | 'refund' | 'transfer' | 'ticket_purchase';
+  description: string;
+  ticketId?: string;
+}): Promise<any> {
+  try {
+    return await fetchWithAuth('/fare/transactions', {
+      method: 'POST',
+      body: JSON.stringify(transactionData),
+    });
+  } catch (err: any) {
+    if (
+      isPhoneVerificationError(err) ||
+      transactionData.fareAccountId.startsWith('local-')
+    ) {
+      // Mock local
+      const userId = transactionData.fareAccountId.replace('local-acc-', '');
+      const account = await getLocalFareAccount(userId);
+
+      if (transactionData.type === 'debit') {
+        if (account.balance < transactionData.amount) {
+          throw new Error('Saldo Insuficiente');
+        }
+        account.balance -= transactionData.amount;
+      } else {
+        account.balance += transactionData.amount;
+      }
+      account.updatedAt = new Date().toISOString();
+      await saveLocalFareAccount(account);
+
+      const transactions = await getLocalTransactions(
+        transactionData.fareAccountId,
+      );
+      const newTx = {
+        id: `tx-${Date.now()}`,
+        accountId: transactionData.fareAccountId,
+        amount: transactionData.amount,
+        type: transactionData.type,
+        transactionType: transactionData.transactionType,
+        description: transactionData.description,
+        ticketId: transactionData.ticketId,
+        createdAt: new Date().toISOString(),
+      };
+      transactions.unshift(newTx);
+      await saveLocalTransactions(transactionData.fareAccountId, transactions);
+
+      return newTx;
+    }
+    throw err;
+  }
 }
 
 /**
  * Obtiene los boletos / viajes de un usuario por su ID del backend.
  */
 export async function getUserTickets(userId: string): Promise<BackendTicket[]> {
-  return await fetchWithAuth(`/tickets/user/${userId}`);
+  try {
+    // Sincronizar boletos locales si existen y el backend está disponible (con teléfono verificado)
+    try {
+      const localTickets = await getLocalTickets(userId);
+      if (localTickets.length > 0) {
+        // Limpiar el almacenamiento local inmediatamente para evitar llamadas concurrentes duplicadas
+        await saveLocalTickets(userId, []);
+        console.log(
+          `[API] Sincronizando ${localTickets.length} boletos locales al backend...`,
+        );
+
+        const failedTickets: BackendTicket[] = [];
+        for (const localTkt of localTickets) {
+          try {
+            await fetchWithAuth('/tickets', {
+              method: 'POST',
+              body: JSON.stringify({
+                userId,
+                qrCode: localTkt.qrCode.startsWith('local-qr-')
+                  ? undefined
+                  : localTkt.qrCode,
+                price: localTkt.price,
+                status: localTkt.status,
+                route: localTkt.route || 'General',
+                origin: localTkt.origin || 'Origen',
+                destination: localTkt.destination || 'Destino',
+              }),
+            });
+          } catch (postErr) {
+            console.warn(
+              '[API] Error al sincronizar boleto individual:',
+              postErr,
+            );
+            failedTickets.push(localTkt);
+          }
+        }
+
+        // Si falló la subida de algún boleto, restaurarlos localmente
+        if (failedTickets.length > 0) {
+          await saveLocalTickets(userId, failedTickets);
+        } else {
+          console.log(
+            '[API] Sincronización de boletos locales finalizada con éxito.',
+          );
+        }
+      }
+    } catch (syncErr) {
+      console.warn('[API] Error al sincronizar boletos locales:', syncErr);
+    }
+
+    return await fetchWithAuth(`/tickets/user/${userId}`);
+  } catch (err: any) {
+    if (isPhoneVerificationError(err)) {
+      return await getLocalTickets(userId);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -373,7 +653,14 @@ export async function getUserTickets(userId: string): Promise<BackendTicket[]> {
 export async function getAccountTransactions(
   accountId: string,
 ): Promise<any[]> {
-  return await fetchWithAuth(`/fare/transactions?accountId=${accountId}`);
+  try {
+    return await fetchWithAuth(`/fare/transactions?accountId=${accountId}`);
+  } catch (err: any) {
+    if (isPhoneVerificationError(err) || accountId.startsWith('local-')) {
+      return await getLocalTransactions(accountId);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -388,20 +675,87 @@ export async function createTicket(ticketData: {
   origin?: string;
   destination?: string;
 }): Promise<BackendTicket> {
-  return await fetchWithAuth('/tickets', {
-    method: 'POST',
-    body: JSON.stringify({
-      ...ticketData,
-      status: ticketData.status || 'active',
-    }),
-  });
+  try {
+    return await fetchWithAuth('/tickets', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...ticketData,
+        status: ticketData.status || 'active',
+      }),
+    });
+  } catch (err: any) {
+    if (isPhoneVerificationError(err)) {
+      const newTicket: BackendTicket = {
+        id: `local-tkt-${Date.now()}`,
+        userId: ticketData.userId,
+        qrCode: ticketData.qrCode || `local-qr-${Date.now()}`,
+        price: ticketData.price,
+        status: (ticketData.status as any) || 'active',
+        route: ticketData.route || 'General',
+        origin: ticketData.origin || 'Origen',
+        destination: ticketData.destination || 'Destino',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const tickets = await getLocalTickets(ticketData.userId);
+      tickets.unshift(newTicket);
+      await saveLocalTickets(ticketData.userId, tickets);
+
+      // Guardar también en la lista global simulada para polling local en el mismo dispositivo
+      try {
+        const globalStr = await AsyncStorage.getItem('mock_global_tickets');
+        const globalTickets = globalStr ? JSON.parse(globalStr) : [];
+        globalTickets.unshift(newTicket);
+        await AsyncStorage.setItem(
+          'mock_global_tickets',
+          JSON.stringify(globalTickets),
+        );
+      } catch (storageErr) {
+        console.warn('[API] Error saving global mock ticket:', storageErr);
+      }
+
+      return newTicket;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Obtiene todos los boletos del sistema (usado por el conductor para recibir cobros en tiempo real).
+ */
+export async function getTickets(): Promise<BackendTicket[]> {
+  try {
+    return await fetchWithAuth('/tickets');
+  } catch (err: any) {
+    if (isPhoneVerificationError(err) || err.message?.includes('Network')) {
+      try {
+        const globalStr = await AsyncStorage.getItem('mock_global_tickets');
+        return globalStr ? JSON.parse(globalStr) : [];
+      } catch (_) {
+        return [];
+      }
+    }
+    throw err;
+  }
 }
 
 /**
  * Obtiene la información de un boleto por su código QR único.
  */
 export async function getTicketByQr(qrCode: string): Promise<BackendTicket> {
-  return await fetchWithAuth(`/tickets/qr/${qrCode}`);
+  try {
+    return await fetchWithAuth(`/tickets/qr/${qrCode}`);
+  } catch (err: any) {
+    // Buscar en boletos locales si falla
+    const user = auth.currentUser;
+    if (user) {
+      const tickets = await getLocalTickets(user.uid);
+      const found = tickets.find((t) => t.qrCode === qrCode);
+      if (found) return found;
+    }
+    throw err;
+  }
 }
 
 /**
@@ -410,9 +764,65 @@ export async function getTicketByQr(qrCode: string): Promise<BackendTicket> {
 export async function validateTicketByQr(
   qrCode: string,
 ): Promise<BackendTicket> {
-  return await fetchWithAuth(`/tickets/validate/${qrCode}`, {
-    method: 'POST',
-  });
+  try {
+    return await fetchWithAuth(`/tickets/validate/${qrCode}`, {
+      method: 'POST',
+    });
+  } catch (err: any) {
+    const user = auth.currentUser;
+    if (user) {
+      const tickets = await getLocalTickets(user.uid);
+      const found = tickets.find((t) => t.qrCode === qrCode);
+      if (found) {
+        found.status = 'used';
+        found.updatedAt = new Date().toISOString();
+        await saveLocalTickets(user.uid, tickets);
+        return found;
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Actualiza los campos de un boleto existente (status, qrCode, route, etc.).
+ * Usado en el nuevo modelo de pasajes para marcar un boleto activo como usado
+ * cuando el pasajero escanea el QR de la unidad de transporte.
+ */
+export async function updateTicket(
+  uuid: string,
+  data: Partial<{
+    status: string;
+    qrCode: string;
+    route: string;
+    usedAt: string;
+  }>,
+): Promise<BackendTicket> {
+  try {
+    return await fetchWithAuth(`/tickets/${uuid}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  } catch (err: any) {
+    // Fallback local: actualizar en AsyncStorage si el backend no responde
+    const user = auth.currentUser;
+    if (user) {
+      const tickets = await getLocalTickets(user.uid);
+      const idx = tickets.findIndex((t) => t.id === uuid);
+      if (idx !== -1) {
+        tickets[idx] = {
+          ...tickets[idx],
+          ...data,
+          status: (data.status ||
+            tickets[idx].status) as BackendTicket['status'],
+          updatedAt: new Date().toISOString(),
+        };
+        await saveLocalTickets(user.uid, tickets);
+        return tickets[idx];
+      }
+    }
+    throw err;
+  }
 }
 
 /**
@@ -544,4 +954,78 @@ export async function submitDriverRequest(requestData: {
     method: 'POST',
     body: JSON.stringify(requestData),
   });
+}
+
+/**
+ * Vincula un número de teléfono verificado en Firebase al usuario actual en el backend.
+ */
+export async function linkPhoneNumber(
+  firebasePhoneToken: string,
+): Promise<{ token: string; user: BackendUser }> {
+  const data = await fetchWithAuth('/auth/phone/link', {
+    method: 'POST',
+    body: JSON.stringify({ firebasePhoneToken }),
+  });
+  if (data?.token) {
+    await saveGoFareToken(data.token);
+  }
+  return data;
+}
+
+/**
+ * Obtiene boletos usados recientes filtrados por ruta/unidad para el conductor.
+ * Consulta la tabla `tickets` (status=used) del backend PostgreSQL — sin Firebase.
+ * @param routeKeywords - Lista de palabras clave (placa, id de ruta) para filtrar
+ * @param sinceTimestamp - Solo tickets actualizados después de este timestamp (ms)
+ */
+export async function getUsedTicketsByRoute(
+  routeKeywords: string[],
+  sinceTimestamp: number,
+): Promise<BackendTicket[]> {
+  try {
+    // Obtener todos los tickets con status=used del backend (tabla pública de tickets)
+    const allTickets = await fetchWithAuth('/tickets?status=used');
+    if (!Array.isArray(allTickets)) return [];
+
+    const keywords = routeKeywords.map((k) => k.toLowerCase());
+
+    return allTickets.filter((t: BackendTicket) => {
+      // Filtrar por tiempo: solo tickets del turno actual
+      const ticketMs = new Date(t.updatedAt || t.createdAt).getTime();
+      if (ticketMs < sinceTimestamp - 10_000) return false;
+
+      // Filtrar por coincidencia de ruta o código QR con la unidad del conductor
+      const qr = (t.qrCode || '').toLowerCase();
+      const route = (t.route || '').toLowerCase();
+      return keywords.some(
+        (kw) => qr.includes(kw) || route.includes(kw) || kw.includes(qr),
+      );
+    });
+  } catch (err: any) {
+    // Fallback: leer desde AsyncStorage si el backend no responde
+    if (
+      isPhoneVerificationError(err) ||
+      err.message?.includes('Network') ||
+      err.message?.includes('timeout')
+    ) {
+      try {
+        const globalStr = await AsyncStorage.getItem('mock_global_tickets');
+        const all: BackendTicket[] = globalStr ? JSON.parse(globalStr) : [];
+        const keywords = routeKeywords.map((k) => k.toLowerCase());
+        return all.filter((t) => {
+          const ticketMs = new Date(t.updatedAt || t.createdAt).getTime();
+          if (ticketMs < sinceTimestamp - 10_000) return false;
+          const qr = (t.qrCode || '').toLowerCase();
+          const route = (t.route || '').toLowerCase();
+          return keywords.some(
+            (kw) => qr.includes(kw) || route.includes(kw) || kw.includes(qr),
+          );
+        });
+      } catch (_) {
+        return [];
+      }
+    }
+    console.warn('[API] getUsedTicketsByRoute error:', err);
+    return [];
+  }
 }

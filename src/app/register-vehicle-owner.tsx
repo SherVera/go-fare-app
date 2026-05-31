@@ -90,8 +90,8 @@ export default function RegisterVehicleOwnerScreen() {
     const trimmedPassword = password.trim();
     const trimmedPhoneNumber = phoneNumber.trim();
 
-    const trimmedBusinessName = businessName.trim();
-    const trimmedOwnerIdNumber = ownerIdNumber.trim();
+    const _trimmedBusinessName = businessName.trim();
+    const _trimmedOwnerIdNumber = ownerIdNumber.trim();
 
     // ── Validaciones Datos de Usuario ──
     if (trimmedFullName.length < 3) {
