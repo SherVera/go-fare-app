@@ -47,3 +47,20 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Agents & AI assistants
+.agents/
+.claude/
+
+# Tokens and private data
+token.txt
+
+# Database sessions / logs
+*.sql
+
+# Firebase local configurations
+.firebase/
+.firebaserc
+firebase.json
+dataconnect/
+
