@@ -28,9 +28,24 @@ interface RouteOption {
 }
 
 const ROUTE_OPTIONS: RouteOption[] = [
-  { id: 'r1', name: 'Ruta 201: Chacaíto - El Hatillo', fare: 15.0, plate: 'xy987zt' },
-  { id: 'r2', name: 'Ruta L1: Propatria - Palo Verde', fare: 20.0, plate: 'ab123cd' },
-  { id: 'r3', name: 'Ruta 102: Plaza Venezuela - Baruta', fare: 12.0, plate: 'ef456gh' },
+  {
+    id: 'r1',
+    name: 'Ruta 201: Chacaíto - El Hatillo',
+    fare: 15.0,
+    plate: 'xy987zt',
+  },
+  {
+    id: 'r2',
+    name: 'Ruta L1: Propatria - Palo Verde',
+    fare: 20.0,
+    plate: 'ab123cd',
+  },
+  {
+    id: 'r3',
+    name: 'Ruta 102: Plaza Venezuela - Baruta',
+    fare: 12.0,
+    plate: 'ef456gh',
+  },
 ];
 
 export default function DriverScanScreen() {
@@ -71,13 +86,18 @@ export default function DriverScanScreen() {
           activeRoute.name.toLowerCase().split(':')[0].trim(),
         ];
 
-        const usedTickets = await getUsedTicketsByRoute(keywords, sessionStartedAt);
+        const usedTickets = await getUsedTicketsByRoute(
+          keywords,
+          sessionStartedAt,
+        );
 
         for (const ticket of usedTickets) {
           if (processedIds.has(ticket.id)) continue;
           processedIds.add(ticket.id);
 
-          const ticketTime = new Date(ticket.updatedAt || ticket.createdAt).getTime();
+          const ticketTime = new Date(
+            ticket.updatedAt || ticket.createdAt,
+          ).getTime();
           const fare = Number(ticket.price) || activeRoute.fare;
           const timeStr = new Date(ticketTime).toLocaleTimeString('es-VE', {
             hour: '2-digit',
@@ -95,7 +115,9 @@ export default function DriverScanScreen() {
           };
 
           // 1. Guardar en AsyncStorage
-          const localListStr = await AsyncStorage.getItem('mock_validated_tickets');
+          const localListStr = await AsyncStorage.getItem(
+            'mock_validated_tickets',
+          );
           const localList = localListStr ? JSON.parse(localListStr) : [];
 
           if (!localList.some((p: any) => p.id === ticket.id)) {
@@ -120,7 +142,9 @@ export default function DriverScanScreen() {
 
             // 4. Haptic feedback
             try {
-              await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              await Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
             } catch (_) {}
 
             setTimeout(() => setSuccessNotification(null), 4000);

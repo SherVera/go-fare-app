@@ -23,10 +23,28 @@ import {
 import { tokens } from '@/theme/tokens';
 
 const RECHARGE_PACKAGES = [
-  { tickets: 1,  amount: 15,  label: '1 Pasaje',   desc: 'Bs. 15,00',   tag: null },
-  { tickets: 2,  amount: 28,  label: '2 Pasajes',  desc: 'Bs. 28,00',   tag: 'AHORRA Bs. 2' },
-  { tickets: 5,  amount: 65,  label: '5 Pasajes',  desc: 'Bs. 65,00',   tag: 'AHORRA Bs. 10' },
-  { tickets: 10, amount: 120, label: '10 Pasajes', desc: 'Bs. 120,00',  tag: 'POPULAR' },
+  { tickets: 1, amount: 15, label: '1 Pasaje', desc: 'Bs. 15,00', tag: null },
+  {
+    tickets: 2,
+    amount: 28,
+    label: '2 Pasajes',
+    desc: 'Bs. 28,00',
+    tag: 'AHORRA Bs. 2',
+  },
+  {
+    tickets: 5,
+    amount: 65,
+    label: '5 Pasajes',
+    desc: 'Bs. 65,00',
+    tag: 'AHORRA Bs. 10',
+  },
+  {
+    tickets: 10,
+    amount: 120,
+    label: '10 Pasajes',
+    desc: 'Bs. 120,00',
+    tag: 'POPULAR',
+  },
 ];
 
 const PAYMENT_METHODS: PaymentMethod[] = [
@@ -73,7 +91,9 @@ export default function TopUpBalanceScreen() {
 
   // Modal de pago
   const [showModal, setShowModal] = useState(false);
-  const [payStep, setPayStep] = useState<'details' | 'processing' | 'success'>('details');
+  const [payStep, setPayStep] = useState<'details' | 'processing' | 'success'>(
+    'details',
+  );
 
   // Campos de Pago Móvil
   const [pmBank, setPmBank] = useState('Banesco');
@@ -132,7 +152,10 @@ export default function TopUpBalanceScreen() {
     // Validaciones
     if (selectedMethod === 'pago_movil') {
       if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(pmPhone.trim())) {
-        Alert.alert('Atención', 'Ingresa un número de Pago Móvil válido (11 dígitos).');
+        Alert.alert(
+          'Atención',
+          'Ingresa un número de Pago Móvil válido (11 dígitos).',
+        );
         return;
       }
       if (!/^\d{5,10}$/.test(pmIdNumber.trim())) {
@@ -141,7 +164,11 @@ export default function TopUpBalanceScreen() {
       }
     } else if (selectedMethod === 'tarjeta') {
       const cleanCard = cardNumber.replace(/\s+/g, '');
-      if (cardHolder.trim().length < 3 || cleanCard.length < 15 || cleanCard.length > 16) {
+      if (
+        cardHolder.trim().length < 3 ||
+        cleanCard.length < 15 ||
+        cleanCard.length > 16
+      ) {
         Alert.alert('Atención', 'Verifica los datos de tu tarjeta.');
         return;
       }
@@ -163,7 +190,10 @@ export default function TopUpBalanceScreen() {
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Acreditar cantidad de pasajes/boletos en el backend (fare_accounts)
-      const updatedAccount = await addAccountBalance(accountId, selectedPkg.tickets);
+      const updatedAccount = await addAccountBalance(
+        accountId,
+        selectedPkg.tickets,
+      );
       setBalance(Number(updatedAccount.balance));
       setPayStep('success');
     } catch (error: any) {
@@ -217,23 +247,40 @@ export default function TopUpBalanceScreen() {
             <View>
               <Text style={styles.ticketCardLabel}>BOLETOS DISPONIBLES</Text>
               {loadingBalance ? (
-                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginTop: 8 }} />
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                  style={{ marginTop: 8 }}
+                />
               ) : (
-                <Text style={styles.ticketCardCount}>{Math.floor(balance)}</Text>
+                <Text style={styles.ticketCardCount}>
+                  {Math.floor(balance)}
+                </Text>
               )}
               <Text style={styles.ticketCardSub}>
-                {Math.floor(balance)} {Math.floor(balance) === 1 ? 'pasaje activo listo para usar' : 'pasajes activos listos para usar'}
+                {Math.floor(balance)}{' '}
+                {Math.floor(balance) === 1
+                  ? 'pasaje activo listo para usar'
+                  : 'pasajes activos listos para usar'}
               </Text>
             </View>
             <View style={styles.ticketIconWrapper}>
-              <MaterialCommunityIcons name="ticket-confirmation" size={40} color="rgba(255,255,255,0.9)" />
+              <MaterialCommunityIcons
+                name="ticket-confirmation"
+                size={40}
+                color="rgba(255,255,255,0.9)"
+              />
             </View>
           </View>
 
           <View style={styles.ticketCardDivider} />
 
           <View style={styles.ticketCardBottom}>
-            <Ionicons name="information-circle-outline" size={14} color="rgba(255,255,255,0.7)" />
+            <Ionicons
+              name="information-circle-outline"
+              size={14}
+              color="rgba(255,255,255,0.7)"
+            />
             <Text style={styles.ticketCardNote}>
               {'  '}Cada boleto = 1 pasaje. Usa en cualquier unidad GoFare.
             </Text>
@@ -252,28 +299,55 @@ export default function TopUpBalanceScreen() {
                 onPress={() => setSelectedPkg(pkg)}
               >
                 {pkg.tag && (
-                  <View style={[styles.pkgTag, isSelected && styles.pkgTagSelected]}>
-                    <Text style={[styles.pkgTagText, isSelected && styles.pkgTagTextSelected]}>
+                  <View
+                    style={[styles.pkgTag, isSelected && styles.pkgTagSelected]}
+                  >
+                    <Text
+                      style={[
+                        styles.pkgTagText,
+                        isSelected && styles.pkgTagTextSelected,
+                      ]}
+                    >
                       {pkg.tag}
                     </Text>
                   </View>
                 )}
-                <View style={[styles.pkgIconWrapper, isSelected && styles.pkgIconWrapperSelected]}>
+                <View
+                  style={[
+                    styles.pkgIconWrapper,
+                    isSelected && styles.pkgIconWrapperSelected,
+                  ]}
+                >
                   <MaterialCommunityIcons
                     name="ticket"
                     size={26}
                     color={isSelected ? '#FFFFFF' : tokens.colors.primary}
                   />
                   {pkg.tickets > 1 && (
-                    <Text style={[styles.pkgQtyOverlay, isSelected && { color: tokens.colors.primary }]}>
+                    <Text
+                      style={[
+                        styles.pkgQtyOverlay,
+                        isSelected && { color: tokens.colors.primary },
+                      ]}
+                    >
                       x{pkg.tickets}
                     </Text>
                   )}
                 </View>
-                <Text style={[styles.pkgLabel, isSelected && styles.pkgLabelSelected]}>
+                <Text
+                  style={[
+                    styles.pkgLabel,
+                    isSelected && styles.pkgLabelSelected,
+                  ]}
+                >
                   {pkg.label}
                 </Text>
-                <Text style={[styles.pkgPrice, isSelected && styles.pkgPriceSelected]}>
+                <Text
+                  style={[
+                    styles.pkgPrice,
+                    isSelected && styles.pkgPriceSelected,
+                  ]}
+                >
                   {pkg.desc}
                 </Text>
               </Pressable>
@@ -288,10 +362,18 @@ export default function TopUpBalanceScreen() {
           return (
             <Pressable
               key={method.id}
-              style={[styles.methodCard, isSelected && styles.methodCardSelected]}
+              style={[
+                styles.methodCard,
+                isSelected && styles.methodCardSelected,
+              ]}
               onPress={() => setSelectedMethod(method.id)}
             >
-              <View style={[styles.methodIconWrapper, { backgroundColor: method.iconBgColor }]}>
+              <View
+                style={[
+                  styles.methodIconWrapper,
+                  { backgroundColor: method.iconBgColor },
+                ]}
+              >
                 <MaterialCommunityIcons
                   name={method.iconName as any}
                   size={22}
@@ -302,7 +384,12 @@ export default function TopUpBalanceScreen() {
                 <Text style={styles.methodTitle}>{method.title}</Text>
                 <Text style={styles.methodSubtitle}>{method.subtitle}</Text>
               </View>
-              <View style={[styles.radioOuter, isSelected && { borderColor: tokens.colors.primary }]}>
+              <View
+                style={[
+                  styles.radioOuter,
+                  isSelected && { borderColor: tokens.colors.primary },
+                ]}
+              >
                 {isSelected && <View style={styles.radioInner} />}
               </View>
             </Pressable>
@@ -313,9 +400,7 @@ export default function TopUpBalanceScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Paquete seleccionado</Text>
-            <Text style={styles.summaryValue}>
-              {selectedPkg.label}
-            </Text>
+            <Text style={styles.summaryValue}>{selectedPkg.label}</Text>
           </View>
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Comisión Pasarela (0%)</Text>
@@ -332,9 +417,15 @@ export default function TopUpBalanceScreen() {
 
         {/* Botón principal */}
         <Pressable style={styles.mainButton} onPress={handleOpenModal}>
-          <MaterialCommunityIcons name="ticket-confirmation" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <MaterialCommunityIcons
+            name="ticket-confirmation"
+            size={20}
+            color="#FFFFFF"
+            style={{ marginRight: 8 }}
+          />
           <Text style={styles.mainButtonText}>
-            Comprar Boletos — Bs. {selectedPkg.amount.toFixed(2).replace('.', ',')}
+            Comprar Boletos — Bs.{' '}
+            {selectedPkg.amount.toFixed(2).replace('.', ',')}
           </Text>
         </Pressable>
 
@@ -356,7 +447,9 @@ export default function TopUpBalanceScreen() {
             {payStep !== 'processing' && (
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>
-                  {payStep === 'details' ? 'Confirmar Compra' : '¡Compra Exitosa!'}
+                  {payStep === 'details'
+                    ? 'Confirmar Compra'
+                    : '¡Compra Exitosa!'}
                 </Text>
                 {payStep === 'details' && (
                   <Pressable onPress={() => setShowModal(false)} hitSlop={10}>
@@ -368,12 +461,21 @@ export default function TopUpBalanceScreen() {
 
             {/* PASO 1: Detalles de pago */}
             {payStep === 'details' && (
-              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+              >
                 {/* Resumen de compra */}
                 <View style={styles.purchaseSummaryBox}>
-                  <MaterialCommunityIcons name="ticket-confirmation" size={32} color={tokens.colors.primary} />
+                  <MaterialCommunityIcons
+                    name="ticket-confirmation"
+                    size={32}
+                    color={tokens.colors.primary}
+                  />
                   <View style={{ marginLeft: 12 }}>
-                    <Text style={styles.purchaseSummaryTitle}>Compra de Boletos</Text>
+                    <Text style={styles.purchaseSummaryTitle}>
+                      Compra de Boletos
+                    </Text>
                     <Text style={styles.purchaseSummaryPrice}>
                       {selectedPkg.label}
                     </Text>
@@ -384,7 +486,8 @@ export default function TopUpBalanceScreen() {
                 {selectedMethod === 'pago_movil' && (
                   <View style={styles.formContainer}>
                     <Text style={styles.infoBox}>
-                      Realiza el Pago Móvil a los datos y luego ingresa la referencia:{'\n'}
+                      Realiza el Pago Móvil a los datos y luego ingresa la
+                      referencia:{'\n'}
                       <Text style={{ fontWeight: 'bold' }}>
                         Banco: Banesco • RIF: J-48291048 • Tel: 0412-5551234
                       </Text>
@@ -392,17 +495,27 @@ export default function TopUpBalanceScreen() {
 
                     <Text style={styles.inputLabel}>BANCO EMISOR</Text>
                     <View style={styles.bankPickerRow}>
-                      {['Banesco', 'Mercantil', 'Provincial', 'Venezuela'].map((b) => (
-                        <Pressable
-                          key={b}
-                          style={[styles.bankBubble, pmBank === b && styles.bankBubbleActive]}
-                          onPress={() => setPmBank(b)}
-                        >
-                          <Text style={[styles.bankBubbleText, pmBank === b && styles.bankBubbleTextActive]}>
-                            {b}
-                          </Text>
-                        </Pressable>
-                      ))}
+                      {['Banesco', 'Mercantil', 'Provincial', 'Venezuela'].map(
+                        (b) => (
+                          <Pressable
+                            key={b}
+                            style={[
+                              styles.bankBubble,
+                              pmBank === b && styles.bankBubbleActive,
+                            ]}
+                            onPress={() => setPmBank(b)}
+                          >
+                            <Text
+                              style={[
+                                styles.bankBubbleText,
+                                pmBank === b && styles.bankBubbleTextActive,
+                              ]}
+                            >
+                              {b}
+                            </Text>
+                          </Pressable>
+                        ),
+                      )}
                     </View>
 
                     <Text style={styles.inputLabel}>TELÉFONO</Text>
@@ -495,7 +608,8 @@ export default function TopUpBalanceScreen() {
                       <Text style={{ fontWeight: 'bold' }}>
                         {(selectedPkg.amount / 36.5).toFixed(4)} USDT
                       </Text>{' '}
-                      a la dirección de Binance Pay y pega el hash de la transacción.
+                      a la dirección de Binance Pay y pega el hash de la
+                      transacción.
                     </Text>
                     <Text style={styles.inputLabel}>HASH DE TRANSACCIÓN</Text>
                     <TextInput
@@ -509,9 +623,13 @@ export default function TopUpBalanceScreen() {
                   </View>
                 )}
 
-                <Pressable style={styles.confirmBtn} onPress={handleConfirmPurchase}>
+                <Pressable
+                  style={styles.confirmBtn}
+                  onPress={handleConfirmPurchase}
+                >
                   <Text style={styles.confirmBtnText}>
-                    Confirmar Compra — Bs. {selectedPkg.amount.toFixed(2).replace('.', ',')}
+                    Confirmar Compra — Bs.{' '}
+                    {selectedPkg.amount.toFixed(2).replace('.', ',')}
                   </Text>
                 </Pressable>
                 <View style={{ height: 24 }} />
@@ -521,8 +639,14 @@ export default function TopUpBalanceScreen() {
             {/* PASO 2: Procesando */}
             {payStep === 'processing' && (
               <View style={styles.processingContainer}>
-                <ActivityIndicator size="large" color={tokens.colors.primary} style={{ marginBottom: 20 }} />
-                <Text style={styles.processingTitle}>Procesando tu Compra...</Text>
+                <ActivityIndicator
+                  size="large"
+                  color={tokens.colors.primary}
+                  style={{ marginBottom: 20 }}
+                />
+                <Text style={styles.processingTitle}>
+                  Procesando tu Compra...
+                </Text>
                 <Text style={styles.processingSubtitle}>
                   Verificando pago y acreditando los boletos a tu cuenta.
                 </Text>
@@ -538,9 +662,16 @@ export default function TopUpBalanceScreen() {
                 <Text style={styles.successTitle}>¡Compra Exitosa!</Text>
                 <Text style={styles.successSubtitle}>
                   Tus nuevos boletos disponibles son{' '}
-                  <Text style={{ fontFamily: tokens.typography.fontFamily.black, color: tokens.colors.primary }}>
-                    {Math.floor(balance)} {Math.floor(balance) === 1 ? 'pasaje' : 'pasajes'}
-                  </Text>.
+                  <Text
+                    style={{
+                      fontFamily: tokens.typography.fontFamily.black,
+                      color: tokens.colors.primary,
+                    }}
+                  >
+                    {Math.floor(balance)}{' '}
+                    {Math.floor(balance) === 1 ? 'pasaje' : 'pasajes'}
+                  </Text>
+                  .
                 </Text>
 
                 {/* Mini-ticket de comprobante */}
@@ -558,16 +689,24 @@ export default function TopUpBalanceScreen() {
                   <View style={styles.receiptRow}>
                     <Text style={styles.receiptLabel}>MÉTODO</Text>
                     <Text style={styles.receiptValue}>
-                      {PAYMENT_METHODS.find((m) => m.id === selectedMethod)?.title}
+                      {
+                        PAYMENT_METHODS.find((m) => m.id === selectedMethod)
+                          ?.title
+                      }
                     </Text>
                   </View>
                   <View style={styles.receiptRow}>
                     <Text style={styles.receiptLabel}>ESTADO</Text>
-                    <Text style={[styles.receiptValue, { color: '#10B981' }]}>CONFIRMADO ✓</Text>
+                    <Text style={[styles.receiptValue, { color: '#10B981' }]}>
+                      CONFIRMADO ✓
+                    </Text>
                   </View>
                 </View>
 
-                <Pressable style={styles.successBtn} onPress={handleCloseSuccess}>
+                <Pressable
+                  style={styles.successBtn}
+                  onPress={handleCloseSuccess}
+                >
                   <Text style={styles.successBtnText}>¡Listo, Gracias!</Text>
                 </Pressable>
               </View>
@@ -609,7 +748,11 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 12,
   },
-  ticketCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  ticketCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   ticketCardLabel: {
     color: 'rgba(255,255,255,0.8)',
     fontSize: 11,
@@ -765,7 +908,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 1,
   },
-  methodCardSelected: { borderColor: tokens.colors.primary, backgroundColor: '#F0F9FF' },
+  methodCardSelected: {
+    borderColor: tokens.colors.primary,
+    backgroundColor: '#F0F9FF',
+  },
   methodIconWrapper: {
     width: 44,
     height: 44,
@@ -815,7 +961,11 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   summaryLabel: {
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.medium,
@@ -939,7 +1089,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  bankPickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  bankPickerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
   bankBubble: {
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -948,7 +1103,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  bankBubbleActive: { backgroundColor: '#EFF6FF', borderColor: tokens.colors.primary },
+  bankBubbleActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: tokens.colors.primary,
+  },
   bankBubbleText: {
     fontSize: 12,
     fontFamily: tokens.typography.fontFamily.bold,

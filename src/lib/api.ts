@@ -543,11 +543,14 @@ export async function createFareTransaction(transactionData: {
       body: JSON.stringify(transactionData),
     });
   } catch (err: any) {
-    if (isPhoneVerificationError(err) || transactionData.fareAccountId.startsWith('local-')) {
+    if (
+      isPhoneVerificationError(err) ||
+      transactionData.fareAccountId.startsWith('local-')
+    ) {
       // Mock local
       const userId = transactionData.fareAccountId.replace('local-acc-', '');
       const account = await getLocalFareAccount(userId);
-      
+
       if (transactionData.type === 'debit') {
         if (account.balance < transactionData.amount) {
           throw new Error('Saldo Insuficiente');
@@ -559,7 +562,9 @@ export async function createFareTransaction(transactionData: {
       account.updatedAt = new Date().toISOString();
       await saveLocalFareAccount(account);
 
-      const transactions = await getLocalTransactions(transactionData.fareAccountId);
+      const transactions = await getLocalTransactions(
+        transactionData.fareAccountId,
+      );
       const newTx = {
         id: `tx-${Date.now()}`,
         accountId: transactionData.fareAccountId,
@@ -590,8 +595,10 @@ export async function getUserTickets(userId: string): Promise<BackendTicket[]> {
       if (localTickets.length > 0) {
         // Limpiar el almacenamiento local inmediatamente para evitar llamadas concurrentes duplicadas
         await saveLocalTickets(userId, []);
-        console.log(`[API] Sincronizando ${localTickets.length} boletos locales al backend...`);
-        
+        console.log(
+          `[API] Sincronizando ${localTickets.length} boletos locales al backend...`,
+        );
+
         const failedTickets: BackendTicket[] = [];
         for (const localTkt of localTickets) {
           try {
@@ -599,7 +606,9 @@ export async function getUserTickets(userId: string): Promise<BackendTicket[]> {
               method: 'POST',
               body: JSON.stringify({
                 userId,
-                qrCode: localTkt.qrCode.startsWith('local-qr-') ? undefined : localTkt.qrCode,
+                qrCode: localTkt.qrCode.startsWith('local-qr-')
+                  ? undefined
+                  : localTkt.qrCode,
                 price: localTkt.price,
                 status: localTkt.status,
                 route: localTkt.route || 'General',
@@ -608,16 +617,21 @@ export async function getUserTickets(userId: string): Promise<BackendTicket[]> {
               }),
             });
           } catch (postErr) {
-            console.warn('[API] Error al sincronizar boleto individual:', postErr);
+            console.warn(
+              '[API] Error al sincronizar boleto individual:',
+              postErr,
+            );
             failedTickets.push(localTkt);
           }
         }
-        
+
         // Si falló la subida de algún boleto, restaurarlos localmente
         if (failedTickets.length > 0) {
           await saveLocalTickets(userId, failedTickets);
         } else {
-          console.log('[API] Sincronización de boletos locales finalizada con éxito.');
+          console.log(
+            '[API] Sincronización de boletos locales finalizada con éxito.',
+          );
         }
       }
     } catch (syncErr) {
@@ -693,7 +707,10 @@ export async function createTicket(ticketData: {
         const globalStr = await AsyncStorage.getItem('mock_global_tickets');
         const globalTickets = globalStr ? JSON.parse(globalStr) : [];
         globalTickets.unshift(newTicket);
-        await AsyncStorage.setItem('mock_global_tickets', JSON.stringify(globalTickets));
+        await AsyncStorage.setItem(
+          'mock_global_tickets',
+          JSON.stringify(globalTickets),
+        );
       } catch (storageErr) {
         console.warn('[API] Error saving global mock ticket:', storageErr);
       }
@@ -796,7 +813,8 @@ export async function updateTicket(
         tickets[idx] = {
           ...tickets[idx],
           ...data,
-          status: (data.status || tickets[idx].status) as BackendTicket['status'],
+          status: (data.status ||
+            tickets[idx].status) as BackendTicket['status'],
           updatedAt: new Date().toISOString(),
         };
         await saveLocalTickets(user.uid, tickets);
@@ -806,7 +824,6 @@ export async function updateTicket(
     throw err;
   }
 }
-
 
 /**
  * Cooperativas simuladas para pruebas en frontend en caso de error del servidor.

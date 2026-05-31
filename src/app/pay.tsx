@@ -40,11 +40,11 @@ export default function PayTripScreen() {
     'details' | 'processing' | 'success'
   >('details');
   const [scannedQr, setScannedQr] = useState('');
-  
+
   // Modelo de Saldo / Fare
   const [balance, setBalance] = useState(0.0);
   const [fareAccount, setFareAccount] = useState<any>(null);
-  const [routeFare, setRouteFare] = useState(15.00);
+  const [routeFare, setRouteFare] = useState(15.0);
   const [backendUserData, setBackendUserData] = useState<any>(null);
   const [routeLabel, setRouteLabel] = useState('General');
 
@@ -83,7 +83,8 @@ export default function PayTripScreen() {
       console.error('[Scanner] Error processing direct payment:', error);
       Alert.alert(
         'Error de Pago',
-        error.message || 'No se pudo procesar el pago del viaje. Intente nuevamente.',
+        error.message ||
+          'No se pudo procesar el pago del viaje. Intente nuevamente.',
         [{ text: 'Aceptar', onPress: () => handleCloseConfirmModal() }],
       );
     }
@@ -161,14 +162,28 @@ export default function PayTripScreen() {
         // Detectar ruta según el QR
         let detectedRoute = 'Ruta General';
         const dataLower = scannedData.toLowerCase();
-        if (dataLower.includes('hatillo') || dataLower.includes('201') || dataLower.includes('r1')) {
+        if (
+          dataLower.includes('hatillo') ||
+          dataLower.includes('201') ||
+          dataLower.includes('r1')
+        ) {
           detectedRoute = 'Ruta 201: Chacaíto - El Hatillo';
-        } else if (dataLower.includes('propatria') || dataLower.includes('l1') || dataLower.includes('verde')) {
+        } else if (
+          dataLower.includes('propatria') ||
+          dataLower.includes('l1') ||
+          dataLower.includes('verde')
+        ) {
           detectedRoute = 'Ruta L1: Propatria - Palo Verde';
-        } else if (dataLower.includes('venezuela') || dataLower.includes('baruta') || dataLower.includes('r3') || dataLower.includes('102')) {
+        } else if (
+          dataLower.includes('venezuela') ||
+          dataLower.includes('baruta') ||
+          dataLower.includes('r3') ||
+          dataLower.includes('102')
+        ) {
           detectedRoute = 'Ruta 102: Plaza Venezuela - Baruta';
         } else {
-          detectedRoute = scannedData.length < 30 ? scannedData : 'Ruta General';
+          detectedRoute =
+            scannedData.length < 30 ? scannedData : 'Ruta General';
         }
 
         const costInTickets = 1;
@@ -178,7 +193,11 @@ export default function PayTripScreen() {
             'Boletos Insuficientes',
             `No tienes boletos disponibles para este viaje.\nTu Saldo: ${userBalance} pasajes\n\n¿Deseas comprar más boletos ahora?`,
             [
-              { text: 'Cancelar', onPress: () => setScanned(false), style: 'cancel' },
+              {
+                text: 'Cancelar',
+                onPress: () => setScanned(false),
+                style: 'cancel',
+              },
               {
                 text: 'Comprar Boletos',
                 onPress: () => {
@@ -218,7 +237,8 @@ export default function PayTripScreen() {
       } else {
         Alert.alert(
           'Error de Pago',
-          errMsg || 'No se pudo procesar el pago del viaje. Intente nuevamente.',
+          errMsg ||
+            'No se pudo procesar el pago del viaje. Intente nuevamente.',
           [{ text: 'Aceptar', onPress: () => setScanned(false) }],
         );
       }
@@ -498,7 +518,8 @@ export default function PayTripScreen() {
                           balance === 0 && { color: '#EF4444' },
                         ]}
                       >
-                        {Math.floor(balance)} {Math.floor(balance) === 1 ? 'boleto' : 'boletos'}
+                        {Math.floor(balance)}{' '}
+                        {Math.floor(balance) === 1 ? 'boleto' : 'boletos'}
                       </Text>
                     </View>
 
@@ -515,7 +536,10 @@ export default function PayTripScreen() {
                           },
                         ]}
                       >
-                        {Math.max(0, Math.floor(balance - routeFare))} {Math.max(0, Math.floor(balance - routeFare)) === 1 ? 'boleto' : 'boletos'}
+                        {Math.max(0, Math.floor(balance - routeFare))}{' '}
+                        {Math.max(0, Math.floor(balance - routeFare)) === 1
+                          ? 'boleto'
+                          : 'boletos'}
                       </Text>
                     </View>
                   </View>
@@ -539,7 +563,6 @@ export default function PayTripScreen() {
                 </Pressable>
               </View>
             )}
-
 
             {/* PASO 2: Procesando */}
             {confirmStep === 'processing' && (
@@ -640,14 +663,19 @@ export default function PayTripScreen() {
                     </View>
 
                     <View style={styles.ticketInfoRow}>
-                      <Text style={styles.ticketInfoLabel}>BOLETOS RESTANTES</Text>
+                      <Text style={styles.ticketInfoLabel}>
+                        BOLETOS RESTANTES
+                      </Text>
                       <Text
                         style={[
                           styles.ticketInfoValue,
                           { fontFamily: tokens.typography.fontFamily.bold },
                         ]}
                       >
-                        {Math.max(0, Math.floor(balance))} {Math.max(0, Math.floor(balance)) === 1 ? 'boleto' : 'boletos'}
+                        {Math.max(0, Math.floor(balance))}{' '}
+                        {Math.max(0, Math.floor(balance)) === 1
+                          ? 'boleto'
+                          : 'boletos'}
                       </Text>
                     </View>
 

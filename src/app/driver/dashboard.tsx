@@ -28,21 +28,40 @@ interface RouteOption {
 }
 
 const ROUTE_OPTIONS: RouteOption[] = [
-  { id: 'r1', name: 'Ruta 201: Chacaíto - El Hatillo', fare: 15.0, plate: 'xy987zt' },
-  { id: 'r2', name: 'Ruta L1: Propatria - Palo Verde', fare: 20.0, plate: 'ab123cd' },
-  { id: 'r3', name: 'Ruta 102: Plaza Venezuela - Baruta', fare: 12.0, plate: 'ef456gh' },
+  {
+    id: 'r1',
+    name: 'Ruta 201: Chacaíto - El Hatillo',
+    fare: 15.0,
+    plate: 'xy987zt',
+  },
+  {
+    id: 'r2',
+    name: 'Ruta L1: Propatria - Palo Verde',
+    fare: 20.0,
+    plate: 'ab123cd',
+  },
+  {
+    id: 'r3',
+    name: 'Ruta 102: Plaza Venezuela - Baruta',
+    fare: 12.0,
+    plate: 'ef456gh',
+  },
 ];
 
 export default function DriverDashboard() {
   const _router = useRouter();
   const [loading, setLoading] = useState(true);
   const [isEnServicio, setIsEnServicio] = useState(false);
-  const [selectedRoute, setSelectedRoute] = useState<RouteOption>(ROUTE_OPTIONS[0]);
+  const [selectedRoute, setSelectedRoute] = useState<RouteOption>(
+    ROUTE_OPTIONS[0],
+  );
   const [showRouteDropdown, setShowRouteDropdown] = useState(false);
 
   // Driver stats
   const [driverName, setDriverName] = useState('Conductor');
-  const [vehicleInfo, _setVehicleInfo] = useState('Encava ENT-610 (Placa: XY987ZT)');
+  const [vehicleInfo, _setVehicleInfo] = useState(
+    'Encava ENT-610 (Placa: XY987ZT)',
+  );
   const [todayTripsCount, setTodayTripsCount] = useState(0);
   const [todayEarnings, setTodayEarnings] = useState(0.0);
 
@@ -94,7 +113,10 @@ export default function DriverDashboard() {
           selectedRoute.name.toLowerCase().split(':')[0].trim(),
         ];
 
-        const usedTickets = await getUsedTicketsByRoute(keywords, sessionStartedAt);
+        const usedTickets = await getUsedTicketsByRoute(
+          keywords,
+          sessionStartedAt,
+        );
 
         for (const ticket of usedTickets) {
           if (processedIds.has(ticket.id)) continue;
@@ -111,17 +133,22 @@ export default function DriverDashboard() {
 
           // Vibración/haptics de confirmación
           try {
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await Haptics.notificationAsync(
+              Haptics.NotificationFeedbackType.Success,
+            );
           } catch (_) {}
 
           // Guardar en caché local para histórico
           try {
-            const localStr = await AsyncStorage.getItem('mock_validated_tickets');
+            const localStr = await AsyncStorage.getItem(
+              'mock_validated_tickets',
+            );
             const localList = localStr ? JSON.parse(localStr) : [];
             if (!localList.some((p: any) => p.id === ticket.id)) {
               localList.unshift({
                 id: ticket.id,
-                code: ticket.qrCode || `GF-${ticket.id.slice(-4).toUpperCase()}`,
+                code:
+                  ticket.qrCode || `GF-${ticket.id.slice(-4).toUpperCase()}`,
                 fare,
                 route: selectedRoute.name,
                 time: new Date().toLocaleTimeString('es-VE', {
@@ -168,12 +195,17 @@ export default function DriverDashboard() {
       setIsEnServicio(serviceStatus === 'active');
 
       // Cargar ruta seleccionada
-      const cachedRouteId = await AsyncStorage.getItem('driver_active_route_id');
+      const cachedRouteId = await AsyncStorage.getItem(
+        'driver_active_route_id',
+      );
       if (cachedRouteId) {
         const found = ROUTE_OPTIONS.find((r) => r.id === cachedRouteId);
         if (found) setSelectedRoute(found);
       } else {
-        await AsyncStorage.setItem('driver_active_route_id', ROUTE_OPTIONS[0].id);
+        await AsyncStorage.setItem(
+          'driver_active_route_id',
+          ROUTE_OPTIONS[0].id,
+        );
       }
 
       // Cargar estadísticas del día desde historial local
@@ -202,7 +234,10 @@ export default function DriverDashboard() {
   const handleToggleService = async (value: boolean) => {
     try {
       setIsEnServicio(value);
-      await AsyncStorage.setItem('driver_service_status', value ? 'active' : 'inactive');
+      await AsyncStorage.setItem(
+        'driver_service_status',
+        value ? 'active' : 'inactive',
+      );
       Alert.alert(
         value ? 'Servicio Iniciado' : 'Servicio Finalizado',
         value
@@ -310,7 +345,9 @@ export default function DriverDashboard() {
             <View style={styles.statusTexts}>
               <Text style={styles.statusPillLabel}>ESTADO DEL TURNO</Text>
               <Text style={styles.statusPillValue}>
-                {isEnServicio ? 'En Servicio / Disponible' : 'Fuera de Servicio'}
+                {isEnServicio
+                  ? 'En Servicio / Disponible'
+                  : 'Fuera de Servicio'}
               </Text>
               {isEnServicio && (
                 <Text style={styles.statusSubNote}>
@@ -339,7 +376,9 @@ export default function DriverDashboard() {
             />
             <View style={styles.vehicleInfo}>
               <Text style={styles.vehicleNameText}>{vehicleInfo}</Text>
-              <Text style={styles.vehicleCoopText}>Cooperativa Caracas Move R.L.</Text>
+              <Text style={styles.vehicleCoopText}>
+                Cooperativa Caracas Move R.L.
+              </Text>
             </View>
           </View>
         </View>
@@ -378,13 +417,15 @@ export default function DriverDashboard() {
                 <Text
                   style={[
                     styles.dropdownItemText,
-                    selectedRoute.id === route.id && styles.dropdownItemTextActive,
+                    selectedRoute.id === route.id &&
+                      styles.dropdownItemTextActive,
                   ]}
                 >
                   {route.name}
                 </Text>
                 <Text style={styles.dropdownItemFare}>
-                  Tarifa: {route.fare.toFixed(2)} Bs • Placa: {route.plate.toUpperCase()}
+                  Tarifa: {route.fare.toFixed(2)} Bs • Placa:{' '}
+                  {route.plate.toUpperCase()}
                 </Text>
               </Pressable>
             ))}
@@ -395,7 +436,9 @@ export default function DriverDashboard() {
         <Text style={styles.sectionTitle}>Estadísticas de Hoy</Text>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <View style={[styles.statIconContainer, { backgroundColor: '#DBEAFE' }]}>
+            <View
+              style={[styles.statIconContainer, { backgroundColor: '#DBEAFE' }]}
+            >
               <Ionicons
                 name="ticket-outline"
                 size={20}
@@ -406,7 +449,9 @@ export default function DriverDashboard() {
             <Text style={styles.statLabel}>Boletos Validados</Text>
           </View>
           <View style={styles.statBox}>
-            <View style={[styles.statIconContainer, { backgroundColor: '#DCFCE7' }]}>
+            <View
+              style={[styles.statIconContainer, { backgroundColor: '#DCFCE7' }]}
+            >
               <Ionicons name="cash-outline" size={20} color="#16A34A" />
             </View>
             <Text style={styles.statValue}>
@@ -419,7 +464,12 @@ export default function DriverDashboard() {
         {/* Aviso de tiempo real */}
         {isEnServicio && (
           <View style={styles.realtimeNote}>
-            <Ionicons name="wifi" size={14} color="#0284C7" style={{ marginRight: 6 }} />
+            <Ionicons
+              name="wifi"
+              size={14}
+              color="#0284C7"
+              style={{ marginRight: 6 }}
+            />
             <Text style={styles.realtimeNoteText}>
               Monitoreando pagos de pasajeros en tiempo real (cada 4 segundos)
             </Text>

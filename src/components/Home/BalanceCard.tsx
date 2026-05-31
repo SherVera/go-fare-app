@@ -8,7 +8,8 @@ import { tokens } from '@/theme/tokens';
 
 export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
   const router = useRouter();
-  const currentBalance = typeof balance === 'number' ? balance : parseFloat(balance as any) || 0;
+  const currentBalance =
+    typeof balance === 'number' ? balance : parseFloat(balance as any) || 0;
 
   return (
     <LinearGradient
@@ -22,7 +23,10 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
           <Text style={styles.label}>BOLETOS DISPONIBLES</Text>
           <View style={styles.balanceRow}>
             <Text style={styles.balance}>{Math.floor(currentBalance)}</Text>
-            <Text style={styles.currency}> {Math.floor(currentBalance) === 1 ? 'pasaje' : 'pasajes'}</Text>
+            <Text style={styles.currency}>
+              {' '}
+              {Math.floor(currentBalance) === 1 ? 'pasaje' : 'pasajes'}
+            </Text>
           </View>
           <Text style={styles.subLabel}>Toca para comprar más →</Text>
         </View>
@@ -30,20 +34,31 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
           style={styles.buyButton}
           onPress={() => router.push('/(tabs)/topup')}
         >
-          <MaterialCommunityIcons name="ticket-confirmation" size={22} color="#FFFFFF" />
+          <MaterialCommunityIcons
+            name="ticket-confirmation"
+            size={22}
+            color="#FFFFFF"
+          />
         </Pressable>
       </View>
 
       <View style={styles.bottomRow}>
         <View>
           <Text style={styles.labelSmall}>CARACAS MOVE ID</Text>
-          <Text style={styles.idNumber}>{carnetId || '0000 • 0000 • 0000'}</Text>
+          <Text style={styles.idNumber}>
+            {carnetId || '0000 • 0000 • 0000'}
+          </Text>
         </View>
         <View style={styles.iconRow}>
           <View style={[styles.miniIcon, { backgroundColor: '#065F46' }]}>
             <Ionicons name="bus" size={14} color="#FFFFFF" />
           </View>
-          <View style={[styles.miniIcon, { backgroundColor: '#1E40AF', marginLeft: 8 }]}>
+          <View
+            style={[
+              styles.miniIcon,
+              { backgroundColor: '#1E40AF', marginLeft: 8 },
+            ]}
+          >
             <Ionicons name="scan" size={14} color="#FFF" />
           </View>
         </View>
