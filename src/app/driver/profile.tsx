@@ -31,7 +31,7 @@ export default function DriverProfileScreen() {
   const [cooperative, setCooperative] = useState(
     'Cooperativa Caracas Move R.L.',
   );
-  const [vehicle, setVehicle] = useState('Encava ENT-610 - XY987ZT');
+  const [vehicle, _setVehicle] = useState('Encava ENT-610 - XY987ZT');
 
   const loadProfileData = useCallback(async () => {
     try {

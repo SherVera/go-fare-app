@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,17 +15,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { syncWithBackend } from '@/lib/api';
+import { linkPhoneNumber, syncWithBackend } from '@/lib/api';
 import { refreshAuthSessionPhase } from '@/lib/auth-session';
 import {
   auth,
+  linkPhoneWithCredential,
   mergeUserProfile,
+  sendLinkPhoneCode,
   sigOutAccount,
   updateUser,
 } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
-
-const STEPS = 3;
 
 function vePhoneFromE164(phone: string | null | undefined): string {
   if (!phone?.startsWith('+58') || phone.length < 12) return '';
@@ -33,6 +34,9 @@ function vePhoneFromE164(phone: string | null | undefined): string {
 
 export default function OnboardingScreen() {
   const user = auth.currentUser;
+  const isPhoneVerified = true; // Omitir verificación telefónica temporalmente
+  const stepsCount = 2;
+
   const [step, setStep] = useState(0);
   const [fullName, setFullName] = useState(
     () => user?.displayName?.trim() ?? '',
@@ -41,6 +45,8 @@ export default function OnboardingScreen() {
   const [phoneNumber, setPhoneNumber] = useState(() =>
     vePhoneFromE164(user?.phoneNumber ?? undefined),
   );
+  const [otp, setOtp] = useState('');
+  const [verificationId, setVerificationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (!user) {
@@ -96,18 +102,77 @@ export default function OnboardingScreen() {
         return false;
       }
     }
+    if (step === 3) {
+      if (otp.trim().length < 6) {
+        Alert.alert(
+          'Código inválido',
+          'El código de verificación debe tener 6 dígitos.',
+        );
+        return false;
+      }
+    }
     return true;
   };
 
   const handlePrimary = async () => {
     if (!validateStep()) return;
-    if (step < STEPS - 1) {
+
+    if (step < stepsCount - 1) {
+      if (step === 2 && !isPhoneVerified) {
+        const trimmed = phoneNumber.trim();
+        const e164 = `+58${trimmed.slice(1)}`;
+        try {
+          setLoading(true);
+          console.log('[Onboarding] Enviando SMS de verificación a:', e164);
+          const vId = await sendLinkPhoneCode(e164);
+          setVerificationId(vId);
+          setStep(3);
+        } catch (error: any) {
+          console.error(
+            '[Onboarding] Error al enviar código de vinculación:',
+            error,
+          );
+          if (error?.code === 'auth/invalid-phone-number') {
+            Alert.alert('Error', 'El número de teléfono no es válido.');
+          } else if (error?.code === 'auth/too-many-requests') {
+            Alert.alert('Error', 'Demasiados intentos. Intenta más tarde.');
+          } else if (error?.code === 'auth/credential-already-in-use') {
+            Alert.alert(
+              'Error',
+              'Este número de teléfono ya está vinculado a otra cuenta.',
+            );
+          } else {
+            Alert.alert(
+              'Error',
+              error?.message ??
+                'No se pudo enviar el código de verificación por SMS.',
+            );
+          }
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
       setStep((s) => s + 1);
       return;
     }
 
     try {
       setLoading(true);
+
+      if (!isPhoneVerified && verificationId) {
+        console.log('[Onboarding] Verificando código OTP de vinculación...');
+        await linkPhoneWithCredential(verificationId, otp.trim());
+
+        console.log('[Onboarding] Refrescando token de Firebase...');
+        const firebaseToken = await user.getIdToken(true);
+
+        console.log('[Onboarding] Sincronizando vinculación en el backend...');
+        await linkPhoneNumber(firebaseToken);
+      }
+
+      console.log('[Onboarding] Actualizando perfil de usuario...');
       await updateUser(user, { displayName: fullName.trim() });
       await mergeUserProfile(user.uid, {
         fullName: fullName.trim(),
@@ -116,11 +181,15 @@ export default function OnboardingScreen() {
         email: email || undefined,
         onboardingCompleted: true,
       });
+
+      console.log('[Onboarding] Sincronizando base de datos local...');
       try {
         await syncWithBackend(user);
       } catch (e) {
         console.warn('[onboarding] backend sync:', e);
       }
+
+      console.log('[Onboarding] Completado, refrescando sesión...');
       await refreshAuthSessionPhase();
     } catch (e: any) {
       console.error('[onboarding] save:', e);
@@ -145,6 +214,11 @@ export default function OnboardingScreen() {
       sub: 'Identificación requerida para el servicio.',
     },
     { dark: 'Tu', blue: 'teléfono', sub: 'Número de contacto en Venezuela.' },
+    {
+      dark: 'Verifica tu',
+      blue: 'teléfono',
+      sub: 'Introduce el código de 6 dígitos que te enviamos por SMS.',
+    },
   ];
 
   const t = titles[step];
@@ -165,19 +239,19 @@ export default function OnboardingScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.stepRow}>
-            {Array.from({ length: STEPS }, (_, i) => (
+            {Array.from({ length: stepsCount }, (_, i) => (
               <View
                 key={String(i)}
                 style={[
                   styles.stepDot,
-                  i < STEPS - 1 && styles.stepDotSpacer,
+                  i < stepsCount - 1 && styles.stepDotSpacer,
                   i <= step && styles.stepDotActive,
                 ]}
               />
             ))}
           </View>
           <Text style={styles.stepMeta}>
-            Paso {step + 1} de {STEPS}
+            Paso {step + 1} de {stepsCount}
           </Text>
 
           <View style={styles.iconSection}>
@@ -190,7 +264,9 @@ export default function OnboardingScreen() {
                     ? 'account-outline'
                     : step === 1
                       ? 'card-account-details-outline'
-                      : 'phone-outline'
+                      : step === 2
+                        ? 'phone-outline'
+                        : 'message-text-outline'
                 }
                 size={88}
                 color={tokens.colors.primary}
@@ -277,6 +353,59 @@ export default function OnboardingScreen() {
             </>
           )}
 
+          {step === 3 && (
+            <>
+              <Text style={styles.inputLabel}>
+                CÓDIGO DE VERIFICACIÓN (SMS)
+              </Text>
+              <View style={styles.inputCard}>
+                <Ionicons name="keypad-outline" size={20} color="#3072ffe7" />
+                <View style={styles.divider} />
+                <TextInput
+                  style={[styles.input, styles.otpInput]}
+                  placeholder="000000"
+                  placeholderTextColor="#B8C4D4"
+                  keyboardType="number-pad"
+                  value={otp}
+                  onChangeText={setOtp}
+                  maxLength={6}
+                  selectionColor={tokens.colors.primary}
+                  editable={!loading}
+                />
+              </View>
+
+              <View style={styles.resendRow}>
+                <Text style={styles.resendText}>¿No llegó el código? </Text>
+                <Pressable
+                  onPress={async () => {
+                    const trimmed = phoneNumber.trim();
+                    const e164 = `+58${trimmed.slice(1)}`;
+                    try {
+                      setLoading(true);
+                      const vId = await sendLinkPhoneCode(e164);
+                      setVerificationId(vId);
+                      Alert.alert(
+                        'Reenviado',
+                        'Se ha enviado un nuevo código de verificación por SMS.',
+                      );
+                    } catch (error: any) {
+                      Alert.alert(
+                        'Error',
+                        error?.message ?? 'No se pudo reenviar el código.',
+                      );
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading}
+                  hitSlop={10}
+                >
+                  <Text style={styles.resendLink}>Reenviar</Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+
           <View style={{ flex: 1, minHeight: 32 }} />
 
           <Pressable
@@ -293,11 +422,11 @@ export default function OnboardingScreen() {
             ) : (
               <>
                 <Text style={styles.ctaText}>
-                  {step < STEPS - 1 ? 'Continuar' : 'Finalizar'}
+                  {step < stepsCount - 1 ? 'Continuar' : 'Finalizar'}
                 </Text>
                 <Ionicons
                   name={
-                    step < STEPS - 1
+                    step < stepsCount - 1
                       ? 'arrow-forward-circle-outline'
                       : 'checkmark-circle-outline'
                   }
@@ -500,5 +629,24 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.black,
     color: '#B0BCCC',
     letterSpacing: 1.1,
+  },
+  otpInput: {
+    fontSize: 24,
+    letterSpacing: 8,
+  },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  resendText: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#6B7A93',
+  },
+  resendLink: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
   },
 });

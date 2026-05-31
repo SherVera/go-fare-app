@@ -236,8 +236,16 @@ export default function RootLayout() {
         return;
       }
 
-      const isPhoneUser = !!user.phoneNumber;
-      const isVerified = user.emailVerified || isPhoneUser;
+      // Intentar recargar el usuario para obtener el estado más reciente de emailVerified
+      try {
+        await user.reload();
+      } catch (reloadErr) {
+        console.warn('[Layout] Error al recargar el usuario:', reloadErr);
+      }
+
+      const currentUser = auth.currentUser || user;
+      const isPhoneUser = !!currentUser.phoneNumber;
+      const isVerified = currentUser.emailVerified || isPhoneUser;
 
       if (!isVerified) {
         if (!cancelled) setPhase('signed_out');
@@ -246,7 +254,7 @@ export default function RootLayout() {
 
       let backendUser;
       try {
-        const response = await syncWithBackend(user);
+        const response = await syncWithBackend(currentUser);
         backendUser = response.user;
       } catch (err) {
         console.warn('[backend] token refresh failed:', err);
@@ -268,7 +276,7 @@ export default function RootLayout() {
         complete = true;
       } else {
         try {
-          complete = await isProfileOnboardingComplete(user.uid);
+          complete = await isProfileOnboardingComplete(currentUser.uid);
         } catch (e) {
           console.warn('[onboarding] could not read profile:', e);
         }

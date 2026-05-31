@@ -38,7 +38,7 @@ const VEHICLES_BASE_EARNINGS: Record<
 };
 
 export default function VehicleOwnerEarnings() {
-  const router = useRouter();
+  const _router = useRouter();
   const [loading, setLoading] = useState(true);
   const [totalEarnings, setTotalEarnings] = useState(5970.0);
   const [totalTrips, setTotalTrips] = useState(398);

@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import type {
   ProfileInfoCard,
   ProfileMenuItem,
@@ -129,7 +130,7 @@ export default function ProfileScreen() {
         }
       }
     }
-  }, []);
+  }, [router.replace]);
 
   useFocusEffect(
     useCallback(() => {
@@ -517,5 +518,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#DC2626',
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  verifyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  verifyBadgeText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#EF4444',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+  },
+  verifiedBadgeText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#10B981',
   },
 });

@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -13,357 +14,284 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type {
-  BackendFareAccount,
-  PaymentMethod,
-  QuickAmount,
-  TopupFormState,
-} from '@/interfaces';
+import type { PaymentMethod } from '@/interfaces';
 import {
   addAccountBalance,
-  createFareAccount,
   getBackendProfile,
   getFareAccountByUserId,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
-export default function TopupScreen() {
+const RECHARGE_PACKAGES = [
+  { tickets: 1,  amount: 15,  label: '1 Pasaje',   desc: 'Bs. 15,00',   tag: null },
+  { tickets: 2,  amount: 28,  label: '2 Pasajes',  desc: 'Bs. 28,00',   tag: 'AHORRA Bs. 2' },
+  { tickets: 5,  amount: 65,  label: '5 Pasajes',  desc: 'Bs. 65,00',   tag: 'AHORRA Bs. 10' },
+  { tickets: 10, amount: 120, label: '10 Pasajes', desc: 'Bs. 120,00',  tag: 'POPULAR' },
+];
+
+const PAYMENT_METHODS: PaymentMethod[] = [
+  {
+    id: 'pago_movil',
+    title: 'Pago Móvil',
+    subtitle: 'Transferencia instantánea en Bs.',
+    iconName: 'bank',
+    iconBgColor: '#EFF6FF',
+    iconColor: tokens.colors.primary,
+  },
+  {
+    id: 'tarjeta',
+    title: 'Tarjeta Débito/Crédito',
+    subtitle: 'Visa / Mastercard / Nacional',
+    iconName: 'credit-card',
+    iconBgColor: '#ECFDF5',
+    iconColor: '#10B981',
+  },
+  {
+    id: 'cripto',
+    title: 'USDT (Binance Pay)',
+    subtitle: 'Criptomonedas instantáneo',
+    iconName: 'bitcoin',
+    iconBgColor: '#FAF5FF',
+    iconColor: '#A855F7',
+  },
+];
+
+export default function TopUpBalanceScreen() {
   const router = useRouter();
 
-  // Estado del formulario
-  const [amount, setAmount] = useState<TopupFormState['amount']>('50');
-  const [selectedQuickAmount, setSelectedQuickAmount] =
-    useState<TopupFormState['selectedQuickAmount']>(50);
-  const [selectedMethod, setSelectedMethod] =
-    useState<TopupFormState['selectedMethod']>('pago_movil');
+  // Paquete seleccionado
+  const [selectedPkg, setSelectedPkg] = useState(RECHARGE_PACKAGES[0]);
+  const [selectedMethod, setSelectedMethod] = useState<string>('pago_movil');
 
-  const [fareAccount, setFareAccount] = useState<BackendFareAccount | null>(
-    null,
-  );
+  // Estado del saldo del usuario
+  const [balance, setBalance] = useState(0.0);
   const [loadingBalance, setLoadingBalance] = useState(true);
 
-  // Estados para el Modal de Pago
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentStep, setPaymentStep] = useState<
-    'details' | 'processing' | 'success'
-  >('details');
+  // Perfil del usuario y cuenta
+  const [userId, setUserId] = useState<string | null>(null);
+  const [accountId, setAccountId] = useState<string | null>(null);
 
-  // Pago Móvil Form
+  // Modal de pago
+  const [showModal, setShowModal] = useState(false);
+  const [payStep, setPayStep] = useState<'details' | 'processing' | 'success'>('details');
+
+  // Campos de Pago Móvil
   const [pmBank, setPmBank] = useState('Banesco');
   const [pmPhone, setPmPhone] = useState('');
   const [pmIdNumber, setPmIdNumber] = useState('');
   const [pmReference, setPmReference] = useState('');
 
-  // Tarjeta Form
+  // Campos de Tarjeta
   const [cardHolder, setCardHolder] = useState('');
   const [cardNumber, setCardNumber] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
 
-  // Cripto Form
+  // Campos de Cripto
   const [cryptoTxHash, setCryptoTxHash] = useState('');
 
-  const fetchBalance = useCallback(async () => {
+  const loadUserData = useCallback(async () => {
     try {
       const backendUser = await getBackendProfile();
       if (backendUser) {
-        // Pre-llenar teléfono del perfil para Pago Móvil
+        setUserId(backendUser.id);
         setPmPhone(backendUser.phoneNumber || '');
 
-        let account;
-        try {
-          account = await getFareAccountByUserId(backendUser.id);
-        } catch (_) {
-          account = await createFareAccount(backendUser.id);
-        }
-        setFareAccount(account);
+        const account = await getFareAccountByUserId(backendUser.id);
+        setAccountId(account.id);
+        setBalance(Number(account.balance));
       }
-    } catch (error) {
-      console.error('[TopUp] Error fetching balance:', error);
+    } catch (err) {
+      console.warn('[TopUp] Error loading user data:', err);
     } finally {
       setLoadingBalance(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchBalance();
-  }, [fetchBalance]);
+    loadUserData();
+  }, [loadUserData]);
 
-  // Abre el modal de detalles de pago
-  const handleOpenDetails = () => {
-    const numericAmount = parseFloat(amount.replace(',', '.'));
-    if (isNaN(numericAmount) || numericAmount <= 0) {
-      Alert.alert(
-        'Monto Inválido',
-        'Por favor ingresa un monto válido a recargar.',
-      );
+  const handleOpenModal = () => {
+    if (!userId || !accountId) {
+      Alert.alert('Error', 'No se pudo cargar tu perfil. Intenta de nuevo.');
       return;
     }
-
-    if (!fareAccount) {
-      Alert.alert(
-        'Error',
-        'No se pudo cargar la cuenta de tarifa. Intente más tarde.',
-      );
-      return;
-    }
-
-    // Reiniciar inputs
+    // Resetear campos
     setPmReference('');
     setCardHolder('');
     setCardNumber('');
     setCardExpiry('');
     setCardCvv('');
     setCryptoTxHash('');
-
-    setPaymentStep('details');
-    setShowPaymentModal(true);
+    setPayStep('details');
+    setShowModal(true);
   };
 
-  // Validaciones y ejecución del cobro
-  const handleConfirmPayment = async () => {
-    // Validaciones específicas
+  const handleConfirmPurchase = async () => {
+    // Validaciones
     if (selectedMethod === 'pago_movil') {
       if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(pmPhone.trim())) {
-        Alert.alert(
-          'Atención',
-          'Por favor, ingresa un número de teléfono de Pago Móvil válido (11 dígitos).',
-        );
+        Alert.alert('Atención', 'Ingresa un número de Pago Móvil válido (11 dígitos).');
         return;
       }
       if (!/^\d{5,10}$/.test(pmIdNumber.trim())) {
-        Alert.alert(
-          'Atención',
-          'Por favor, ingresa una cédula de identidad válida.',
-        );
+        Alert.alert('Atención', 'Ingresa una cédula válida.');
         return;
       }
     } else if (selectedMethod === 'tarjeta') {
-      if (cardHolder.trim().length < 3) {
-        Alert.alert(
-          'Atención',
-          'Por favor, ingresa el nombre del titular de la tarjeta.',
-        );
-        return;
-      }
       const cleanCard = cardNumber.replace(/\s+/g, '');
-      if (cleanCard.length < 15 || cleanCard.length > 16) {
-        Alert.alert(
-          'Atención',
-          'Por favor, ingresa un número de tarjeta de crédito/débito válido.',
-        );
+      if (cardHolder.trim().length < 3 || cleanCard.length < 15 || cleanCard.length > 16) {
+        Alert.alert('Atención', 'Verifica los datos de tu tarjeta.');
         return;
       }
       if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) {
-        Alert.alert(
-          'Atención',
-          'Por favor, ingresa una fecha de vencimiento válida (MM/AA).',
-        );
+        Alert.alert('Atención', 'Fecha de vencimiento inválida (MM/AA).');
         return;
       }
-      if (cardCvv.trim().length < 3 || cardCvv.trim().length > 4) {
-        Alert.alert(
-          'Atención',
-          'Por favor, ingresa un código de seguridad (CVV) válido.',
-        );
+      if (cardCvv.trim().length < 3) {
+        Alert.alert('Atención', 'CVV inválido.');
         return;
       }
     }
 
-    const numericAmount = parseFloat(amount.replace(',', '.'));
-    if (!fareAccount) return;
+    if (!userId || !accountId) return;
 
     try {
-      setPaymentStep('processing');
-
-      // Delay artificial para simular procesamiento bancario/pasarela (UX Premium)
+      setPayStep('processing');
+      // Simular procesamiento de la pasarela de pago
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      const updatedAccount = await addAccountBalance(
-        fareAccount.id,
-        numericAmount,
-      );
-      setFareAccount(updatedAccount);
-      setPaymentStep('success');
+      // Acreditar cantidad de pasajes/boletos en el backend (fare_accounts)
+      const updatedAccount = await addAccountBalance(accountId, selectedPkg.tickets);
+      setBalance(Number(updatedAccount.balance));
+      setPayStep('success');
     } catch (error: any) {
-      console.error('[TopUp] Error performing recharge:', error);
+      console.error('[TopUp] Purchase error:', error);
       Alert.alert(
-        'Error de Pago',
-        error.message || 'No se pudo procesar la transacción bancaria.',
+        'Error de Recarga',
+        error.message || 'No se pudo procesar la recarga. Intenta nuevamente.',
       );
-      setPaymentStep('details');
+      setPayStep('details');
     }
   };
 
   const handleCloseSuccess = () => {
-    setShowPaymentModal(false);
-    setAmount('');
-    setSelectedQuickAmount(null);
-    fetchBalance();
+    setShowModal(false);
+    loadUserData();
   };
 
-  // Formateadores rápidos de campos
   const handleCardNumberChange = (text: string) => {
-    const cleanText = text.replace(/\D/g, '');
-    const formatted = cleanText.replace(/(\d{4})(?=\d)/g, '$1 ');
-    setCardNumber(formatted);
+    const clean = text.replace(/\D/g, '');
+    setCardNumber(clean.replace(/(\d{4})(?=\d)/g, '$1 '));
   };
 
   const handleExpiryChange = (text: string) => {
-    let cleanText = text.replace(/\D/g, '');
-    if (cleanText.length > 2) {
-      cleanText = `${cleanText.slice(0, 2)}/${cleanText.slice(2, 4)}`;
-    }
-    setCardExpiry(cleanText);
-  };
-
-  const paymentMethods: PaymentMethod[] = [
-    {
-      id: 'pago_movil',
-      title: 'Pago Móvil',
-      subtitle: 'Transferencia instantánea en Bs.',
-      iconName: 'bank',
-      iconBgColor: '#EFF6FF',
-      iconColor: tokens.colors.primary,
-    },
-    {
-      id: 'tarjeta',
-      title: 'Tarjeta Débito/Crédito',
-      subtitle: 'Visa / Mastercard / Nacional',
-      iconName: 'credit-card',
-      iconBgColor: '#ECFDF5',
-      iconColor: '#10B981',
-    },
-    {
-      id: 'cripto',
-      title: 'USDT (Binance Pay)',
-      subtitle: 'Criptomonedas instantáneo',
-      iconName: 'bitcoin',
-      iconBgColor: '#FAF5FF',
-      iconColor: '#A855F7',
-    },
-  ];
-
-  const handleQuickAmount = (val: QuickAmount) => {
-    setSelectedQuickAmount(val);
-    setAmount(val.toString());
+    let clean = text.replace(/\D/g, '');
+    if (clean.length > 2) clean = `${clean.slice(0, 2)}/${clean.slice(2, 4)}`;
+    setCardExpiry(clean);
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ── HEADER ── */}
+      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={tokens.colors.primary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Recargar Saldo</Text>
+        <Text style={styles.headerTitle}>Comprar Boletos</Text>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── BALANCE CARD ── */}
-        <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Saldo Actual</Text>
-          <View style={styles.balanceRow}>
-            <Text style={styles.currencySymbol}>Bs. </Text>
-            {loadingBalance ? (
-              <ActivityIndicator
-                size="small"
-                color="#FFFFFF"
-                style={{ marginRight: 16 }}
-              />
-            ) : (
-              <Text style={styles.balanceAmount}>
-                {fareAccount
-                  ? fareAccount.balance.toFixed(2).replace('.', ',')
-                  : '0,00'}
+        {/* Tarjeta de Saldo Disponible */}
+        <LinearGradient
+          colors={['#1E40AF', '#3B82F6', '#0EA5E9']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.ticketCard}
+        >
+          <View style={styles.ticketCardTop}>
+            <View>
+              <Text style={styles.ticketCardLabel}>BOLETOS DISPONIBLES</Text>
+              {loadingBalance ? (
+                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginTop: 8 }} />
+              ) : (
+                <Text style={styles.ticketCardCount}>{Math.floor(balance)}</Text>
+              )}
+              <Text style={styles.ticketCardSub}>
+                {Math.floor(balance)} {Math.floor(balance) === 1 ? 'pasaje activo listo para usar' : 'pasajes activos listos para usar'}
               </Text>
-            )}
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusText}>Activo</Text>
+            </View>
+            <View style={styles.ticketIconWrapper}>
+              <MaterialCommunityIcons name="ticket-confirmation" size={40} color="rgba(255,255,255,0.9)" />
             </View>
           </View>
-          <View style={styles.lastRechargeRow}>
-            <Ionicons
-              name="time-outline"
-              size={14}
-              color="#E0E7FF"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.lastRechargeText}>
-              Billetera digital GoFare Caracas
+
+          <View style={styles.ticketCardDivider} />
+
+          <View style={styles.ticketCardBottom}>
+            <Ionicons name="information-circle-outline" size={14} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.ticketCardNote}>
+              {'  '}Cada boleto = 1 pasaje. Usa en cualquier unidad GoFare.
             </Text>
           </View>
+        </LinearGradient>
+
+        {/* Selector de paquetes */}
+        <Text style={styles.sectionTitle}>SELECCIONA TU PAQUETE</Text>
+        <View style={styles.packagesGrid}>
+          {RECHARGE_PACKAGES.map((pkg) => {
+            const isSelected = selectedPkg.amount === pkg.amount;
+            return (
+              <Pressable
+                key={pkg.amount}
+                style={[styles.pkgCard, isSelected && styles.pkgCardSelected]}
+                onPress={() => setSelectedPkg(pkg)}
+              >
+                {pkg.tag && (
+                  <View style={[styles.pkgTag, isSelected && styles.pkgTagSelected]}>
+                    <Text style={[styles.pkgTagText, isSelected && styles.pkgTagTextSelected]}>
+                      {pkg.tag}
+                    </Text>
+                  </View>
+                )}
+                <View style={[styles.pkgIconWrapper, isSelected && styles.pkgIconWrapperSelected]}>
+                  <MaterialCommunityIcons
+                    name="ticket"
+                    size={26}
+                    color={isSelected ? '#FFFFFF' : tokens.colors.primary}
+                  />
+                  {pkg.tickets > 1 && (
+                    <Text style={[styles.pkgQtyOverlay, isSelected && { color: tokens.colors.primary }]}>
+                      x{pkg.tickets}
+                    </Text>
+                  )}
+                </View>
+                <Text style={[styles.pkgLabel, isSelected && styles.pkgLabelSelected]}>
+                  {pkg.label}
+                </Text>
+                <Text style={[styles.pkgPrice, isSelected && styles.pkgPriceSelected]}>
+                  {pkg.desc}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
-        {/* ── MONTO A RECARGAR ── */}
-        <Text style={styles.sectionTitle}>MONTO A RECARGAR</Text>
-        <View style={styles.amountContainer}>
-          <View style={styles.inputWrapper}>
-            <Text style={styles.currencyPrefix}>Bs.</Text>
-            <TextInput
-              style={styles.amountInput}
-              placeholder="0,00"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="numeric"
-              value={amount}
-              onChangeText={(text) => {
-                setAmount(text);
-                setSelectedQuickAmount(null);
-              }}
-            />
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.quickAmountsRow}>
-            {([10, 25, 50, 100] as QuickAmount[]).map((val) => {
-              const isSelected = selectedQuickAmount === val;
-              return (
-                <Pressable
-                  key={val}
-                  style={[
-                    styles.quickAmountBtn,
-                    isSelected && styles.quickAmountBtnSelected,
-                  ]}
-                  onPress={() => handleQuickAmount(val)}
-                >
-                  <Text
-                    style={[
-                      styles.quickAmountText,
-                      isSelected && styles.quickAmountTextSelected,
-                    ]}
-                  >
-                    {val}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* ── MÉTODO DE PAGO ── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>MÉTODO DE PAGO</Text>
-        </View>
-
-        {paymentMethods.map((method) => {
+        {/* Método de Pago */}
+        <Text style={styles.sectionTitle}>MÉTODO DE PAGO</Text>
+        {PAYMENT_METHODS.map((method) => {
           const isSelected = selectedMethod === method.id;
           return (
             <Pressable
               key={method.id}
-              style={[
-                styles.methodCard,
-                isSelected && styles.methodCardSelected,
-              ]}
+              style={[styles.methodCard, isSelected && styles.methodCardSelected]}
               onPress={() => setSelectedMethod(method.id)}
             >
-              <View
-                style={[
-                  styles.methodIconWrapper,
-                  { backgroundColor: method.iconBgColor },
-                ]}
-              >
+              <View style={[styles.methodIconWrapper, { backgroundColor: method.iconBgColor }]}>
                 <MaterialCommunityIcons
                   name={method.iconName as any}
                   size={22}
@@ -374,31 +302,19 @@ export default function TopupScreen() {
                 <Text style={styles.methodTitle}>{method.title}</Text>
                 <Text style={styles.methodSubtitle}>{method.subtitle}</Text>
               </View>
-              <View
-                style={[
-                  styles.radioOuter,
-                  isSelected && {
-                    borderColor: tokens.colors.primary,
-                  },
-                ]}
-              >
+              <View style={[styles.radioOuter, isSelected && { borderColor: tokens.colors.primary }]}>
                 {isSelected && <View style={styles.radioInner} />}
               </View>
             </Pressable>
           );
         })}
 
-        {/* ── RESUMEN TOTAL ── */}
+        {/* Resumen */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Monto Recarga</Text>
+            <Text style={styles.summaryLabel}>Paquete seleccionado</Text>
             <Text style={styles.summaryValue}>
-              Bs.{' '}
-              {amount
-                ? parseFloat(amount.replace(',', '.'))
-                    .toFixed(2)
-                    .replace('.', ',')
-                : '0,00'}
+              {selectedPkg.label}
             </Text>
           </View>
           <View style={styles.summaryRow}>
@@ -409,387 +325,250 @@ export default function TopupScreen() {
           <View style={[styles.summaryRow, { marginBottom: 0 }]}>
             <Text style={styles.summaryTotalLabel}>Total a pagar</Text>
             <Text style={styles.summaryTotalValue}>
-              Bs.{' '}
-              {amount
-                ? parseFloat(amount.replace(',', '.'))
-                    .toFixed(2)
-                    .replace('.', ',')
-                : '0,00'}
+              Bs. {selectedPkg.amount.toFixed(2).replace('.', ',')}
             </Text>
           </View>
         </View>
 
-        {/* ── PAY BUTTON ── */}
-        <Pressable style={styles.mainButton} onPress={handleOpenDetails}>
-          <Text style={styles.mainButtonText}>Pagar ahora</Text>
+        {/* Botón principal */}
+        <Pressable style={styles.mainButton} onPress={handleOpenModal}>
+          <MaterialCommunityIcons name="ticket-confirmation" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Text style={styles.mainButtonText}>
+            Comprar Boletos — Bs. {selectedPkg.amount.toFixed(2).replace('.', ',')}
+          </Text>
         </Pressable>
 
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* ── MODAL STEP-BY-STEP DE PAGO ── */}
+      {/* Modal de pago */}
       <Modal
-        visible={showPaymentModal}
+        visible={showModal}
         animationType="slide"
-        transparent={true}
+        transparent
         onRequestClose={() => {
-          if (paymentStep !== 'processing') setShowPaymentModal(false);
+          if (payStep !== 'processing') setShowModal(false);
         }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            {/* Cabecera del modal */}
-            {paymentStep !== 'processing' && (
+            {/* Header del modal */}
+            {payStep !== 'processing' && (
               <View style={styles.modalHeader}>
-                <Text style={styles.modalSheetTitle}>
-                  {paymentStep === 'details'
-                    ? 'Detalles de Pago'
-                    : 'Comprobante de Recarga'}
+                <Text style={styles.modalTitle}>
+                  {payStep === 'details' ? 'Confirmar Compra' : '¡Compra Exitosa!'}
                 </Text>
-                {paymentStep === 'details' && (
-                  <Pressable
-                    onPress={() => setShowPaymentModal(false)}
-                    hitSlop={10}
-                  >
+                {payStep === 'details' && (
+                  <Pressable onPress={() => setShowModal(false)} hitSlop={10}>
                     <Ionicons name="close" size={24} color="#6B7280" />
                   </Pressable>
                 )}
               </View>
             )}
 
-            {/* PASO 1: Ingreso de detalles */}
-            {paymentStep === 'details' && (
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
+            {/* PASO 1: Detalles de pago */}
+            {payStep === 'details' && (
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {/* Resumen de compra */}
+                <View style={styles.purchaseSummaryBox}>
+                  <MaterialCommunityIcons name="ticket-confirmation" size={32} color={tokens.colors.primary} />
+                  <View style={{ marginLeft: 12 }}>
+                    <Text style={styles.purchaseSummaryTitle}>Compra de Boletos</Text>
+                    <Text style={styles.purchaseSummaryPrice}>
+                      {selectedPkg.label}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Formulario según método */}
                 {selectedMethod === 'pago_movil' && (
                   <View style={styles.formContainer}>
                     <Text style={styles.infoBox}>
-                      Realice el Pago Móvil a los siguientes datos antes de
-                      confirmar: {'\n'}
+                      Realiza el Pago Móvil a los datos y luego ingresa la referencia:{'\n'}
                       <Text style={{ fontWeight: 'bold' }}>
-                        Banco: Banesco • RIF: J-48291048 • Teléfono:
-                        0412-5551234
+                        Banco: Banesco • RIF: J-48291048 • Tel: 0412-5551234
                       </Text>
                     </Text>
 
-                    <Text style={styles.modalInputLabel}>BANCO EMISOR</Text>
+                    <Text style={styles.inputLabel}>BANCO EMISOR</Text>
                     <View style={styles.bankPickerRow}>
-                      {['Banesco', 'Mercantil', 'Provincial', 'Venezuela'].map(
-                        (b) => (
-                          <Pressable
-                            key={b}
-                            style={[
-                              styles.bankBubble,
-                              pmBank === b && styles.bankBubbleActive,
-                            ]}
-                            onPress={() => setPmBank(b)}
-                          >
-                            <Text
-                              style={[
-                                styles.bankBubbleText,
-                                pmBank === b && styles.bankBubbleTextActive,
-                              ]}
-                            >
-                              {b}
-                            </Text>
-                          </Pressable>
-                        ),
-                      )}
+                      {['Banesco', 'Mercantil', 'Provincial', 'Venezuela'].map((b) => (
+                        <Pressable
+                          key={b}
+                          style={[styles.bankBubble, pmBank === b && styles.bankBubbleActive]}
+                          onPress={() => setPmBank(b)}
+                        >
+                          <Text style={[styles.bankBubbleText, pmBank === b && styles.bankBubbleTextActive]}>
+                            {b}
+                          </Text>
+                        </Pressable>
+                      ))}
                     </View>
 
-                    <Text style={styles.modalInputLabel}>
-                      TELÉFONO PAGO MÓVIL
-                    </Text>
-                    <View style={styles.modalInputCard}>
-                      <Ionicons
-                        name="call-outline"
-                        size={20}
-                        color={tokens.colors.primary}
-                      />
-                      <View style={styles.modalInputDivider} />
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder="ej. 04127177757"
-                        placeholderTextColor="#94A3B8"
-                        keyboardType="phone-pad"
-                        maxLength={11}
-                        value={pmPhone}
-                        onChangeText={setPmPhone}
-                      />
-                    </View>
+                    <Text style={styles.inputLabel}>TELÉFONO</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="04XX-XXXXXXX"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="phone-pad"
+                      value={pmPhone}
+                      onChangeText={setPmPhone}
+                    />
 
-                    <Text style={styles.modalInputLabel}>
-                      CÉDULA DE IDENTIDAD
-                    </Text>
-                    <View style={styles.modalInputCard}>
-                      <Ionicons
-                        name="card-outline"
-                        size={20}
-                        color={tokens.colors.primary}
-                      />
-                      <View style={styles.modalInputDivider} />
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder="ej. 24810294"
-                        placeholderTextColor="#94A3B8"
-                        keyboardType="numeric"
-                        maxLength={10}
-                        value={pmIdNumber}
-                        onChangeText={setPmIdNumber}
-                      />
-                    </View>
+                    <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Ej: 12345678"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="number-pad"
+                      value={pmIdNumber}
+                      onChangeText={setPmIdNumber}
+                    />
 
-                    <Text style={styles.modalInputLabel}>
-                      NÚMERO DE REFERENCIA (ÚLTIMOS 6 DÍGITOS)
-                    </Text>
-                    <View style={styles.modalInputCard}>
-                      <Ionicons
-                        name="receipt-outline"
-                        size={20}
-                        color={tokens.colors.primary}
-                      />
-                      <View style={styles.modalInputDivider} />
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder="ej. 829104"
-                        placeholderTextColor="#94A3B8"
-                        keyboardType="numeric"
-                        maxLength={6}
-                        value={pmReference}
-                        onChangeText={setPmReference}
-                      />
-                    </View>
+                    <Text style={styles.inputLabel}>NÚMERO DE REFERENCIA</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Ej: 00123456"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="number-pad"
+                      value={pmReference}
+                      onChangeText={setPmReference}
+                    />
                   </View>
                 )}
 
                 {selectedMethod === 'tarjeta' && (
                   <View style={styles.formContainer}>
-                    <Text style={styles.modalInputLabel}>
-                      NOMBRE EN LA TARJETA
-                    </Text>
-                    <View style={styles.modalInputCard}>
-                      <Ionicons
-                        name="person-outline"
-                        size={20}
-                        color="#10B981"
-                      />
-                      <View style={styles.modalInputDivider} />
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder="ej. Carlos Pérez"
-                        placeholderTextColor="#94A3B8"
-                        autoCapitalize="words"
-                        value={cardHolder}
-                        onChangeText={setCardHolder}
-                      />
-                    </View>
-
-                    <Text style={styles.modalInputLabel}>
-                      NÚMERO DE TARJETA
-                    </Text>
-                    <View style={styles.modalInputCard}>
-                      <Ionicons name="card-outline" size={20} color="#10B981" />
-                      <View style={styles.modalInputDivider} />
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder="0000 0000 0000 0000"
-                        placeholderTextColor="#94A3B8"
-                        keyboardType="numeric"
-                        maxLength={19}
-                        value={cardNumber}
-                        onChangeText={handleCardNumberChange}
-                      />
-                    </View>
-
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        justifyContent: 'space-between',
-                      }}
-                    >
-                      <View style={{ width: '48%' }}>
-                        <Text style={styles.modalInputLabel}>VENCIMIENTO</Text>
-                        <View style={styles.modalInputCard}>
-                          <TextInput
-                            style={styles.modalInput}
-                            placeholder="MM/AA"
-                            placeholderTextColor="#94A3B8"
-                            keyboardType="numeric"
-                            maxLength={5}
-                            value={cardExpiry}
-                            onChangeText={handleExpiryChange}
-                          />
-                        </View>
+                    <Text style={styles.inputLabel}>TITULAR DE LA TARJETA</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="Nombre como aparece en la tarjeta"
+                      placeholderTextColor="#9CA3AF"
+                      value={cardHolder}
+                      onChangeText={setCardHolder}
+                      autoCapitalize="words"
+                    />
+                    <Text style={styles.inputLabel}>NÚMERO DE TARJETA</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="XXXX XXXX XXXX XXXX"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="number-pad"
+                      value={cardNumber}
+                      onChangeText={handleCardNumberChange}
+                      maxLength={19}
+                    />
+                    <View style={styles.twoColRow}>
+                      <View style={styles.twoColItem}>
+                        <Text style={styles.inputLabel}>VENCIMIENTO</Text>
+                        <TextInput
+                          style={styles.inputField}
+                          placeholder="MM/AA"
+                          placeholderTextColor="#9CA3AF"
+                          keyboardType="number-pad"
+                          value={cardExpiry}
+                          onChangeText={handleExpiryChange}
+                          maxLength={5}
+                        />
                       </View>
-                      <View style={{ width: '48%' }}>
-                        <Text style={styles.modalInputLabel}>CVV</Text>
-                        <View style={styles.modalInputCard}>
-                          <TextInput
-                            style={styles.modalInput}
-                            placeholder="123"
-                            placeholderTextColor="#94A3B8"
-                            keyboardType="numeric"
-                            secureTextEntry={true}
-                            maxLength={4}
-                            value={cardCvv}
-                            onChangeText={setCardCvv}
-                          />
-                        </View>
+                      <View style={styles.twoColItem}>
+                        <Text style={styles.inputLabel}>CVV</Text>
+                        <TextInput
+                          style={styles.inputField}
+                          placeholder="123"
+                          placeholderTextColor="#9CA3AF"
+                          keyboardType="number-pad"
+                          value={cardCvv}
+                          onChangeText={setCardCvv}
+                          maxLength={4}
+                          secureTextEntry
+                        />
                       </View>
                     </View>
                   </View>
                 )}
 
                 {selectedMethod === 'cripto' && (
-                  <View
-                    style={[styles.formContainer, { alignItems: 'center' }]}
-                  >
-                    <Text style={styles.binanceTitle}>USDT • Binance Pay</Text>
-                    <View style={styles.qrContainer}>
-                      <MaterialCommunityIcons
-                        name="qrcode"
-                        size={140}
-                        color="#A855F7"
-                      />
-                    </View>
-
-                    <View style={styles.payIdRow}>
-                      <Text style={styles.payIdLabel}>Pay ID: </Text>
-                      <Text style={styles.payIdValue}>28491048</Text>
-                      <Pressable
-                        style={styles.copyBtn}
-                        onPress={() =>
-                          Alert.alert(
-                            'Copiado',
-                            'Binance Pay ID copiado al portapapeles.',
-                          )
-                        }
-                      >
-                        <Ionicons
-                          name="copy-outline"
-                          size={16}
-                          color="#A855F7"
-                        />
-                      </Pressable>
-                    </View>
-
-                    <Text
-                      style={[
-                        styles.modalInputLabel,
-                        { alignSelf: 'flex-start', marginTop: 24 },
-                      ]}
-                    >
-                      CÓDIGO DE TRANSACCIÓN / HASH (USDT)
+                  <View style={styles.formContainer}>
+                    <Text style={styles.infoBox}>
+                      Envía exactamente{' '}
+                      <Text style={{ fontWeight: 'bold' }}>
+                        {(selectedPkg.amount / 36.5).toFixed(4)} USDT
+                      </Text>{' '}
+                      a la dirección de Binance Pay y pega el hash de la transacción.
                     </Text>
-                    <View style={styles.modalInputCard}>
-                      <Ionicons name="link-outline" size={20} color="#A855F7" />
-                      <View style={styles.modalInputDivider} />
-                      <TextInput
-                        style={styles.modalInput}
-                        placeholder="ej. TX82910482910..."
-                        placeholderTextColor="#94A3B8"
-                        autoCapitalize="none"
-                        value={cryptoTxHash}
-                        onChangeText={setCryptoTxHash}
-                      />
-                    </View>
+                    <Text style={styles.inputLabel}>HASH DE TRANSACCIÓN</Text>
+                    <TextInput
+                      style={styles.inputField}
+                      placeholder="0x..."
+                      placeholderTextColor="#9CA3AF"
+                      value={cryptoTxHash}
+                      onChangeText={setCryptoTxHash}
+                      autoCapitalize="none"
+                    />
                   </View>
                 )}
 
-                {/* Botón de confirmar en modal */}
-                <Pressable
-                  style={styles.modalPayBtn}
-                  onPress={handleConfirmPayment}
-                >
-                  <Text style={styles.modalPayBtnText}>
-                    Confirmar y Recargar
+                <Pressable style={styles.confirmBtn} onPress={handleConfirmPurchase}>
+                  <Text style={styles.confirmBtnText}>
+                    Confirmar Compra — Bs. {selectedPkg.amount.toFixed(2).replace('.', ',')}
                   </Text>
                 </Pressable>
+                <View style={{ height: 24 }} />
               </ScrollView>
             )}
 
             {/* PASO 2: Procesando */}
-            {paymentStep === 'processing' && (
+            {payStep === 'processing' && (
               <View style={styles.processingContainer}>
-                <ActivityIndicator
-                  size="large"
-                  color={tokens.colors.primary}
-                  style={{ marginBottom: 20 }}
-                />
-                <Text style={styles.processingTitle}>
-                  Procesando Pago Seguro...
-                </Text>
+                <ActivityIndicator size="large" color={tokens.colors.primary} style={{ marginBottom: 20 }} />
+                <Text style={styles.processingTitle}>Procesando tu Compra...</Text>
                 <Text style={styles.processingSubtitle}>
-                  Validando los fondos y actualizando tu billetera digital
-                  GoFare.
+                  Verificando pago y acreditando los boletos a tu cuenta.
                 </Text>
               </View>
             )}
 
             {/* PASO 3: Éxito */}
-            {paymentStep === 'success' && (
+            {payStep === 'success' && (
               <View style={styles.successContainer}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={80}
-                  color="#10B981"
-                  style={{ marginBottom: 16 }}
-                />
-                <Text style={styles.successTitle}>¡Recarga Exitosa!</Text>
+                <View style={styles.successIconWrapper}>
+                  <Ionicons name="checkmark-circle" size={80} color="#10B981" />
+                </View>
+                <Text style={styles.successTitle}>¡Compra Exitosa!</Text>
                 <Text style={styles.successSubtitle}>
-                  Los fondos han sido acreditados a tu cuenta de tarifa.
+                  Tus nuevos boletos disponibles son{' '}
+                  <Text style={{ fontFamily: tokens.typography.fontFamily.black, color: tokens.colors.primary }}>
+                    {Math.floor(balance)} {Math.floor(balance) === 1 ? 'pasaje' : 'pasajes'}
+                  </Text>.
                 </Text>
 
-                <View style={styles.receiptCard}>
+                {/* Mini-ticket de comprobante */}
+                <View style={styles.receiptBox}>
                   <View style={styles.receiptRow}>
-                    <Text style={styles.receiptLabel}>Monto Acreditado</Text>
-                    <Text
-                      style={[
-                        styles.receiptValue,
-                        { color: tokens.colors.primary, fontWeight: 'bold' },
-                      ]}
-                    >
-                      Bs.{' '}
-                      {parseFloat(amount.replace(',', '.'))
-                        .toFixed(2)
-                        .replace('.', ',')}
+                    <Text style={styles.receiptLabel}>BOLETOS ACREDITADOS</Text>
+                    <Text style={styles.receiptValue}>{selectedPkg.label}</Text>
+                  </View>
+                  <View style={styles.receiptRow}>
+                    <Text style={styles.receiptLabel}>TOTAL PAGADO</Text>
+                    <Text style={styles.receiptValue}>
+                      Bs. {selectedPkg.amount.toFixed(2).replace('.', ',')}
                     </Text>
                   </View>
                   <View style={styles.receiptRow}>
-                    <Text style={styles.receiptLabel}>Método de Pago</Text>
+                    <Text style={styles.receiptLabel}>MÉTODO</Text>
                     <Text style={styles.receiptValue}>
-                      {selectedMethod === 'pago_movil'
-                        ? `Pago Móvil (${pmBank})`
-                        : selectedMethod === 'tarjeta'
-                          ? 'Tarjeta Débito/Crédito'
-                          : 'Binance Pay (Crypto)'}
+                      {PAYMENT_METHODS.find((m) => m.id === selectedMethod)?.title}
                     </Text>
                   </View>
                   <View style={styles.receiptRow}>
-                    <Text style={styles.receiptLabel}>Referencia</Text>
-                    <Text style={styles.receiptValue}>
-                      {selectedMethod === 'pago_movil'
-                        ? pmReference
-                        : selectedMethod === 'tarjeta'
-                          ? 'TXN-CARD-OK'
-                          : cryptoTxHash.slice(0, 10).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.receiptRow}>
-                    <Text style={styles.receiptLabel}>Fecha y Hora</Text>
-                    <Text style={styles.receiptValue}>
-                      {new Date().toLocaleString('es-VE')}
-                    </Text>
+                    <Text style={styles.receiptLabel}>ESTADO</Text>
+                    <Text style={[styles.receiptValue, { color: '#10B981' }]}>CONFIRMADO ✓</Text>
                   </View>
                 </View>
 
-                <Pressable
-                  style={styles.receiptCloseBtn}
-                  onPress={handleCloseSuccess}
-                >
-                  <Text style={styles.receiptCloseBtnText}>Entendido</Text>
+                <Pressable style={styles.successBtn} onPress={handleCloseSuccess}>
+                  <Text style={styles.successBtnText}>¡Listo, Gracias!</Text>
                 </Pressable>
               </View>
             )}
@@ -801,442 +580,431 @@ export default function TopupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  backButton: {
-    marginRight: 16,
-  },
+  backButton: { marginRight: 12 },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.primary,
+    color: '#18243E',
   },
-  scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 8,
-  },
-  balanceCard: {
-    backgroundColor: tokens.colors.primary,
-    borderRadius: 24,
+  scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
+
+  // Tarjeta de boletos activos
+  ticketCard: {
+    borderRadius: 28,
     padding: 24,
-    marginBottom: 32,
-    shadowColor: tokens.colors.primary,
+    marginBottom: 28,
+    shadowColor: '#1E40AF',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 12,
   },
-  balanceLabel: {
-    fontSize: 14,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#DBEAFE',
-    marginBottom: 8,
+  ticketCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  ticketCardLabel: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.black,
+    letterSpacing: 1,
+    marginBottom: 4,
   },
-  balanceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 20,
-  },
-  currencySymbol: {
-    fontSize: 24,
-    fontFamily: tokens.typography.fontFamily.bold,
+  ticketCardCount: {
     color: '#FFFFFF',
+    fontSize: 56,
+    fontFamily: tokens.typography.fontFamily.black,
+    lineHeight: 64,
   },
-  balanceAmount: {
-    fontSize: 48,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#FFFFFF',
-    marginRight: 12,
-  },
-  statusBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#FFFFFF',
-  },
-  lastRechargeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  lastRechargeText: {
+  ticketCardSub: {
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 12,
     fontFamily: tokens.typography.fontFamily.medium,
-    color: '#E0E7FF',
+    marginTop: 4,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  ticketIconWrapper: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center',
-    marginBottom: 16,
-    marginTop: 16,
+    justifyContent: 'center',
   },
+  ticketCardDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginVertical: 16,
+  },
+  ticketCardBottom: { flexDirection: 'row', alignItems: 'center' },
+  ticketCardNote: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.regular,
+    flex: 1,
+  },
+
+  // Paquetes
   sectionTitle: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#8594AB',
+    letterSpacing: 1,
+    marginBottom: 14,
+    marginTop: 4,
+  },
+  packagesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 28,
+  },
+  pkgCard: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  pkgCardSelected: {
+    borderColor: tokens.colors.primary,
+    backgroundColor: '#EFF6FF',
+  },
+  pkgTag: {
+    position: 'absolute',
+    top: 10,
+    right: -1,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  pkgTagSelected: { backgroundColor: tokens.colors.primary },
+  pkgTagText: {
+    fontSize: 8,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#92400E',
+    letterSpacing: 0.3,
+  },
+  pkgTagTextSelected: { color: '#FFFFFF' },
+  pkgIconWrapper: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    marginTop: 8,
+    position: 'relative',
+  },
+  pkgIconWrapperSelected: { backgroundColor: tokens.colors.primary },
+  pkgQtyOverlay: {
+    position: 'absolute',
+    bottom: -4,
+    right: -6,
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: tokens.colors.primary,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    overflow: 'hidden',
+  },
+  pkgLabel: {
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#6B7280',
-    letterSpacing: 0.5,
-    marginBottom: 16,
+    color: '#334155',
+    marginBottom: 4,
+    textAlign: 'center',
   },
-  amountContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 24,
-    marginBottom: 32,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  currencyPrefix: {
-    fontSize: 32,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.primary,
-    marginRight: 12,
-  },
-  amountInput: {
-    flex: 1,
-    fontSize: 48,
+  pkgLabelSelected: { color: tokens.colors.primary },
+  pkgPrice: {
+    fontSize: 17,
     fontFamily: tokens.typography.fontFamily.black,
-    color: tokens.colors.textDark,
+    color: '#1E293B',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#F1F5F9',
-    marginBottom: 24,
+  pkgPriceSelected: { color: tokens.colors.primary },
+  pkgPerUnit: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#94A3B8',
+    marginTop: 2,
   },
-  quickAmountsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  quickAmountBtn: {
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 16,
-  },
-  quickAmountBtnSelected: {
-    backgroundColor: tokens.colors.primary,
-    shadowColor: tokens.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  quickAmountText: {
-    fontSize: 16,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#475569',
-  },
-  quickAmountTextSelected: {
-    color: '#FFFFFF',
-  },
+  pkgPerUnitSelected: { color: '#60A5FA' },
+
+  // Métodos de pago
   methodCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    padding: 20,
-    borderRadius: 20,
-    marginBottom: 16,
-    borderWidth: 2,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1.5,
     borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 1,
   },
-  methodCardSelected: {
-    borderColor: tokens.colors.primary,
-    backgroundColor: '#FFFFFF',
-  },
+  methodCardSelected: { borderColor: tokens.colors.primary, backgroundColor: '#F0F9FF' },
   methodIconWrapper: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
-    marginRight: 16,
+    justifyContent: 'center',
+    marginRight: 14,
   },
-  methodInfo: {
-    flex: 1,
-  },
+  methodInfo: { flex: 1 },
   methodTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.textDark,
-    marginBottom: 4,
+    color: '#1E293B',
+    marginBottom: 2,
   },
   methodSubtitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontFamily: tokens.typography.fontFamily.regular,
     color: '#64748B',
   },
   radioOuter: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     borderWidth: 2,
     borderColor: '#CBD5E1',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   radioInner: {
-    width: 12,
-    height: 12,
+    width: 11,
+    height: 11,
     borderRadius: 6,
     backgroundColor: tokens.colors.primary,
   },
-  mainButton: {
-    backgroundColor: tokens.colors.primary,
-    paddingVertical: 18,
-    borderRadius: 20,
-    alignItems: 'center',
-    shadowColor: tokens.colors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
-    marginTop: 16,
-  },
-  mainButtonText: {
-    fontSize: 18,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#FFFFFF',
-  },
+
+  // Resumen
   summaryCard: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 24,
-    padding: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
     marginTop: 8,
-    marginBottom: 16,
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   summaryLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#64748B',
   },
   summaryValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.textDark,
+    color: '#1E293B',
   },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 12,
-  },
+  summaryDivider: { height: 1, backgroundColor: '#F1F5F9', marginVertical: 8 },
   summaryTotalLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.textDark,
+    color: '#1E293B',
   },
   summaryTotalValue: {
-    fontSize: 20,
-    fontFamily: tokens.typography.fontFamily.bold,
+    fontSize: 17,
+    fontFamily: tokens.typography.fontFamily.black,
     color: tokens.colors.primary,
   },
-  // Modal de Pago
+
+  // Botón principal
+  mainButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: tokens.colors.primary,
+    borderRadius: 18,
+    height: 58,
+    shadowColor: tokens.colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  mainButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: tokens.typography.fontFamily.bold,
+  },
+
+  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: 'rgba(15,23,42,0.5)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
-    padding: 24,
+    paddingHorizontal: 24,
+    paddingTop: 8,
     maxHeight: '90%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    marginBottom: 12,
   },
-  modalSheetTitle: {
-    fontSize: 20,
+  modalTitle: {
+    fontSize: 17,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.textDark,
+    color: '#1E293B',
   },
-  formContainer: {
+
+  // Resumen en modal
+  purchaseSummaryBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  purchaseSummaryTitle: {
+    fontSize: 16,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  purchaseSummaryPrice: {
+    fontSize: 22,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: tokens.colors.primary,
+  },
+
+  // Formulario
+  formContainer: { marginBottom: 8 },
+  infoBox: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#1E293B',
+    lineHeight: 18,
     marginBottom: 16,
   },
-  infoBox: {
-    backgroundColor: '#FEF3C7',
-    color: '#92400E',
-    padding: 16,
-    borderRadius: 16,
-    fontSize: 13,
-    marginBottom: 20,
-    lineHeight: 18,
+  inputLabel: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#8594AB',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+    marginTop: 12,
   },
-  modalInputLabel: {
-    fontSize: 11,
+  inputField: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    height: 50,
+    fontFamily: tokens.typography.fontFamily.medium,
+    fontSize: 15,
+    color: '#1E293B',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  bankPickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  bankBubble: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  bankBubbleActive: { backgroundColor: '#EFF6FF', borderColor: tokens.colors.primary },
+  bankBubbleText: {
+    fontSize: 12,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#64748B',
-    letterSpacing: 0.8,
-    marginBottom: 8,
   },
-  modalInputCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    height: 56,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  modalInputDivider: {
-    width: 1,
-    height: 20,
-    backgroundColor: '#CBD5E1',
-    marginHorizontal: 12,
-  },
-  modalInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: tokens.colors.textDark,
-  },
-  bankPickerRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  bankBubble: {
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  bankBubbleActive: {
-    backgroundColor: '#DBEAFE',
-    borderColor: tokens.colors.primary,
-  },
-  bankBubbleText: {
-    fontSize: 13,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#475569',
-  },
-  bankBubbleTextActive: {
-    color: tokens.colors.primary,
-    fontFamily: tokens.typography.fontFamily.bold,
-  },
-  binanceTitle: {
-    fontSize: 18,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#F59E0B',
-    marginBottom: 16,
-  },
-  qrContainer: {
-    padding: 16,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    marginBottom: 16,
-  },
-  payIdRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-  },
-  payIdLabel: {
-    fontSize: 14,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#475569',
-  },
-  payIdValue: {
-    fontSize: 14,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.textDark,
-    marginRight: 8,
-  },
-  copyBtn: {
-    padding: 4,
-  },
-  modalPayBtn: {
+  bankBubbleTextActive: { color: tokens.colors.primary },
+  twoColRow: { flexDirection: 'row', gap: 12 },
+  twoColItem: { flex: 1 },
+
+  // Botón de confirmar
+  confirmBtn: {
     backgroundColor: tokens.colors.primary,
+    borderRadius: 18,
     height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 24,
+    justifyContent: 'center',
+    marginTop: 24,
     shadowColor: tokens.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 5,
   },
-  modalPayBtnText: {
-    fontSize: 16,
-    fontFamily: tokens.typography.fontFamily.bold,
+  confirmBtnText: {
     color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: tokens.typography.fontFamily.bold,
   },
-  // Procesando Pago
+
+  // Procesando
   processingContainer: {
     alignItems: 'center',
-    paddingVertical: 48,
+    paddingVertical: 60,
   },
   processingTitle: {
     fontSize: 18,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.textDark,
+    color: '#1E293B',
     marginBottom: 8,
   },
   processingSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: tokens.typography.fontFamily.regular,
     color: '#64748B',
     textAlign: 'center',
-    paddingHorizontal: 24,
-    lineHeight: 20,
+    paddingHorizontal: 20,
   },
-  // Éxito Pago
-  successContainer: {
-    alignItems: 'center',
-    paddingVertical: 16,
-  },
+
+  // Éxito
+  successContainer: { alignItems: 'center', paddingBottom: 32 },
+  successIconWrapper: { marginVertical: 20 },
   successTitle: {
-    fontSize: 22,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#10B981',
-    marginBottom: 8,
+    fontSize: 24,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#1E293B',
+    marginBottom: 6,
   },
   successSubtitle: {
     fontSize: 14,
@@ -1244,44 +1012,49 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
     marginBottom: 24,
+    paddingHorizontal: 20,
   },
-  receiptCard: {
+  receiptBox: {
+    width: '100%',
     backgroundColor: '#F8FAFC',
-    borderRadius: 20,
+    borderRadius: 18,
+    padding: 20,
+    marginBottom: 24,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    padding: 20,
-    width: '100%',
-    marginBottom: 24,
   },
   receiptRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 12,
   },
   receiptLabel: {
-    fontSize: 13,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#64748B',
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#94A3B8',
+    letterSpacing: 0.5,
   },
   receiptValue: {
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.textDark,
+    color: '#1E293B',
   },
-  receiptCloseBtn: {
+  successBtn: {
     backgroundColor: tokens.colors.primary,
-    width: '100%',
+    borderRadius: 18,
     height: 56,
-    borderRadius: 16,
-    justifyContent: 'center',
+    width: '100%',
     alignItems: 'center',
-    marginBottom: 16,
+    justifyContent: 'center',
+    shadowColor: tokens.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
   },
-  receiptCloseBtnText: {
-    fontSize: 16,
-    fontFamily: tokens.typography.fontFamily.bold,
+  successBtnText: {
     color: '#FFFFFF',
+    fontSize: 15,
+    fontFamily: tokens.typography.fontFamily.bold,
   },
 });
