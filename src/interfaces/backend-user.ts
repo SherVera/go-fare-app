@@ -12,6 +12,7 @@ export interface BackendUser {
   profilePhoto?: string;
   provider: string;
   providerId: string;
+  nationalId?: string;
   createdAt: string;
   updatedAt: string;
 }

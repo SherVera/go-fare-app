@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import React, { useState } from 'react';
 import {
@@ -15,16 +16,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { linkPhoneNumber, syncWithBackend } from '@/lib/api';
+import { syncWithBackend, updateBackendProfile } from '@/lib/api';
 import { refreshAuthSessionPhase } from '@/lib/auth-session';
-import {
-  auth,
-  linkPhoneWithCredential,
-  mergeUserProfile,
-  sendLinkPhoneCode,
-  sigOutAccount,
-  updateUser,
-} from '@/lib/firebase';
+import { auth, sigOutAccount, updateUser } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 function vePhoneFromE164(phone: string | null | undefined): string {
@@ -34,10 +28,7 @@ function vePhoneFromE164(phone: string | null | undefined): string {
 
 export default function OnboardingScreen() {
   const user = auth.currentUser;
-  const isPhoneVerified = true; // Omitir verificación telefónica temporalmente
-  const stepsCount = 2;
 
-  const [step, setStep] = useState(0);
   const [fullName, setFullName] = useState(
     () => user?.displayName?.trim() ?? '',
   );
@@ -45,8 +36,6 @@ export default function OnboardingScreen() {
   const [phoneNumber, setPhoneNumber] = useState(() =>
     vePhoneFromE164(user?.phoneNumber ?? undefined),
   );
-  const [otp, setOtp] = useState('');
-  const [verificationId, setVerificationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (!user) {
@@ -56,10 +45,6 @@ export default function OnboardingScreen() {
   const email = user.email ?? '';
 
   const handleBack = () => {
-    if (step > 0) {
-      setStep((s) => s - 1);
-      return;
-    }
     Alert.alert(
       'Salir del registro',
       'Si sales ahora, cerraremos la sesión y podrás elegir otro método de acceso.',
@@ -80,114 +65,72 @@ export default function OnboardingScreen() {
     );
   };
 
-  const validateStep = (): boolean => {
-    if (step === 0) {
-      if (fullName.trim().length < 3) {
-        Alert.alert('Atención', 'El nombre debe tener al menos 3 caracteres.');
-        return false;
-      }
+  const validateForm = (): boolean => {
+    if (fullName.trim().length < 3) {
+      Alert.alert('Atención', 'El nombre debe tener al menos 3 caracteres.');
+      return false;
     }
-    if (step === 1) {
-      if (!/^\d{5,10}$/.test(idNumber.trim())) {
-        Alert.alert(
-          'Atención',
-          'La cédula debe contener entre 5 y 10 dígitos (solo números).',
-        );
-        return false;
-      }
+    if (!/^\d{5,10}$/.test(idNumber.trim())) {
+      Alert.alert(
+        'Atención',
+        'La cédula debe contener entre 5 y 10 dígitos (solo números).',
+      );
+      return false;
     }
-    if (step === 2) {
-      if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(phoneNumber.trim())) {
-        Alert.alert('Atención', 'Ingresa un número válido (ej. 04120000000).');
-        return false;
-      }
-    }
-    if (step === 3) {
-      if (otp.trim().length < 6) {
-        Alert.alert(
-          'Código inválido',
-          'El código de verificación debe tener 6 dígitos.',
-        );
-        return false;
-      }
+    if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(phoneNumber.trim())) {
+      Alert.alert(
+        'Atención',
+        'Por favor, ingresa un número de teléfono válido (ej. 04120000000).',
+      );
+      return false;
     }
     return true;
   };
 
   const handlePrimary = async () => {
-    if (!validateStep()) return;
-
-    if (step < stepsCount - 1) {
-      if (step === 2 && !isPhoneVerified) {
-        const trimmed = phoneNumber.trim();
-        const e164 = `+58${trimmed.slice(1)}`;
-        try {
-          setLoading(true);
-          console.log('[Onboarding] Enviando SMS de verificación a:', e164);
-          const vId = await sendLinkPhoneCode(e164);
-          setVerificationId(vId);
-          setStep(3);
-        } catch (error: any) {
-          console.error(
-            '[Onboarding] Error al enviar código de vinculación:',
-            error,
-          );
-          if (error?.code === 'auth/invalid-phone-number') {
-            Alert.alert('Error', 'El número de teléfono no es válido.');
-          } else if (error?.code === 'auth/too-many-requests') {
-            Alert.alert('Error', 'Demasiados intentos. Intenta más tarde.');
-          } else if (error?.code === 'auth/credential-already-in-use') {
-            Alert.alert(
-              'Error',
-              'Este número de teléfono ya está vinculado a otra cuenta.',
-            );
-          } else {
-            Alert.alert(
-              'Error',
-              error?.message ??
-                'No se pudo enviar el código de verificación por SMS.',
-            );
-          }
-        } finally {
-          setLoading(false);
-        }
-        return;
-      }
-
-      setStep((s) => s + 1);
-      return;
-    }
+    if (!validateForm()) return;
 
     try {
       setLoading(true);
 
-      if (!isPhoneVerified && verificationId) {
-        console.log('[Onboarding] Verificando código OTP de vinculación...');
-        await linkPhoneWithCredential(verificationId, otp.trim());
-
-        console.log('[Onboarding] Refrescando token de Firebase...');
-        const firebaseToken = await user.getIdToken(true);
-
-        console.log('[Onboarding] Sincronizando vinculación en el backend...');
-        await linkPhoneNumber(firebaseToken);
-      }
-
-      console.log('[Onboarding] Actualizando perfil de usuario...');
+      console.log('[Onboarding] Actualizando perfil en Firebase Auth...');
       await updateUser(user, { displayName: fullName.trim() });
-      await mergeUserProfile(user.uid, {
+
+      console.log(
+        '[Onboarding] Autenticando y sincronizando con el backend...',
+      );
+      const response = await syncWithBackend(user);
+
+      console.log('[Onboarding] Actualizando perfil en el backend...');
+      const parts = fullName.trim().split(/\s+/);
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ') || undefined;
+
+      await updateBackendProfile(response.user.id, {
+        displayName: fullName.trim(),
+        firstName,
+        lastName,
+        phoneNumber: phoneNumber.trim(),
+        nationalId: idNumber.trim(),
+      });
+
+      // Guardar perfil completo en caché local
+      const cachedProfile = {
+        uid: user.uid,
         fullName: fullName.trim(),
+        displayName: fullName.trim(),
+        firstName,
+        lastName,
         idNumber: idNumber.trim(),
+        nationalId: idNumber.trim(),
         phoneNumber: phoneNumber.trim(),
         email: email || undefined,
         onboardingCompleted: true,
-      });
-
-      console.log('[Onboarding] Sincronizando base de datos local...');
-      try {
-        await syncWithBackend(user);
-      } catch (e) {
-        console.warn('[onboarding] backend sync:', e);
-      }
+      };
+      await AsyncStorage.setItem(
+        'gofare_cached_user_profile',
+        JSON.stringify(cachedProfile),
+      );
 
       console.log('[Onboarding] Completado, refrescando sesión...');
       await refreshAuthSessionPhase();
@@ -201,27 +144,6 @@ export default function OnboardingScreen() {
       setLoading(false);
     }
   };
-
-  const titles = [
-    {
-      dark: 'Cómo',
-      blue: 'te llamas',
-      sub: 'Usaremos tu nombre en recibos y viajes.',
-    },
-    {
-      dark: 'Tu',
-      blue: 'cédula',
-      sub: 'Identificación requerida para el servicio.',
-    },
-    { dark: 'Tu', blue: 'teléfono', sub: 'Número de contacto en Venezuela.' },
-    {
-      dark: 'Verifica tu',
-      blue: 'teléfono',
-      sub: 'Introduce el código de 6 dígitos que te enviamos por SMS.',
-    },
-  ];
-
-  const t = titles[step];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -238,36 +160,12 @@ export default function OnboardingScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.stepRow}>
-            {Array.from({ length: stepsCount }, (_, i) => (
-              <View
-                key={String(i)}
-                style={[
-                  styles.stepDot,
-                  i < stepsCount - 1 && styles.stepDotSpacer,
-                  i <= step && styles.stepDotActive,
-                ]}
-              />
-            ))}
-          </View>
-          <Text style={styles.stepMeta}>
-            Paso {step + 1} de {stepsCount}
-          </Text>
-
           <View style={styles.iconSection}>
             <View style={styles.fakeShadow} />
             <View style={styles.iconCard}>
               <View style={styles.topShine} />
               <MaterialCommunityIcons
-                name={
-                  step === 0
-                    ? 'account-outline'
-                    : step === 1
-                      ? 'card-account-details-outline'
-                      : step === 2
-                        ? 'phone-outline'
-                        : 'message-text-outline'
-                }
+                name="card-account-details-outline"
                 size={88}
                 color={tokens.colors.primary}
               />
@@ -275,9 +173,11 @@ export default function OnboardingScreen() {
           </View>
 
           <View style={styles.titleBlock}>
-            <Text style={styles.titleDark}>{t.dark}</Text>
-            <Text style={styles.titleBlue}>{t.blue}</Text>
-            <Text style={styles.subtitle}>{t.sub}</Text>
+            <Text style={styles.titleDark}>Completa tu</Text>
+            <Text style={styles.titleBlue}>perfil</Text>
+            <Text style={styles.subtitle}>
+              Ingresa tus datos personales para activar tu cuenta.
+            </Text>
           </View>
 
           {email ? (
@@ -292,119 +192,54 @@ export default function OnboardingScreen() {
             </View>
           ) : null}
 
-          {step === 0 && (
-            <>
-              <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>
-              <View style={styles.inputCard}>
-                <Ionicons name="person-outline" size={20} color="#3072ffe7" />
-                <View style={styles.divider} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="ej. Carlos Pérez"
-                  placeholderTextColor="#B8C4D4"
-                  value={fullName}
-                  onChangeText={setFullName}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-            </>
-          )}
+          <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>
+          <View style={styles.inputCard}>
+            <Ionicons name="person-outline" size={20} color="#3072ffe7" />
+            <View style={styles.divider} />
+            <TextInput
+              style={styles.input}
+              placeholder="ej. Carlos Pérez"
+              placeholderTextColor="#B8C4D4"
+              value={fullName}
+              onChangeText={setFullName}
+              selectionColor={tokens.colors.primary}
+              editable={!loading}
+            />
+          </View>
 
-          {step === 1 && (
-            <>
-              <Text style={styles.inputLabel}>CÉDULA (solo números)</Text>
-              <View style={styles.inputCard}>
-                <Text style={styles.prefix}>V-</Text>
-                <View style={styles.divider} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="00000000"
-                  placeholderTextColor="#B8C4D4"
-                  keyboardType="number-pad"
-                  value={idNumber}
-                  onChangeText={setIdNumber}
-                  maxLength={10}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-            </>
-          )}
+          <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
+          <View style={styles.inputCard}>
+            <Text style={styles.prefix}>V-</Text>
+            <View style={styles.divider} />
+            <TextInput
+              style={styles.input}
+              placeholder="00000000"
+              placeholderTextColor="#B8C4D4"
+              keyboardType="number-pad"
+              value={idNumber}
+              onChangeText={setIdNumber}
+              maxLength={10}
+              selectionColor={tokens.colors.primary}
+              editable={!loading}
+            />
+          </View>
 
-          {step === 2 && (
-            <>
-              <Text style={styles.inputLabel}>TELÉFONO</Text>
-              <View style={styles.inputCard}>
-                <Ionicons name="call-outline" size={20} color="#3072ffe7" />
-                <View style={styles.divider} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="04120000000"
-                  placeholderTextColor="#B8C4D4"
-                  keyboardType="phone-pad"
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  maxLength={11}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-            </>
-          )}
-
-          {step === 3 && (
-            <>
-              <Text style={styles.inputLabel}>
-                CÓDIGO DE VERIFICACIÓN (SMS)
-              </Text>
-              <View style={styles.inputCard}>
-                <Ionicons name="keypad-outline" size={20} color="#3072ffe7" />
-                <View style={styles.divider} />
-                <TextInput
-                  style={[styles.input, styles.otpInput]}
-                  placeholder="000000"
-                  placeholderTextColor="#B8C4D4"
-                  keyboardType="number-pad"
-                  value={otp}
-                  onChangeText={setOtp}
-                  maxLength={6}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-
-              <View style={styles.resendRow}>
-                <Text style={styles.resendText}>¿No llegó el código? </Text>
-                <Pressable
-                  onPress={async () => {
-                    const trimmed = phoneNumber.trim();
-                    const e164 = `+58${trimmed.slice(1)}`;
-                    try {
-                      setLoading(true);
-                      const vId = await sendLinkPhoneCode(e164);
-                      setVerificationId(vId);
-                      Alert.alert(
-                        'Reenviado',
-                        'Se ha enviado un nuevo código de verificación por SMS.',
-                      );
-                    } catch (error: any) {
-                      Alert.alert(
-                        'Error',
-                        error?.message ?? 'No se pudo reenviar el código.',
-                      );
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  disabled={loading}
-                  hitSlop={10}
-                >
-                  <Text style={styles.resendLink}>Reenviar</Text>
-                </Pressable>
-              </View>
-            </>
-          )}
+          <Text style={styles.inputLabel}>TELÉFONO</Text>
+          <View style={styles.inputCard}>
+            <Ionicons name="call-outline" size={20} color="#3072ffe7" />
+            <View style={styles.divider} />
+            <TextInput
+              style={styles.input}
+              placeholder="04120000000"
+              placeholderTextColor="#B8C4D4"
+              keyboardType="phone-pad"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              maxLength={11}
+              selectionColor={tokens.colors.primary}
+              editable={!loading}
+            />
+          </View>
 
           <View style={{ flex: 1, minHeight: 32 }} />
 
@@ -421,15 +256,9 @@ export default function OnboardingScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Text style={styles.ctaText}>
-                  {step < stepsCount - 1 ? 'Continuar' : 'Finalizar'}
-                </Text>
+                <Text style={styles.ctaText}>Finalizar</Text>
                 <Ionicons
-                  name={
-                    step < stepsCount - 1
-                      ? 'arrow-forward-circle-outline'
-                      : 'checkmark-circle-outline'
-                  }
+                  name="checkmark-circle-outline"
                   size={20}
                   color="#fff"
                   style={{ marginLeft: 10 }}
@@ -462,31 +291,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26,
     paddingTop: 8,
     paddingBottom: 36,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  stepDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#D4DEEC',
-  },
-  stepDotSpacer: {
-    marginRight: 8,
-  },
-  stepDotActive: {
-    backgroundColor: tokens.colors.primary,
-  },
-  stepMeta: {
-    textAlign: 'center',
-    fontSize: 12,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#8594AB',
-    marginBottom: 20,
   },
   iconSection: { alignItems: 'center', marginBottom: 28 },
   fakeShadow: {
@@ -629,24 +433,5 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.black,
     color: '#B0BCCC',
     letterSpacing: 1.1,
-  },
-  otpInput: {
-    fontSize: 24,
-    letterSpacing: 8,
-  },
-  resendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  resendText: {
-    fontSize: 13,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#6B7A93',
-  },
-  resendLink: {
-    fontSize: 13,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.primary,
   },
 });

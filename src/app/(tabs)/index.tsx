@@ -25,7 +25,7 @@ import {
   getFareAccountByUserId,
   getUserTickets,
 } from '@/lib/api';
-import { auth, getDocument } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function HomeDashboard() {
@@ -79,29 +79,37 @@ export default function HomeDashboard() {
         }
       }
 
-      // Obtener datos legacy de Firestore para compatibilidad (carnetId, idNumber)
-      const legacyData = await getDocument(`users/${user.uid}`).catch(
-        () => null,
-      );
-      const carnetId =
-        legacyData?.carnetId ||
-        `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`;
+      // Obtener carnetId de caché local o generar uno nuevo
+      let carnetId = 'GO-0000-0000';
+      try {
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached) {
+          const cachedProfile = JSON.parse(cached);
+          if (cachedProfile.carnetId) {
+            carnetId = cachedProfile.carnetId;
+          }
+        }
+      } catch (e) {
+        console.warn('[Home] Error al cargar carnetId de la caché:', e);
+      }
+
+      if (carnetId === 'GO-0000-0000') {
+        carnetId = `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
 
       const updatedProfile = {
         uid: user.uid,
         fullName:
           backendUser.displayName ||
           `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-          legacyData?.fullName ||
           'Usuario',
         displayName:
           backendUser.displayName ||
           `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-          legacyData?.fullName ||
           'Usuario',
-        idNumber: legacyData?.idNumber || 'V-00000000',
+        idNumber: backendUser.nationalId || 'V-00000000',
         email: backendUser.email,
-        phoneNumber: backendUser.phoneNumber || legacyData?.phoneNumber || '',
+        phoneNumber: backendUser.phoneNumber || '',
         balance: fareAccount?.balance ?? 0,
         carnetId,
         createdAt: backendUser.createdAt,
@@ -145,20 +153,20 @@ export default function HomeDashboard() {
         '[Home] Error al obtener datos del backend:',
         error.message || error,
       );
-      // Si el error es de autorización (Unauthorized), no hacemos fallback a Firestore
+      // Si el error es de autorización (Unauthorized), no hacemos fallback
       if (error?.message === 'Unauthorized') {
         return;
       }
-      // Fallback a Firestore local en caso de error de conexión
+      // Fallback a caché local en caso de error de conexión
       try {
-        const legacyData = await getDocument(`users/${user.uid}`);
-        if (legacyData) {
-          setUserProfile(legacyData as UserProfile);
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached) {
+          setUserProfile(JSON.parse(cached));
         }
-      } catch (fbError: any) {
+      } catch (cacheErr: any) {
         console.log(
-          '[Home] Error en fallback de Firestore:',
-          fbError.message || fbError,
+          '[Home] Error en fallback de caché local:',
+          cacheErr.message || cacheErr,
         );
       }
     }

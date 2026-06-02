@@ -41,12 +41,7 @@ import {
   syncWithBackend,
 } from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
-import {
-  auth,
-  isProfileOnboardingComplete,
-  listenToAuthState,
-  sigOutAccount,
-} from '@/lib/firebase';
+import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
 import {
   getFcmToken,
   getInitialNotification,
@@ -225,7 +220,7 @@ export default function RootLayout() {
     Outfit_900Black,
   });
 
-  // 1. Firebase Auth + perfil Firestore (onboarding) + sincronización de rol
+  // 1. Firebase Auth + perfil(onboarding) + sincronización de rol
   useEffect(() => {
     let cancelled = false;
 
@@ -263,22 +258,67 @@ export default function RootLayout() {
       let role = null;
       if (backendUser) {
         const roles = (backendUser as any).roles || [];
+        const isAdmin = roles.some((r: any) => r.name === 'platform_admin');
         const isOwner = roles.some((r: any) => r.name === 'transport_owner');
         const isDriver = roles.some((r: any) => r.name === 'driver');
-        role = isOwner ? 'transport_owner' : isDriver ? 'driver' : 'passenger';
+        role = isAdmin
+          ? 'platform_admin'
+          : isOwner
+            ? 'transport_owner'
+            : isDriver
+              ? 'driver'
+              : 'passenger';
         await AsyncStorage.setItem('user_role', role);
       } else {
         role = await AsyncStorage.getItem('user_role');
       }
 
       let complete = false;
-      if (role === 'driver' || role === 'transport_owner') {
+      if (
+        role === 'driver' ||
+        role === 'transport_owner' ||
+        role === 'platform_admin'
+      ) {
         complete = true;
       } else {
-        try {
-          complete = await isProfileOnboardingComplete(currentUser.uid);
-        } catch (e) {
-          console.warn('[onboarding] could not read profile:', e);
+        let userToCheck = backendUser;
+        if (!userToCheck) {
+          try {
+            const cached = await AsyncStorage.getItem(
+              'gofare_cached_user_profile',
+            );
+            if (cached) {
+              userToCheck = JSON.parse(cached);
+            }
+          } catch (cacheErr) {
+            console.warn(
+              '[Layout] Error al cargar caché del perfil para onboarding check:',
+              cacheErr,
+            );
+          }
+        }
+
+        if (userToCheck) {
+          const checkObj = userToCheck as any;
+          const name = (
+            checkObj.displayName ||
+            `${checkObj.firstName || ''} ${checkObj.lastName || ''}`.trim() ||
+            checkObj.fullName ||
+            ''
+          ).trim();
+          const nameOk = name.length >= 3;
+
+          const rawId = checkObj.nationalId || checkObj.idNumber || '';
+          const cleanId =
+            typeof rawId === 'string' ? rawId.replace('V-', '').trim() : '';
+          const idOk = /^\d{5,10}$/.test(cleanId);
+
+          const phone = checkObj.phoneNumber || '';
+          const phoneOk = /^(0412|0414|0424|0416|0426|0212|\+58)\d{7,11}$/.test(
+            phone.trim(),
+          );
+
+          complete = Boolean(nameOk && idOk && phoneOk);
         }
       }
 
@@ -313,15 +353,18 @@ export default function RootLayout() {
           const backendUser = await getBackendProfile();
           if (backendUser && active) {
             const roles = (backendUser as any).roles || [];
+            const isAdmin = roles.some((r: any) => r.name === 'platform_admin');
             const isOwner = roles.some(
-              (role: any) => role.name === 'transport_owner',
+              (r: any) => r.name === 'transport_owner',
             );
-            const isDriver = roles.some((role: any) => role.name === 'driver');
-            const newRole = isOwner
-              ? 'transport_owner'
-              : isDriver
-                ? 'driver'
-                : 'passenger';
+            const isDriver = roles.some((r: any) => r.name === 'driver');
+            const newRole = isAdmin
+              ? 'platform_admin'
+              : isOwner
+                ? 'transport_owner'
+                : isDriver
+                  ? 'driver'
+                  : 'passenger';
 
             if (newRole !== cachedRole) {
               console.log('[Layout] User role updated from backend:', newRole);
@@ -417,7 +460,9 @@ export default function RootLayout() {
       const onGate = !s0 || publicAuthRoutes.has(s0) || s0 === 'onboarding';
 
       if (onGate) {
-        if (userRole === 'transport_owner') {
+        if (userRole === 'platform_admin') {
+          router.replace('/admin/dashboard' as any);
+        } else if (userRole === 'transport_owner') {
           router.replace('/vehicle-owner/dashboard' as any);
         } else if (userRole === 'driver') {
           router.replace('/driver/dashboard' as any);
@@ -426,17 +471,21 @@ export default function RootLayout() {
         }
       } else {
         // Verificar correspondencia de rol si intenta navegar
-        if (userRole === 'transport_owner') {
-          if (s0 === '(tabs)' || s0 === 'driver') {
+        if (userRole === 'platform_admin') {
+          if (s0 !== 'admin') {
+            router.replace('/admin/dashboard' as any);
+          }
+        } else if (userRole === 'transport_owner') {
+          if (s0 === '(tabs)' || s0 === 'driver' || s0 === 'admin') {
             router.replace('/vehicle-owner/dashboard' as any);
           }
         } else if (userRole === 'driver') {
-          if (s0 === '(tabs)' || s0 === 'vehicle-owner') {
+          if (s0 === '(tabs)' || s0 === 'vehicle-owner' || s0 === 'admin') {
             router.replace('/driver/dashboard' as any);
           }
         } else {
           // Passenger
-          if (s0 === 'vehicle-owner' || s0 === 'driver') {
+          if (s0 === 'vehicle-owner' || s0 === 'driver' || s0 === 'admin') {
             router.replace('/(tabs)' as any);
           }
         }
