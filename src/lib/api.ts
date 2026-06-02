@@ -13,6 +13,11 @@ import {
 const getBaseUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
 
+  // En el emulador de Android, forzar el uso de 10.0.2.2 si está configurado en el env
+  if (Platform.OS === 'android' && envUrl?.includes('10.0.2.2')) {
+    return envUrl;
+  }
+
   // Si la URL del env existe y es una URL de producción (no local)
   if (
     envUrl &&
@@ -224,13 +229,17 @@ async function fetchWithAuth(
 export async function registerWithEmail(
   dto: FirebaseEmailRegisterDto,
 ): Promise<FirebaseIssuedCredentialsDto> {
-  const response = await fetchWithTimeout(`${BASE_URL}/auth/register`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/auth/register`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(dto),
     },
-    body: JSON.stringify(dto),
-  });
+    30000,
+  );
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -293,13 +302,17 @@ export async function sendFirebaseVerificationEmail(
 export async function loginWithFirebaseToken(
   firebaseIdToken: string,
 ): Promise<{ token: string; user: BackendUser }> {
-  const response = await fetchWithTimeout(`${BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${firebaseIdToken}`,
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/auth/login`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${firebaseIdToken}`,
+      },
     },
-  });
+    30000,
+  );
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
@@ -330,6 +343,30 @@ export async function getBackendProfile(): Promise<BackendUser> {
   return user;
 }
 
+/**
+ * Actualiza los datos del usuario en el backend.
+ */
+export async function updateBackendProfile(
+  userId: string,
+  data: {
+    displayName?: string;
+    firstName?: string;
+    lastName?: string;
+    phoneNumber?: string;
+    nationalId?: string;
+  },
+): Promise<BackendUser> {
+  const responseData = await fetchWithAuth(`/users/${userId}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  const user = responseData?.user || responseData;
+  if (user) {
+    user.id = user.uuid || user.id;
+  }
+  return user;
+}
+
 const LOCAL_FARE_ACCOUNT_PREFIX = 'gofare_local_fare_account_';
 const LOCAL_TICKETS_PREFIX = 'gofare_local_tickets_';
 const LOCAL_TRANSACTIONS_PREFIX = 'gofare_local_transactions_';
@@ -349,12 +386,17 @@ async function getLocalFareAccount(
   const key = `${LOCAL_FARE_ACCOUNT_PREFIX}${userId}`;
   const data = await AsyncStorage.getItem(key);
   if (data) {
-    return JSON.parse(data);
+    const acc = JSON.parse(data);
+    if (acc.balance === 100.0) {
+      acc.balance = 0.0;
+      await AsyncStorage.setItem(key, JSON.stringify(acc));
+    }
+    return acc;
   }
   const newAccount: BackendFareAccount = {
     id: `local-acc-${userId}`,
     userId,
-    balance: 100.0, // Saldo inicial de cortesía para pruebas locales
+    balance: 0.0, // Saldo inicial de 0 pasajes para pruebas locales
     isActive: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -1028,4 +1070,235 @@ export async function getUsedTicketsByRoute(
     console.warn('[API] getUsedTicketsByRoute error:', err);
     return [];
   }
+}
+
+/**
+ * Obtiene la lista completa de usuarios registrados.
+ * @returns Lista de usuarios (BackendUser[])
+ */
+export async function getAllUsers(): Promise<BackendUser[]> {
+  return fetchWithAuth('/users');
+}
+
+/**
+ * Elimina un usuario por su ID de la plataforma.
+ * @param id - Identificador UUID del usuario
+ */
+export async function deleteUser(id: string): Promise<void> {
+  await fetchWithAuth(`/users/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Actualiza los roles asignados a un usuario.
+ * @param id - Identificador UUID del usuario
+ * @param roleIds - Lista de IDs numéricos de roles (como string)
+ */
+export async function updateUserRoles(
+  id: string,
+  roleIds: string[],
+): Promise<any> {
+  return fetchWithAuth(`/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ roleIds }),
+  });
+}
+
+/**
+ * Obtiene la lista de todos los documentos presentados en la plataforma.
+ * Intenta consumir del backend, si no existe el endpoint usa datos mock de AsyncStorage.
+ */
+export async function getAllDocuments(): Promise<any[]> {
+  try {
+    const docs = await fetchWithAuth('/documents');
+    if (Array.isArray(docs)) return docs;
+  } catch (err) {
+    console.warn(
+      '[API] Error al obtener documentos del backend, usando mock:',
+      err,
+    );
+  }
+
+  const cached = await AsyncStorage.getItem('mock_admin_documents');
+  if (cached) return JSON.parse(cached);
+
+  const initialDocs = [
+    {
+      uuid: 'doc-1111-2222',
+      type: 'driver_license',
+      documentNumber: 'V-12345678',
+      fileUrl: 'https://example.com/license.pdf',
+      status: 'pending_review',
+      createdAt: new Date().toISOString(),
+      owner: {
+        uuid: 'user-driver-1',
+        displayName: 'Carlos Pérez',
+        email: 'carlos.perez@example.com',
+      },
+    },
+    {
+      uuid: 'doc-3333-4444',
+      type: 'medical_certificate',
+      documentNumber: 'MED-998877',
+      fileUrl: 'https://example.com/med.pdf',
+      status: 'verified',
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+      owner: {
+        uuid: 'user-driver-2',
+        displayName: 'María Rodríguez',
+        email: 'maria.rodriguez@example.com',
+      },
+    },
+    {
+      uuid: 'doc-5555-6666',
+      type: 'property_title',
+      documentNumber: 'PROP-112233',
+      fileUrl: 'https://example.com/title.pdf',
+      status: 'pending_review',
+      createdAt: new Date().toISOString(),
+      owner: {
+        uuid: 'user-owner-1',
+        displayName: 'Juan Gómez',
+        email: 'juan.gomez@example.com',
+      },
+    },
+  ];
+  await AsyncStorage.setItem(
+    'mock_admin_documents',
+    JSON.stringify(initialDocs),
+  );
+  return initialDocs;
+}
+
+/**
+ * Aprueba un documento de conductor/dueño.
+ * @param uuid - Identificador del documento
+ */
+export async function verifyDocument(uuid: string): Promise<any> {
+  try {
+    const res = await fetchWithAuth(`/documents/${uuid}/verify`, {
+      method: 'PATCH',
+    });
+    return res;
+  } catch (err) {
+    console.warn(
+      '[API] verifyDocument falló en backend, actualizando local:',
+      err,
+    );
+  }
+
+  const cached = await AsyncStorage.getItem('mock_admin_documents');
+  const docs = cached ? JSON.parse(cached) : [];
+  const updated = docs.map((d: any) => {
+    if (d.uuid === uuid) {
+      return {
+        ...d,
+        status: 'verified',
+        verifiedBy: { displayName: 'Administrador' },
+      };
+    }
+    return d;
+  });
+  await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(updated));
+  return { uuid, status: 'verified' };
+}
+
+/**
+ * Rechaza un documento con un motivo opcional.
+ * @param uuid - Identificador del documento
+ * @param reason - Motivo del rechazo
+ */
+export async function rejectDocument(
+  uuid: string,
+  reason: string,
+): Promise<any> {
+  try {
+    const res = await fetchWithAuth(`/documents/${uuid}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+    return res;
+  } catch (err) {
+    console.warn(
+      '[API] rejectDocument falló en backend, actualizando local:',
+      err,
+    );
+  }
+
+  const cached = await AsyncStorage.getItem('mock_admin_documents');
+  const docs = cached ? JSON.parse(cached) : [];
+  const updated = docs.map((d: any) => {
+    if (d.uuid === uuid) {
+      return {
+        ...d,
+        status: 'rejected',
+        rejectionReason: reason,
+        verifiedBy: { displayName: 'Administrador' },
+      };
+    }
+    return d;
+  });
+  await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(updated));
+  return { uuid, status: 'rejected', rejectionReason: reason };
+}
+
+/**
+ * Obtiene todas las unidades de transporte registradas.
+ * Intenta consumir del backend, si no existe el endpoint usa datos mock de AsyncStorage.
+ */
+export async function getAllTransportUnits(): Promise<any[]> {
+  try {
+    const units = await fetchWithAuth('/transport-units');
+    if (Array.isArray(units)) return units;
+  } catch (err) {
+    console.warn(
+      '[API] Error al obtener unidades de transporte, usando mock:',
+      err,
+    );
+  }
+
+  const cached = await AsyncStorage.getItem('mock_admin_units');
+  if (cached) return JSON.parse(cached);
+
+  const initialUnits = [
+    {
+      uuid: 'unit-1111',
+      plate: 'ADF123',
+      brand: 'Encava',
+      model: 'ENT-610',
+      inviteCode: 'ENCAVA1',
+      isActive: true,
+      owner: {
+        displayName: 'Juan Gómez',
+        email: 'juan.gomez@example.com',
+      },
+    },
+    {
+      uuid: 'unit-2222',
+      plate: 'BBX987',
+      brand: 'Toyota',
+      model: 'Coaster',
+      inviteCode: 'TOYOTA2',
+      isActive: true,
+      owner: {
+        displayName: 'Luis Blanco',
+        email: 'luis.blanco@example.com',
+      },
+    },
+    {
+      uuid: 'unit-3333',
+      plate: 'CFG456',
+      brand: 'Iveco',
+      model: 'Daily',
+      inviteCode: 'IVECO3',
+      isActive: false,
+      owner: {
+        displayName: 'Pedro Torres',
+        email: 'pedro.torres@example.com',
+      },
+    },
+  ];
+  await AsyncStorage.setItem('mock_admin_units', JSON.stringify(initialUnits));
+  return initialUnits;
 }

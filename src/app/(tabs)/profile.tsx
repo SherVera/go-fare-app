@@ -22,8 +22,12 @@ import type {
   ProfileMenuItem,
   UserProfile,
 } from '@/interfaces';
-import { clearGoFareToken, getBackendProfile } from '@/lib/api';
-import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
+import {
+  clearGoFareToken,
+  getBackendProfile,
+  getFareAccountByUserId,
+} from '@/lib/api';
+import { auth, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ProfileScreen() {
@@ -47,31 +51,31 @@ export default function ProfileScreen() {
       // 2. Consultar servidor en segundo plano
       try {
         const backendUser = await getBackendProfile();
-        const legacyData = await getDocument(`users/${user.uid}`).catch(
-          () => null,
-        );
+        let fareAccountBalance = 0;
+        try {
+          const account = await getFareAccountByUserId(backendUser.id);
+          fareAccountBalance = account.balance;
+        } catch (accountErr) {
+          console.warn('[Profile] Error loading fare account:', accountErr);
+        }
 
         const updatedProfile: UserProfile = {
           uid: user.uid,
           fullName:
             backendUser.displayName ||
             `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-            legacyData?.fullName ||
             'Usuario',
           displayName:
             backendUser.displayName ||
             `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-            legacyData?.fullName ||
             'Usuario',
-          idNumber: legacyData?.idNumber || 'V-00000000',
+          idNumber: backendUser.nationalId || 'V-00000000',
           email: backendUser.email,
-          phoneNumber: backendUser.phoneNumber || legacyData?.phoneNumber || '',
-          balance: legacyData?.balance ?? 0,
+          phoneNumber: backendUser.phoneNumber || '',
+          balance: fareAccountBalance,
           photoURL:
-            backendUser.profilePhoto ||
-            legacyData?.photoURL ||
-            'https://i.pravatar.cc/150?img=11',
-          city: legacyData?.city || 'Caracas, Venezuela',
+            backendUser.profilePhoto || 'https://i.pravatar.cc/150?img=11',
+          city: 'Caracas, Venezuela',
           createdAt: backendUser.createdAt,
         };
 
@@ -111,21 +115,19 @@ export default function ProfileScreen() {
         if (error?.message === 'Unauthorized') {
           return;
         }
-        // Fallback a Firestore local en caso de error
+        // Fallback a caché local en caso de error
         try {
-          const legacyData = await getDocument(`users/${user.uid}`);
-          if (legacyData) {
-            const fbProfile = legacyData as UserProfile;
+          const cached = await AsyncStorage.getItem(
+            'gofare_cached_user_profile',
+          );
+          if (cached) {
+            const fbProfile = JSON.parse(cached);
             setUserProfile(fbProfile);
-            await AsyncStorage.setItem(
-              'gofare_cached_user_profile',
-              JSON.stringify(fbProfile),
-            );
           }
-        } catch (fbError: any) {
+        } catch (cacheErr: any) {
           console.log(
-            '[Profile] Error en fallback de Firestore:',
-            fbError.message || fbError,
+            '[Profile] Error en fallback de caché local:',
+            cacheErr.message || cacheErr,
           );
         }
       }

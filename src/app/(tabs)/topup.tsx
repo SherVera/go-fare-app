@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { PaymentMethod } from '@/interfaces';
 import {
   addAccountBalance,
+  createFareAccount,
   getBackendProfile,
   getFareAccountByUserId,
 } from '@/lib/api';
@@ -117,9 +118,21 @@ export default function TopUpBalanceScreen() {
         setUserId(backendUser.id);
         setPmPhone(backendUser.phoneNumber || '');
 
-        const account = await getFareAccountByUserId(backendUser.id);
-        setAccountId(account.id);
-        setBalance(Number(account.balance));
+        let account;
+        try {
+          account = await getFareAccountByUserId(backendUser.id);
+        } catch (_) {
+          try {
+            account = await createFareAccount(backendUser.id);
+          } catch (createErr) {
+            console.warn('[TopUp] Error creating fare account:', createErr);
+          }
+        }
+
+        if (account) {
+          setAccountId(account.id);
+          setBalance(Number(account.balance));
+        }
       }
     } catch (err) {
       console.warn('[TopUp] Error loading user data:', err);

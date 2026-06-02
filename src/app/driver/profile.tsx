@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { clearGoFareToken, getBackendProfile } from '@/lib/api';
-import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
+import { auth, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function DriverProfileScreen() {
@@ -49,17 +49,31 @@ export default function DriverProfileScreen() {
           setPhone(backendUser.phoneNumber || 'No registrado');
         } catch (apiErr) {
           console.warn(
-            '[DriverProfile] API error, falling back to Firebase/Firestore:',
+            '[DriverProfile] API error, falling back to local cache:',
             apiErr,
           );
-          const legacyData = await getDocument(`users/${user.uid}`).catch(
-            () => null,
-          );
-          if (legacyData) {
-            setName(legacyData.fullName || 'Conductor');
-            setEmail(legacyData.email || user.email || 'conductor@example.com');
-            setPhone(legacyData.phoneNumber || 'No registrado');
-            setLicense(legacyData.idNumber || 'V-12345678');
+          try {
+            const cached = await AsyncStorage.getItem(
+              'gofare_cached_user_profile',
+            );
+            if (cached) {
+              const cachedData = JSON.parse(cached);
+              setName(
+                cachedData.fullName || cachedData.displayName || 'Conductor',
+              );
+              setEmail(
+                cachedData.email || user.email || 'conductor@example.com',
+              );
+              setPhone(cachedData.phoneNumber || 'No registrado');
+              setLicense(
+                cachedData.nationalId || cachedData.idNumber || 'V-12345678',
+              );
+            }
+          } catch (cacheErr) {
+            console.warn(
+              '[DriverProfile] Error loading cached data:',
+              cacheErr,
+            );
           }
         }
       }
