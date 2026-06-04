@@ -91,6 +91,12 @@ export default function AdminLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="owner-requests"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

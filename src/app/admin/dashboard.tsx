@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   clearBackendJwt,
   getAllDocuments,
+  getAllOwnerRequests,
   getAllTransportUnits,
   getAllUsers,
 } from '@/lib/api';
@@ -23,22 +25,25 @@ import { tokens } from '@/theme/tokens';
 export default function AdminDashboardScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
     passengers: 0,
     drivers: 0,
     owners: 0,
     units: 0,
     pendingDocs: 0,
+    pendingOwners: 0,
   });
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      const [users, units, docs] = await Promise.all([
+      const [users, units, docs, ownerReqs] = await Promise.all([
         getAllUsers().catch(() => []),
         getAllTransportUnits().catch(() => []),
         getAllDocuments().catch(() => []),
+        getAllOwnerRequests().catch(() => []),
       ]);
 
       // Calcular estadísticas
@@ -62,12 +67,17 @@ export default function AdminDashboardScreen() {
         (d: any) => d.status === 'pending_review',
       ).length;
 
+      const pendingOwnersCount = ownerReqs.filter(
+        (r: any) => r.status === 'pending',
+      ).length;
+
       setStats({
         passengers: passengerCount,
         drivers: driverCount,
         owners: ownerCount,
         units: units.length,
         pendingDocs: pendingCount,
+        pendingOwners: pendingOwnersCount,
       });
 
       // Ordenar por fecha de creación (descendente) y tomar los 3 más recientes
@@ -87,8 +97,14 @@ export default function AdminDashboardScreen() {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+  }, [loadDashboardData]);
 
   useEffect(() => {
     loadDashboardData();
@@ -133,6 +149,14 @@ export default function AdminDashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         bounces={true}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+            tintColor={tokens.colors.primary}
+          />
+        }
       >
         {/* Cabecera Principal */}
         <View style={styles.header}>
@@ -277,6 +301,29 @@ export default function AdminDashboardScreen() {
                 Códigos de invitación y placa
               </Text>
             </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </Pressable>
+
+          <Pressable
+            style={styles.actionRow}
+            onPress={() => router.push('/admin/owner-requests')}
+          >
+            <View style={[styles.actionIcon, { backgroundColor: '#F5F3FF' }]}>
+              <Ionicons name="business-outline" size={22} color="#7C3AED" />
+            </View>
+            <View style={styles.actionInfoText}>
+              <Text style={styles.actionName}>Solicitudes de Socios</Text>
+              <Text style={styles.actionSub}>
+                Aprobar o rechazar dueños de vehículos
+              </Text>
+            </View>
+            {stats.pendingOwners > 0 && (
+              <View style={styles.pendingBadge}>
+                <Text style={styles.pendingBadgeText}>
+                  {stats.pendingOwners}
+                </Text>
+              </View>
+            )}
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </Pressable>
         </View>
@@ -596,5 +643,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.regular,
     color: '#94A3B8',
+  },
+  pendingBadge: {
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  pendingBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: tokens.typography.fontFamily.bold,
+    fontSize: 11,
   },
 });
