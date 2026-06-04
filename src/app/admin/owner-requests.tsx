@@ -7,6 +7,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -14,92 +15,90 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { getAllDocuments, rejectDocument, verifyDocument } from '@/lib/api';
+import {
+  getAllOwnerRequests,
+  rejectOwnerRequest,
+  verifyOwnerRequest,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
-export default function AdminDocumentsScreen() {
+export default function AdminOwnerRequestsScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [filteredDocs, setFilteredDocs] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [filteredReqs, setFilteredReqs] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<
-    'pending' | 'verified' | 'rejected'
+    'pending' | 'approved' | 'rejected'
   >('pending');
 
   // Estado para el modal de rechazo
-  const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
+  const [selectedReq, setSelectedReq] = useState<any | null>(null);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
-  const applyFilters = useCallback((allDocs: any[], tab: typeof activeTab) => {
-    const statusMap = {
-      pending: 'pending_review',
-      verified: 'verified',
-      rejected: 'rejected',
-    };
-    const targetStatus = statusMap[tab];
-    const result = allDocs.filter((d) => d.status === targetStatus);
-    setFilteredDocs(result);
+  const applyFilters = useCallback((allReqs: any[], tab: typeof activeTab) => {
+    const result = allReqs.filter((r) => r.status === tab);
+    setFilteredReqs(result);
   }, []);
 
-  const fetchDocuments = useCallback(
-    async (isRefresh = false) => {
-      if (!isRefresh) setLoading(true);
-      try {
-        const allDocs = await getAllDocuments();
-        setDocuments(allDocs);
-        applyFilters(allDocs, activeTab);
-      } catch (err) {
-        console.warn('[AdminDocs] Error loading documents:', err);
-        Alert.alert(
-          'Error',
-          'No se pudieron sincronizar los documentos legales.',
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [activeTab, applyFilters],
-  );
+  const fetchRequests = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await getAllOwnerRequests();
+      setRequests(list);
+      applyFilters(list, activeTab);
+    } catch (err) {
+      console.warn('[AdminOwnerRequests] Error loading requests:', err);
+      Alert.alert(
+        'Error',
+        'No se pudieron sincronizar las solicitudes de socios.',
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [activeTab, applyFilters]);
+
+  useEffect(() => {
+    fetchRequests();
+  }, [fetchRequests]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchDocuments(true);
-  }, [fetchDocuments]);
-
-  useEffect(() => {
-    fetchDocuments();
-  }, [fetchDocuments]);
+    await fetchRequests();
+  }, [fetchRequests]);
 
   const handleTabChange = (tab: typeof activeTab) => {
     setActiveTab(tab);
-    applyFilters(documents, tab);
+    applyFilters(requests, tab);
   };
 
-  const handleApprove = (doc: any) => {
+  const handleApprove = (req: any) => {
     Alert.alert(
-      'Aprobar Documento',
-      `¿Deseas verificar y aprobar este documento (${getDocTypeLabel(doc.type)})?`,
+      'Aprobar Solicitud',
+      `¿Deseas aprobar a ${req.displayName} como Socio/Dueño de Vehículo?\n\nEsto le dará permisos para gestionar unidades y conductores de: ${req.businessName}.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Aprobar',
+          text: 'Aprobar Socio',
           onPress: async () => {
             setLoading(true);
             try {
-              await verifyDocument(doc.uuid);
+              await verifyOwnerRequest(req.uuid, req.userUuid);
               Alert.alert(
                 'Éxito',
-                'El documento ha sido verificado y aprobado.',
+                'El usuario ha sido ascendido a Socio con éxito.',
               );
-              fetchDocuments();
+              fetchRequests();
             } catch (err: any) {
-              console.warn('[AdminDocs] Error verifying doc:', err);
+              console.warn(
+                '[AdminOwnerRequests] Error approving request:',
+                err,
+              );
               Alert.alert(
                 'Error',
-                err.message || 'No se pudo aprobar el documento.',
+                err.message || 'No se pudo aprobar la solicitud.',
               );
               setLoading(false);
             }
@@ -109,14 +108,14 @@ export default function AdminDocumentsScreen() {
     );
   };
 
-  const handleRejectInit = (doc: any) => {
-    setSelectedDoc(doc);
+  const handleRejectInit = (req: any) => {
+    setSelectedReq(req);
     setRejectReason('');
     setRejectModalVisible(true);
   };
 
   const handleRejectConfirm = async () => {
-    if (!selectedDoc) return;
+    if (!selectedReq) return;
     if (rejectReason.trim().length < 4) {
       Alert.alert(
         'Advertencia',
@@ -128,45 +127,22 @@ export default function AdminDocumentsScreen() {
     setRejectModalVisible(false);
     setLoading(true);
     try {
-      await rejectDocument(selectedDoc.uuid, rejectReason.trim());
-      Alert.alert('Rechazado', 'El documento ha sido rechazado.');
-      fetchDocuments();
+      await rejectOwnerRequest(selectedReq.uuid, rejectReason.trim());
+      Alert.alert('Rechazada', 'La solicitud ha sido rechazada.');
+      fetchRequests();
     } catch (err: any) {
-      console.warn('[AdminDocs] Error rejecting doc:', err);
-      Alert.alert('Error', err.message || 'No se pudo rechazar el documento.');
+      console.warn('[AdminOwnerRequests] Error rejecting request:', err);
+      Alert.alert('Error', err.message || 'No se pudo rechazar la solicitud.');
       setLoading(false);
-    }
-  };
-
-  const getDocTypeLabel = (type: string) => {
-    switch (type) {
-      case 'driver_license':
-        return 'Licencia de Conducir';
-      case 'medical_certificate':
-        return 'Certificado Médico';
-      case 'property_title':
-        return 'Título de Propiedad';
-      default:
-        return 'Documento Legal';
-    }
-  };
-
-  const getDocTypeIcon = (type: string) => {
-    switch (type) {
-      case 'driver_license':
-        return 'card-outline';
-      case 'medical_certificate':
-        return 'medical-outline';
-      case 'property_title':
-        return 'business-outline';
-      default:
-        return 'document-text-outline';
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScreenHeader title="Validar Documentos" onBack={() => router.back()} />
+      <ScreenHeader
+        title="Solicitudes de Socios"
+        onBack={() => router.back()}
+      />
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
@@ -185,16 +161,16 @@ export default function AdminDocumentsScreen() {
         </Pressable>
 
         <Pressable
-          style={[styles.tab, activeTab === 'verified' && styles.tabActive]}
-          onPress={() => handleTabChange('verified')}
+          style={[styles.tab, activeTab === 'approved' && styles.tabActive]}
+          onPress={() => handleTabChange('approved')}
         >
           <Text
             style={[
               styles.tabLabel,
-              activeTab === 'verified' && styles.tabLabelActive,
+              activeTab === 'approved' && styles.tabLabelActive,
             ]}
           >
-            Aprobados
+            Aprobadas
           </Text>
         </Pressable>
 
@@ -208,30 +184,36 @@ export default function AdminDocumentsScreen() {
               activeTab === 'rejected' && styles.tabLabelActive,
             ]}
           >
-            Rechazados
+            Rechazadas
           </Text>
         </Pressable>
       </View>
 
       {/* List */}
-      {loading ? (
+      {loading && !refreshing ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={tokens.colors.primary} />
         </View>
-      ) : filteredDocs.length === 0 ? (
+      ) : filteredReqs.length === 0 ? (
         <View style={styles.centered}>
-          <Ionicons name="document-text-outline" size={48} color="#CBD5E1" />
+          <Ionicons name="business-outline" size={48} color="#CBD5E1" />
           <Text style={styles.emptyText}>
-            No hay documentos en esta sección.
+            No hay solicitudes en esta sección.
           </Text>
         </View>
       ) : (
         <FlatList
-          data={filteredDocs}
+          data={filteredReqs}
           keyExtractor={(item) => item.uuid}
           contentContainerStyle={styles.listContent}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[tokens.colors.primary]}
+              tintColor={tokens.colors.primary}
+            />
+          }
           renderItem={({ item }) => {
             const dateStr = new Date(item.createdAt).toLocaleDateString(
               'es-ES',
@@ -243,51 +225,55 @@ export default function AdminDocumentsScreen() {
             );
 
             return (
-              <View style={styles.docCard}>
+              <View style={styles.reqCard}>
                 <View style={styles.cardHeader}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons
-                      name={getDocTypeIcon(item.type)}
-                      size={20}
-                      color={tokens.colors.primary}
-                    />
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                      {(item.displayName || 'U').charAt(0).toUpperCase()}
+                    </Text>
                   </View>
                   <View style={styles.meta}>
-                    <Text style={styles.docTitle}>
-                      {getDocTypeLabel(item.type)}
-                    </Text>
-                    <Text style={styles.docNum}>
-                      Nro: {item.documentNumber || 'S/N'}
-                    </Text>
+                    <Text style={styles.userName}>{item.displayName}</Text>
+                    <Text style={styles.userEmail}>{item.email}</Text>
                   </View>
                   <Text style={styles.dateText}>{dateStr}</Text>
                 </View>
 
-                {/* Info Propietario */}
-                <View style={styles.ownerCard}>
-                  <Text style={styles.ownerTitle}>PROPIETARIO</Text>
-                  <Text style={styles.ownerName}>
-                    {item.owner?.displayName || 'Usuario GoFare'}
-                  </Text>
-                  <Text style={styles.ownerEmail}>
-                    {item.owner?.email || 'Sin correo'}
-                  </Text>
+                {/* Detalles de Usuario */}
+                <View style={styles.detailsRow}>
+                  {item.nationalId && (
+                    <Text style={styles.detailText}>
+                      Cédula: {item.nationalId}
+                    </Text>
+                  )}
+                  {item.phoneNumber && (
+                    <Text style={styles.detailText}>
+                      Tel: {item.phoneNumber}
+                    </Text>
+                  )}
                 </View>
 
-                {/* Detalles Adicionales en caso de Rechazo */}
+                {/* Cooperativa / RIF */}
+                <View style={styles.coopCard}>
+                  <Text style={styles.coopCardTitle}>AFILIACIÓN COMERCIAL</Text>
+                  <Text style={styles.coopName}>{item.businessName}</Text>
+                  <Text style={styles.coopRif}>RIF: {item.idNumber}</Text>
+                </View>
+
+                {/* Motivo de rechazo */}
                 {item.status === 'rejected' && item.rejectionReason && (
-                  <View style={styles.rejectionReasonCard}>
-                    <Text style={styles.rejectionReasonTitle}>
+                  <View style={styles.rejectionCard}>
+                    <Text style={styles.rejectionTitle}>
                       MOTIVO DE RECHAZO:
                     </Text>
-                    <Text style={styles.rejectionReasonText}>
+                    <Text style={styles.rejectionText}>
                       {item.rejectionReason}
                     </Text>
                   </View>
                 )}
 
-                {/* Acciones */}
-                {item.status === 'pending_review' && (
+                {/* Acciones para Pendientes */}
+                {item.status === 'pending' && (
                   <View style={styles.actionsRow}>
                     <Pressable
                       style={styles.rejectBtn}
@@ -310,7 +296,7 @@ export default function AdminDocumentsScreen() {
                         size={18}
                         color="#FFFFFF"
                       />
-                      <Text style={styles.approveBtnText}>Aprobar</Text>
+                      <Text style={styles.approveBtnText}>Aprobar Socio</Text>
                     </Pressable>
                   </View>
                 )}
@@ -330,7 +316,7 @@ export default function AdminDocumentsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Rechazar Documento</Text>
+              <Text style={styles.modalTitle}>Rechazar Solicitud</Text>
               <Pressable onPress={() => setRejectModalVisible(false)}>
                 <Ionicons
                   name="close-circle-outline"
@@ -341,12 +327,12 @@ export default function AdminDocumentsScreen() {
             </View>
 
             <Text style={styles.modalSubtitle}>
-              Indica el motivo por el cual rechazas este documento:
+              Indica el motivo por el cual rechazas al postulante:
             </Text>
 
             <TextInput
               style={styles.modalInput}
-              placeholder="Ej. El documento está vencido o la foto está borrosa..."
+              placeholder="Ej. El RIF provisto no coincide o no es socio autorizado..."
               placeholderTextColor="#94A3B8"
               multiline
               numberOfLines={4}
@@ -415,9 +401,9 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 110, // Más padding para evitar que se tape con el tab bar flotante
   },
-  docCard: {
+  reqCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
@@ -434,7 +420,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  iconCircle: {
+  avatar: {
     width: 40,
     height: 40,
     borderRadius: 10,
@@ -443,15 +429,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  avatarText: {
+    fontSize: 15,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+  },
   meta: {
     flex: 1,
   },
-  docTitle: {
+  userName: {
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#0F172A',
   },
-  docNum: {
+  userEmail: {
     fontSize: 11,
     fontFamily: tokens.typography.fontFamily.regular,
     color: '#64748B',
@@ -462,46 +453,57 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#94A3B8',
   },
-  ownerCard: {
+  detailsRow: {
+    flexDirection: 'row',
+    marginTop: 8,
+    paddingLeft: 2,
+  },
+  detailText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginRight: 16,
+  },
+  coopCard: {
     backgroundColor: '#F8FAFC',
     borderRadius: 10,
     padding: 12,
-    marginTop: 14,
+    marginTop: 12,
   },
-  ownerTitle: {
+  coopCardTitle: {
     fontSize: 9,
     fontFamily: tokens.typography.fontFamily.black,
     color: '#94A3B8',
     letterSpacing: 1,
     marginBottom: 4,
   },
-  ownerName: {
+  coopName: {
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#334155',
   },
-  ownerEmail: {
+  coopRif: {
     fontSize: 11,
-    fontFamily: tokens.typography.fontFamily.regular,
+    fontFamily: tokens.typography.fontFamily.medium,
     color: '#64748B',
     marginTop: 1,
   },
-  rejectionReasonCard: {
+  rejectionCard: {
     backgroundColor: '#FEF2F2',
     borderLeftWidth: 3,
     borderLeftColor: '#EF4444',
     borderRadius: 8,
     padding: 10,
-    marginTop: 14,
+    marginTop: 12,
   },
-  rejectionReasonTitle: {
+  rejectionTitle: {
     fontSize: 9,
     fontFamily: tokens.typography.fontFamily.black,
     color: '#991B1B',
     letterSpacing: 0.8,
     marginBottom: 2,
   },
-  rejectionReasonText: {
+  rejectionText: {
     fontSize: 12,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#B91C1C',
@@ -531,7 +533,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   approveBtn: {
-    flex: 1,
+    flex: 1.3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
