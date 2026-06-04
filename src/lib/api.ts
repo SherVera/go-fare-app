@@ -888,6 +888,36 @@ export async function submitVehicleOwnerRequest(requestData: {
   businessName: string;
   idNumber: string;
 }): Promise<any> {
+  const profile = await getBackendProfile().catch(() => null);
+
+  const newRequest = {
+    uuid: `owner-req-${profile?.id || Date.now()}`,
+    userUuid: profile?.id || 'unknown',
+    displayName: profile?.displayName || 'Usuario de Pruebas',
+    email: profile?.email || 'test@example.com',
+    nationalId: profile?.nationalId || 'V-00000000',
+    phoneNumber: profile?.phoneNumber || '04120000000',
+    businessName: requestData.businessName,
+    idNumber: requestData.idNumber,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
+    const requests = cached ? JSON.parse(cached) : [];
+    const filtered = requests.filter(
+      (r: any) => r.userUuid !== newRequest.userUuid,
+    );
+    filtered.unshift(newRequest);
+    await AsyncStorage.setItem(
+      'mock_global_owner_requests',
+      JSON.stringify(filtered),
+    );
+  } catch (err) {
+    console.warn('[API] Error al guardar solicitud de socio globalmente:', err);
+  }
+
   try {
     await AsyncStorage.setItem(
       'mock_vehicle_owner_cooperative',
@@ -1301,4 +1331,157 @@ export async function getAllTransportUnits(): Promise<any[]> {
   ];
   await AsyncStorage.setItem('mock_admin_units', JSON.stringify(initialUnits));
   return initialUnits;
+}
+
+/**
+ * Obtiene todas las solicitudes de registro de dueños de vehículos.
+ * Si está vacío, se auto-inicializa basándose en usuarios pasajeros reales en PostgreSQL.
+ */
+export async function getAllOwnerRequests(): Promise<any[]> {
+  let cachedRequests: any[] = [];
+  try {
+    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
+    if (cached) {
+      cachedRequests = JSON.parse(cached);
+    }
+  } catch (err) {
+    console.warn(
+      '[API] Error al leer solicitudes de socio de AsyncStorage:',
+      err,
+    );
+  }
+
+  // Cargar usuarios reales de la DB para hacer la simulación coherente
+  let users: any[] = [];
+  try {
+    users = await getAllUsers();
+  } catch (err) {
+    console.warn(
+      '[API] Error al cargar usuarios para solicitudes de socio:',
+      err,
+    );
+  }
+
+  // Filtrar los pasajeros puros (usuarios que no tienen rol Socio o Conductor)
+  const passengers = users.filter((u) => {
+    const roles = u.roles || [];
+    const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+    const isDriver = roles.some((r: any) => r.name === 'driver');
+    const isAdmin = roles.some((r: any) => r.name === 'platform_admin');
+    return !isOwner && !isDriver && !isAdmin;
+  });
+
+  // Si no hay solicitudes en caché y hay pasajeros en la DB, inicializamos algunas solicitudes
+  if (cachedRequests.length === 0 && passengers.length > 0) {
+    cachedRequests = passengers.map((p, index) => {
+      // Usar RIFs ficticios pero consistentes
+      const rifs = ['J-409823124', 'J-312984716', 'J-481920384', 'J-501238472'];
+      const coops = [
+        'Cooperativa Caracas Move R.L.',
+        'Línea de Transporte Chacao',
+        'Asociación de Conductores La India',
+        'Cooperativa Metrópolis',
+      ];
+      return {
+        uuid: `owner-req-${p.uuid || p.id}`,
+        userUuid: p.uuid || p.id,
+        displayName:
+          p.displayName || `${p.firstName || ''} ${p.lastName || ''}`,
+        email: p.email,
+        nationalId: p.nationalId || `V-${12000000 + index}`,
+        phoneNumber: p.phoneNumber || '04125550000',
+        businessName: coops[index % coops.length],
+        idNumber: rifs[index % rifs.length],
+        status: 'pending',
+        createdAt: new Date(Date.now() - index * 7200000).toISOString(),
+      };
+    });
+    try {
+      await AsyncStorage.setItem(
+        'mock_global_owner_requests',
+        JSON.stringify(cachedRequests),
+      );
+    } catch (storageErr) {
+      console.warn('[API] Error al guardar solicitudes iniciales:', storageErr);
+    }
+  }
+
+  return cachedRequests;
+}
+
+/**
+ * Aprueba una solicitud de dueño de vehículo: asigna el rol Socio (ID '3')
+ * en la base de datos real de PostgreSQL y marca la solicitud como aprobada.
+ */
+export async function verifyOwnerRequest(
+  requestUuid: string,
+  userUuid: string,
+): Promise<any> {
+  // 1. Llamada real al backend para ascender el rol del usuario a Socio (ID '3')
+  try {
+    await updateUserRoles(userUuid, ['3']);
+  } catch (err) {
+    console.warn(
+      '[API] Error al ascender el rol del usuario en la base de datos:',
+      err,
+    );
+    throw new Error('No se pudo ascender al usuario a Socio en el servidor.');
+  }
+
+  // 2. Actualizar el estado local de la solicitud
+  try {
+    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
+    if (cached) {
+      const requests = JSON.parse(cached);
+      const updated = requests.map((r: any) => {
+        if (r.uuid === requestUuid) {
+          return { ...r, status: 'approved' };
+        }
+        return r;
+      });
+      await AsyncStorage.setItem(
+        'mock_global_owner_requests',
+        JSON.stringify(updated),
+      );
+    }
+  } catch (storageErr) {
+    console.warn(
+      '[API] Error al actualizar estado de solicitud aprobada:',
+      storageErr,
+    );
+  }
+
+  return { requestUuid, status: 'approved' };
+}
+
+/**
+ * Rechaza una solicitud de socio con un motivo.
+ */
+export async function rejectOwnerRequest(
+  requestUuid: string,
+  reason: string,
+): Promise<any> {
+  try {
+    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
+    if (cached) {
+      const requests = JSON.parse(cached);
+      const updated = requests.map((r: any) => {
+        if (r.uuid === requestUuid) {
+          return { ...r, status: 'rejected', rejectionReason: reason };
+        }
+        return r;
+      });
+      await AsyncStorage.setItem(
+        'mock_global_owner_requests',
+        JSON.stringify(updated),
+      );
+    }
+  } catch (storageErr) {
+    console.warn(
+      '[API] Error al actualizar estado de solicitud rechazada:',
+      storageErr,
+    );
+  }
+
+  return { requestUuid, status: 'rejected', rejectionReason: reason };
 }

@@ -20,6 +20,7 @@ import { tokens } from '@/theme/tokens';
 export default function AdminUsersScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [users, setUsers] = useState<any[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -43,7 +44,13 @@ export default function AdminUsersScreen() {
       if (roleTab !== 'all') {
         result = result.filter((u) => {
           const roles = (u as any).roles || [];
-          return roles.some((r: any) => r.name === roleTab);
+          const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+          const isDriver = roles.some((r: any) => r.name === 'driver');
+
+          if (roleTab === 'transport_owner') return isOwner;
+          if (roleTab === 'driver') return isDriver;
+          if (roleTab === 'passenger') return !isOwner && !isDriver;
+          return false;
         });
       }
 
@@ -71,22 +78,31 @@ export default function AdminUsersScreen() {
     [],
   );
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const allUsers = await getAllUsers();
-      setUsers(allUsers);
-      applyFilters(allUsers, search, activeTab);
-    } catch (err) {
-      console.warn('[AdminUsers] Error loading users:', err);
-      Alert.alert(
-        'Error',
-        'No se pudo obtener la lista de usuarios del servidor.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [applyFilters, search, activeTab]);
+  const fetchUsers = useCallback(
+    async (isRefresh = false) => {
+      if (!isRefresh) setLoading(true);
+      try {
+        const allUsers = await getAllUsers();
+        setUsers(allUsers);
+        applyFilters(allUsers, search, activeTab);
+      } catch (err) {
+        console.warn('[AdminUsers] Error loading users:', err);
+        Alert.alert(
+          'Error',
+          'No se pudo obtener la lista de usuarios del servidor.',
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [applyFilters, search, activeTab],
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchUsers(true);
+  }, [fetchUsers]);
 
   useEffect(() => {
     fetchUsers();
@@ -262,6 +278,8 @@ export default function AdminUsersScreen() {
           data={filteredUsers}
           keyExtractor={(item) => item.uuid}
           contentContainerStyle={styles.listContent}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           renderItem={({ item }) => {
             const roles = item.roles || [];
             const isOwner = roles.some(

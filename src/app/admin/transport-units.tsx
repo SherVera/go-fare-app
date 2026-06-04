@@ -19,6 +19,7 @@ import { tokens } from '@/theme/tokens';
 export default function AdminTransportUnitsScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [units, setUnits] = useState<any[]>([]);
   const [filteredUnits, setFilteredUnits] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -61,22 +62,31 @@ export default function AdminTransportUnitsScreen() {
     [],
   );
 
-  const fetchUnits = useCallback(async () => {
-    setLoading(true);
-    try {
-      const allUnits = await getAllTransportUnits();
-      setUnits(allUnits);
-      applyFilters(allUnits, search, activeTab);
-    } catch (err) {
-      console.warn('[AdminUnits] Error loading units:', err);
-      Alert.alert(
-        'Error',
-        'No se pudo obtener el listado de unidades del servidor.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [activeTab, applyFilters, search]);
+  const fetchUnits = useCallback(
+    async (isRefresh = false) => {
+      if (!isRefresh) setLoading(true);
+      try {
+        const allUnits = await getAllTransportUnits();
+        setUnits(allUnits);
+        applyFilters(allUnits, search, activeTab);
+      } catch (err) {
+        console.warn('[AdminUnits] Error loading units:', err);
+        Alert.alert(
+          'Error',
+          'No se pudo obtener el listado de unidades del servidor.',
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [activeTab, applyFilters, search],
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchUnits(true);
+  }, [fetchUnits]);
 
   useEffect(() => {
     fetchUnits();
@@ -180,6 +190,8 @@ export default function AdminTransportUnitsScreen() {
           data={filteredUnits}
           keyExtractor={(item) => item.uuid}
           contentContainerStyle={styles.listContent}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           renderItem={({ item }) => {
             const statusColor = item.isActive ? '#10B981' : '#64748B';
             const statusText = item.isActive ? 'Activa' : 'Inactiva';

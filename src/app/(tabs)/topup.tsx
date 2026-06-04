@@ -7,6 +7,7 @@ import {
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -96,6 +97,9 @@ export default function TopUpBalanceScreen() {
     'details',
   );
 
+  // Estado para pull to refresh
+  const [refreshing, setRefreshing] = useState(false);
+
   // Campos de Pago Móvil
   const [pmBank, setPmBank] = useState('Banesco');
   const [pmPhone, setPmPhone] = useState('');
@@ -140,6 +144,12 @@ export default function TopUpBalanceScreen() {
       setLoadingBalance(false);
     }
   }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadUserData();
+    setRefreshing(false);
+  }, [loadUserData]);
 
   useEffect(() => {
     loadUserData();
@@ -248,6 +258,14 @@ export default function TopUpBalanceScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+            tintColor={tokens.colors.primary}
+          />
+        }
       >
         {/* Tarjeta de Saldo Disponible */}
         <LinearGradient
