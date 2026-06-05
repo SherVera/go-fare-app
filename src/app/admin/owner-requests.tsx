@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
   getAllOwnerRequests,
@@ -23,7 +24,8 @@ import {
 import { tokens } from '@/theme/tokens';
 
 export default function AdminOwnerRequestsScreen() {
-  const router = useRouter();
+  const _router = useRouter();
+  const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
@@ -141,7 +143,7 @@ export default function AdminOwnerRequestsScreen() {
     <SafeAreaView style={styles.container}>
       <ScreenHeader
         title="Solicitudes de Socios"
-        onBack={() => router.back()}
+        onMenu={() => setIsOpen(true)}
       />
 
       {/* Tabs */}

@@ -13,12 +13,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { getAllDocuments, rejectDocument, verifyDocument } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function AdminDocumentsScreen() {
-  const router = useRouter();
+  const _router = useRouter();
+  const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [documents, setDocuments] = useState<any[]>([]);
@@ -166,7 +168,7 @@ export default function AdminDocumentsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScreenHeader title="Validar Documentos" onBack={() => router.back()} />
+      <ScreenHeader title="Validar Documentos" onMenu={() => setIsOpen(true)} />
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>

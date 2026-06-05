@@ -378,7 +378,7 @@ export default function RegisterScreen() {
           {/* ── TÍTULOS ── */}
           <View style={styles.titleBlock}>
             <Text style={styles.titleDark}>Únete a</Text>
-            <Text style={styles.titleBlue}>GoFair</Text>
+            <Text style={styles.titleBlue}>GoFare</Text>
             <Text style={styles.subtitle}>
               {`Crea tu cuenta para moverte\nlibremente por la ciudad.`}
             </Text>

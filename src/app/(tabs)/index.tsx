@@ -222,7 +222,7 @@ export default function HomeDashboard() {
       {/* ── CUSTOM HEADER ── */}
       <View style={styles.header}>
         <View style={styles.headerIcon} />
-        <Text style={styles.headerTitle}>GoFair</Text>
+        <Text style={styles.headerTitle}>GoFare</Text>
         <Pressable style={styles.headerIcon}>
           <Ionicons
             name="notifications-outline"
@@ -263,8 +263,8 @@ export default function HomeDashboard() {
         {/* ── QUICK ACTIONS ── */}
         <View style={styles.actionsRow}>
           <ActionCard
-            title="Comprar Boleto"
-            subtitle="Adquiere pasajes vía Pago Móvil o tarjeta"
+            title="Comprar Fares"
+            subtitle="Adquiere fares vía Pago Móvil o tarjeta"
             icon="ticket"
             onPress={() => router.push('/topup')}
           />
