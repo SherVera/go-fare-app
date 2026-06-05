@@ -153,7 +153,7 @@ export default function TripsScreen() {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>GoFair</Text>
+        <Text style={styles.headerTitle}>GoFare</Text>
         <Image
           source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
           style={styles.avatar}
@@ -277,8 +277,7 @@ export default function TripsScreen() {
               <View style={styles.noTripsContainer}>
                 <Ionicons name="bus-outline" size={48} color="#9CA3AF" />
                 <Text style={styles.noTripsText}>
-                  No se encontraron boletos ni viajes registrados en este
-                  período.
+                  No se encontraron fares ni viajes registrados en este período.
                 </Text>
               </View>
             ) : (
@@ -307,7 +306,7 @@ export default function TripsScreen() {
                     </View>
                     <View style={styles.tripInfo}>
                       <Text style={styles.tripTitle}>
-                        {ticket.route || 'Boleto General'}
+                        {ticket.route || 'Fare General'}
                       </Text>
                       <View style={styles.tripSubtitleRow}>
                         <Text style={styles.tripSubtitle}>{formattedDate}</Text>

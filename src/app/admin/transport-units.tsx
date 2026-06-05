@@ -12,12 +12,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { getAllTransportUnits } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function AdminTransportUnitsScreen() {
-  const router = useRouter();
+  const _router = useRouter();
+  const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [units, setUnits] = useState<any[]>([]);
@@ -66,14 +68,14 @@ export default function AdminTransportUnitsScreen() {
     async (isRefresh = false) => {
       if (!isRefresh) setLoading(true);
       try {
-        const allUnits = await getAllTransportUnits();
-        setUnits(allUnits);
-        applyFilters(allUnits, search, activeTab);
+        const res = await getAllTransportUnits();
+        setUnits(res);
+        applyFilters(res, search, activeTab);
       } catch (err) {
-        console.warn('[AdminUnits] Error loading units:', err);
+        console.warn('[AdminUnits] Error fetching units:', err);
         Alert.alert(
           'Error',
-          'No se pudo obtener el listado de unidades del servidor.',
+          'No se pudieron cargar las unidades de transporte.',
         );
       } finally {
         setLoading(false);
@@ -104,7 +106,10 @@ export default function AdminTransportUnitsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScreenHeader title="Unidades Registradas" onBack={() => router.back()} />
+      <ScreenHeader
+        title="Unidades Registradas"
+        onMenu={() => setIsOpen(true)}
+      />
 
       {/* Search */}
       <View style={styles.searchContainer}>

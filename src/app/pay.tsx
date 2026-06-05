@@ -130,8 +130,8 @@ export default function PayTripScreen() {
       if (ticket) {
         if (ticket.status === 'used') {
           Alert.alert(
-            'Boleto Usado',
-            'Este boleto ya ha sido validado anteriormente.',
+            'Fare Usado',
+            'Este fare ya ha sido validado anteriormente.',
             [{ text: 'Aceptar', onPress: () => setScanned(false) }],
           );
           return;
@@ -140,8 +140,8 @@ export default function PayTripScreen() {
         // Validar el boleto existente
         await validateTicketByQr(scannedData);
         Alert.alert(
-          'Boleto Validado',
-          `Boleto para la ruta "${ticket.route || 'General'}" validado con éxito. ¡Buen viaje!`,
+          'Fare Validado',
+          `Fare para la ruta "${ticket.route || 'General'}" validado con éxito. ¡Buen viaje!`,
           [
             {
               text: 'Aceptar',
@@ -188,10 +188,10 @@ export default function PayTripScreen() {
 
         const costInTickets = 1;
         if (userBalance < costInTickets) {
-          // No tiene boletos suficientes — redirigir a comprar
+          // No tiene fares suficientes — redirigir a comprar
           Alert.alert(
-            'Boletos Insuficientes',
-            `No tienes boletos disponibles para este viaje.\nTu Saldo: ${userBalance} pasajes\n\n¿Deseas comprar más boletos ahora?`,
+            'Fares Insuficientes',
+            `No tienes fares disponibles para este viaje.\nTu Saldo: ${userBalance.toFixed(2)} fares\n\n¿Deseas comprar más fares ahora?`,
             [
               {
                 text: 'Cancelar',
@@ -199,7 +199,7 @@ export default function PayTripScreen() {
                 style: 'cancel',
               },
               {
-                text: 'Comprar Boletos',
+                text: 'Comprar Fares',
                 onPress: () => {
                   setScanned(false);
                   router.push('/(tabs)/topup');
@@ -210,7 +210,7 @@ export default function PayTripScreen() {
           return;
         }
 
-        // Tiene saldo suficiente — mostrar confirmación del pasaje
+        // Tiene saldo suficiente — mostrar confirmación del fare
         setBackendUserData(backendUser);
         setFareAccount(account);
         setBalance(userBalance);
@@ -453,7 +453,7 @@ export default function PayTripScreen() {
                   />
                 </View>
 
-                <Text style={styles.modalSubtitle}>Confirma tu Pasaje</Text>
+                <Text style={styles.modalSubtitle}>Confirma tu Fare</Text>
 
                 {/* TICKET DIGITAL */}
                 <View style={styles.ticketCard}>
@@ -470,7 +470,7 @@ export default function PayTripScreen() {
                           size={18}
                           color={tokens.colors.primary}
                         />
-                        <Text style={styles.ticketLogoText}>PASAJE GOFARE</Text>
+                        <Text style={styles.ticketLogoText}>FARE GOFARE</Text>
                       </View>
                       <View style={styles.ticketBadge}>
                         <Text style={styles.ticketBadgeText}>ACTIVO</Text>
@@ -485,8 +485,10 @@ export default function PayTripScreen() {
                     </View>
 
                     <View style={styles.ticketPriceRow}>
-                      <Text style={styles.ticketLabel}>TARIFA DEL PASAJE</Text>
-                      <Text style={styles.ticketPriceValue}>1 pasaje</Text>
+                      <Text style={styles.ticketLabel}>TARIFA (COSTO)</Text>
+                      <Text style={styles.ticketPriceValue}>
+                        {routeFare.toFixed(2)} fares
+                      </Text>
                     </View>
                   </View>
 
@@ -510,7 +512,7 @@ export default function PayTripScreen() {
 
                     <View style={styles.ticketInfoRow}>
                       <Text style={styles.ticketInfoLabel}>
-                        BOLETOS DISPONIBLES
+                        FARES DISPONIBLES
                       </Text>
                       <Text
                         style={[
@@ -518,14 +520,13 @@ export default function PayTripScreen() {
                           balance === 0 && { color: '#EF4444' },
                         ]}
                       >
-                        {Math.floor(balance)}{' '}
-                        {Math.floor(balance) === 1 ? 'boleto' : 'boletos'}
+                        {balance.toFixed(2)} fares
                       </Text>
                     </View>
 
                     <View style={styles.ticketInfoRow}>
                       <Text style={styles.ticketInfoLabel}>
-                        BOLETOS RESTANTES
+                        FARES RESTANTES
                       </Text>
                       <Text
                         style={[
@@ -536,10 +537,7 @@ export default function PayTripScreen() {
                           },
                         ]}
                       >
-                        {Math.max(0, Math.floor(balance - routeFare))}{' '}
-                        {Math.max(0, Math.floor(balance - routeFare)) === 1
-                          ? 'boleto'
-                          : 'boletos'}
+                        {Math.max(0, balance - routeFare).toFixed(2)} fares
                       </Text>
                     </View>
                   </View>
@@ -573,10 +571,10 @@ export default function PayTripScreen() {
                   style={{ marginBottom: 24 }}
                 />
                 <Text style={styles.processingTitle}>
-                  Procesando tu Pasaje...
+                  Procesando tu Fare...
                 </Text>
                 <Text style={styles.processingSubtitle}>
-                  Activando tu boleto y registrando el viaje de forma segura.
+                  Activando tu fare y registrando el viaje de forma segura.
                 </Text>
               </View>
             )}
@@ -589,7 +587,7 @@ export default function PayTripScreen() {
                 </View>
                 <Text style={styles.successTitle}>¡Buen Viaje!</Text>
                 <Text style={styles.successSubtitle}>
-                  Tu pasaje ha sido pagado y validado con éxito.
+                  Tu fare ha sido pagado y validado con éxito.
                 </Text>
 
                 {/* TICKET DIGITAL COMPROBANTE */}
@@ -635,11 +633,11 @@ export default function PayTripScreen() {
                     </View>
 
                     <View style={styles.ticketPriceRow}>
-                      <Text style={styles.ticketLabel}>BOLETO USADO</Text>
+                      <Text style={styles.ticketLabel}>FARE USADO</Text>
                       <Text
                         style={[styles.ticketPriceValue, { color: '#10B981' }]}
                       >
-                        1 pasaje
+                        {routeFare.toFixed(2)} fares
                       </Text>
                     </View>
                   </View>

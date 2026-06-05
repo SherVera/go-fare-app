@@ -176,20 +176,6 @@ export default function ProfileScreen() {
       onPress: () => router.push('/security'),
     },
     {
-      id: 'vehicle-owner',
-      title: 'Dueño de Vehículo',
-      subtitle: 'Panel de control de tu flota',
-      iconName: 'car',
-      onPress: () => router.push('/vehicle-owner/dashboard' as any),
-    },
-    {
-      id: 'driver',
-      title: 'Trabajar como Conductor',
-      subtitle: 'Envía tu solicitud para conducir',
-      iconName: 'id-card-outline',
-      onPress: () => router.push('/register-driver' as any),
-    },
-    {
       id: 'notifications',
       title: 'Notificaciones',
       subtitle: 'Alertas de viaje y recargas',
@@ -252,7 +238,7 @@ export default function ProfileScreen() {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>GoFair</Text>
+        <Text style={styles.headerTitle}>GoFare</Text>
         <Image
           source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
           style={styles.headerAvatar}

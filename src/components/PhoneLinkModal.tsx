@@ -127,7 +127,7 @@ export function PhoneLinkModal({
           </View>
           <Text style={styles.description}>
             {step === 'phone'
-              ? 'Se requiere un número verificado por SMS para realizar pagos y comprar boletos.'
+              ? 'Se requiere un número verificado por SMS para realizar pagos y adquirir fares.'
               : 'Ingresa el código de 6 dígitos enviado a tu teléfono por SMS.'}
           </Text>
 

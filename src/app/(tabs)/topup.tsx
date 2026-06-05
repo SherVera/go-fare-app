@@ -25,25 +25,25 @@ import {
 import { tokens } from '@/theme/tokens';
 
 const RECHARGE_PACKAGES = [
-  { tickets: 1, amount: 15, label: '1 Pasaje', desc: 'Bs. 15,00', tag: null },
+  { tickets: 1, amount: 15, label: '1 Fare', desc: 'Bs. 15,00', tag: null },
   {
     tickets: 2,
     amount: 28,
-    label: '2 Pasajes',
+    label: '2 Fares',
     desc: 'Bs. 28,00',
     tag: 'AHORRA Bs. 2',
   },
   {
     tickets: 5,
     amount: 65,
-    label: '5 Pasajes',
+    label: '5 Fares',
     desc: 'Bs. 65,00',
     tag: 'AHORRA Bs. 10',
   },
   {
     tickets: 10,
     amount: 120,
-    label: '10 Pasajes',
+    label: '10 Fares',
     desc: 'Bs. 120,00',
     tag: 'POPULAR',
   },
@@ -252,7 +252,7 @@ export default function TopUpBalanceScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={tokens.colors.primary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Comprar Boletos</Text>
+        <Text style={styles.headerTitle}>Comprar Fares</Text>
       </View>
 
       <ScrollView
@@ -276,7 +276,7 @@ export default function TopUpBalanceScreen() {
         >
           <View style={styles.ticketCardTop}>
             <View>
-              <Text style={styles.ticketCardLabel}>BOLETOS DISPONIBLES</Text>
+              <Text style={styles.ticketCardLabel}>FARES DISPONIBLES</Text>
               {loadingBalance ? (
                 <ActivityIndicator
                   size="small"
@@ -284,15 +284,13 @@ export default function TopUpBalanceScreen() {
                   style={{ marginTop: 8 }}
                 />
               ) : (
-                <Text style={styles.ticketCardCount}>
-                  {Math.floor(balance)}
-                </Text>
+                <Text style={styles.ticketCardCount}>{balance.toFixed(2)}</Text>
               )}
               <Text style={styles.ticketCardSub}>
-                {Math.floor(balance)}{' '}
-                {Math.floor(balance) === 1
-                  ? 'pasaje activo listo para usar'
-                  : 'pasajes activos listos para usar'}
+                {balance.toFixed(2)}{' '}
+                {balance === 1
+                  ? 'fare activo listo para usar'
+                  : 'fares activos listos para usar'}
               </Text>
             </View>
             <View style={styles.ticketIconWrapper}>
@@ -313,7 +311,8 @@ export default function TopUpBalanceScreen() {
               color="rgba(255,255,255,0.7)"
             />
             <Text style={styles.ticketCardNote}>
-              {'  '}Cada boleto = 1 pasaje. Usa en cualquier unidad GoFare.
+              {'  '}Los fares son divisibles y se descuentan según la tarifa de
+              la ruta.
             </Text>
           </View>
         </LinearGradient>
@@ -455,7 +454,7 @@ export default function TopUpBalanceScreen() {
             style={{ marginRight: 8 }}
           />
           <Text style={styles.mainButtonText}>
-            Comprar Boletos — Bs.{' '}
+            Comprar Fares — Bs.{' '}
             {selectedPkg.amount.toFixed(2).replace('.', ',')}
           </Text>
         </Pressable>
@@ -505,7 +504,7 @@ export default function TopUpBalanceScreen() {
                   />
                   <View style={{ marginLeft: 12 }}>
                     <Text style={styles.purchaseSummaryTitle}>
-                      Compra de Boletos
+                      Compra de Fares
                     </Text>
                     <Text style={styles.purchaseSummaryPrice}>
                       {selectedPkg.label}
@@ -679,7 +678,7 @@ export default function TopUpBalanceScreen() {
                   Procesando tu Compra...
                 </Text>
                 <Text style={styles.processingSubtitle}>
-                  Verificando pago y acreditando los boletos a tu cuenta.
+                  Verificando pago y acreditando los fares a tu cuenta.
                 </Text>
               </View>
             )}
@@ -692,15 +691,14 @@ export default function TopUpBalanceScreen() {
                 </View>
                 <Text style={styles.successTitle}>¡Compra Exitosa!</Text>
                 <Text style={styles.successSubtitle}>
-                  Tus nuevos boletos disponibles son{' '}
+                  Tus nuevos fares disponibles son{' '}
                   <Text
                     style={{
                       fontFamily: tokens.typography.fontFamily.black,
                       color: tokens.colors.primary,
                     }}
                   >
-                    {Math.floor(balance)}{' '}
-                    {Math.floor(balance) === 1 ? 'pasaje' : 'pasajes'}
+                    {balance.toFixed(2)} {balance === 1 ? 'fare' : 'fares'}
                   </Text>
                   .
                 </Text>
@@ -708,7 +706,7 @@ export default function TopUpBalanceScreen() {
                 {/* Mini-ticket de comprobante */}
                 <View style={styles.receiptBox}>
                   <View style={styles.receiptRow}>
-                    <Text style={styles.receiptLabel}>BOLETOS ACREDITADOS</Text>
+                    <Text style={styles.receiptLabel}>FARES ACREDITADOS</Text>
                     <Text style={styles.receiptValue}>{selectedPkg.label}</Text>
                   </View>
                   <View style={styles.receiptRow}>

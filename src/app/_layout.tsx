@@ -547,7 +547,7 @@ export default function RootLayout() {
             color="#0EA5E9"
             style={styles.lockLogo}
           />
-          <Text style={styles.lockAppName}>GoFair</Text>
+          <Text style={styles.lockAppName}>GoFare</Text>
         </View>
 
         <View style={styles.lockBody}>

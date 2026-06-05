@@ -267,7 +267,7 @@ export default function OnboardingScreen() {
             )}
           </Pressable>
 
-          <Text style={styles.footerLegal}>GOFAIR • ONBOARDING</Text>
+          <Text style={styles.footerLegal}>GOFARE • ONBOARDING</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

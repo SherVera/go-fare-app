@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import {
   clearBackendJwt,
   getAllDocuments,
@@ -24,6 +25,7 @@ import { tokens } from '@/theme/tokens';
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
+  const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
@@ -110,7 +112,7 @@ export default function AdminDashboardScreen() {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  const handleLogout = () => {
+  const _handleLogout = () => {
     Alert.alert(
       'Cerrar Sesión',
       '¿Estás seguro de que deseas salir del panel de administración?',
@@ -160,13 +162,13 @@ export default function AdminDashboardScreen() {
       >
         {/* Cabecera Principal */}
         <View style={styles.header}>
-          <View>
+          <Pressable style={styles.menuBtn} onPress={() => setIsOpen(true)}>
+            <Ionicons name="menu" size={26} color={tokens.colors.primary} />
+          </Pressable>
+          <View style={styles.headerTextContainer}>
             <Text style={styles.headerSubtitle}>PANEL DE CONTROL</Text>
             <Text style={styles.headerTitle}>Administración</Text>
           </View>
-          <Pressable style={styles.logoutBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={24} color="#EF4444" />
-          </Pressable>
         </View>
 
         {/* Tarjeta Informativa / Bienvenida */}
@@ -425,8 +427,24 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 20,
+  },
+  menuBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   headerSubtitle: {
     fontSize: 10,
@@ -438,19 +456,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontFamily: tokens.typography.fontFamily.black,
     color: '#0F172A',
-  },
-  logoutBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
   },
   heroCard: {
     flexDirection: 'row',
