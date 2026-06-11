@@ -33,23 +33,46 @@ export default function AdminOwnerRequestsScreen() {
   const [activeTab, setActiveTab] = useState<
     'pending' | 'approved' | 'rejected'
   >('pending');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Estado para el modal de rechazo
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
-  const applyFilters = useCallback((allReqs: any[], tab: typeof activeTab) => {
-    const result = allReqs.filter((r) => r.status === tab);
-    setFilteredReqs(result);
-  }, []);
+  const applyFilters = useCallback(
+    (allReqs: any[], tab: typeof activeTab, query: string) => {
+      let result = allReqs.filter((r) => r.status === tab);
+
+      if (query.trim().length > 0) {
+        const cleanQuery = query.toLowerCase().trim();
+        result = result.filter((r) => {
+          const nameMatch = r.displayName?.toLowerCase().includes(cleanQuery);
+          const emailMatch = r.email?.toLowerCase().includes(cleanQuery);
+          const nationalIdMatch = r.nationalId?.toLowerCase().includes(cleanQuery);
+          const businessNameMatch = r.businessName?.toLowerCase().includes(cleanQuery);
+          const idNumberMatch = r.idNumber?.toLowerCase().includes(cleanQuery);
+          return (
+            nameMatch ||
+            emailMatch ||
+            nationalIdMatch ||
+            businessNameMatch ||
+            idNumberMatch
+          );
+        });
+      }
+
+      setFilteredReqs(result);
+    },
+    [],
+  );
 
   const fetchRequests = useCallback(async () => {
     setLoading(true);
     try {
       const list = await getAllOwnerRequests();
       setRequests(list);
-      applyFilters(list, activeTab);
+      applyFilters(list, activeTab, searchQuery);
     } catch (err) {
       console.warn('[AdminOwnerRequests] Error loading requests:', err);
       Alert.alert(
@@ -60,7 +83,7 @@ export default function AdminOwnerRequestsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab, applyFilters]);
+  }, [activeTab, applyFilters, searchQuery]);
 
   useEffect(() => {
     fetchRequests();
@@ -73,7 +96,12 @@ export default function AdminOwnerRequestsScreen() {
 
   const handleTabChange = (tab: typeof activeTab) => {
     setActiveTab(tab);
-    applyFilters(requests, tab);
+    applyFilters(requests, tab, searchQuery);
+  };
+
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    applyFilters(requests, activeTab, text);
   };
 
   const handleApprove = (req: any) => {
@@ -145,6 +173,34 @@ export default function AdminOwnerRequestsScreen() {
         title="Solicitudes de Socios"
         onMenu={() => setIsOpen(true)}
       />
+
+      {/* Barra de Búsqueda */}
+      <View style={styles.searchContainer}>
+        <Ionicons
+          name="search-outline"
+          size={18}
+          color="#94A3B8"
+          style={styles.searchIcon}
+        />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar por nombre o cédula..."
+          placeholderTextColor="#94A3B8"
+          value={searchQuery}
+          onChangeText={handleSearchChange}
+          clearButtonMode="while-editing"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <Pressable
+            onPress={() => handleSearchChange('')}
+            style={styles.clearBtn}
+          >
+            <Ionicons name="close-circle" size={18} color="#94A3B8" />
+          </Pressable>
+        )}
+      </View>
 
       {/* Tabs */}
       <View style={styles.tabsContainer}>
@@ -368,6 +424,36 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginHorizontal: 20,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    height: 46,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    fontFamily: tokens.typography.fontFamily.medium,
+    fontSize: 14,
+    color: '#0F172A',
+  },
+  clearBtn: {
+    padding: 4,
   },
   tabsContainer: {
     flexDirection: 'row',

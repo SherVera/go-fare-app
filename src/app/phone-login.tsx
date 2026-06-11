@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { syncWithBackend } from '@/lib/api';
-import { confirmPhoneCode, sendPhoneVerificationCode } from '@/lib/firebase';
+import { confirmPhoneCode, sendPhoneVerificationCode, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 type Step = 'phone' | 'otp';
@@ -100,6 +100,15 @@ export default function PhoneLoginScreen() {
           await syncWithBackend(credential.user);
         } catch (backendErr) {
           console.warn('[phone-login] backend sync failed:', backendErr);
+          try {
+            await sigOutAccount();
+          } catch {}
+          Alert.alert(
+            'Error de Conexión',
+            'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.'
+          );
+          setLoading(false);
+          return;
         }
       }
     } catch (error: any) {

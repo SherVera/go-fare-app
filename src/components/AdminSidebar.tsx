@@ -5,6 +5,7 @@ import {
   Animated,
   Dimensions,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -76,36 +77,68 @@ export function AdminSidebar() {
     }
   };
 
-  const menuItems = [
+  const menuSections = [
     {
-      id: 'dashboard',
-      label: 'Dashboard',
-      icon: 'grid',
-      route: '/admin/dashboard',
+      title: 'Principal',
+      items: [
+        {
+          id: 'dashboard',
+          label: 'Dashboard',
+          icon: 'grid',
+          route: '/admin/dashboard',
+        },
+      ],
     },
     {
-      id: 'users',
-      label: 'Usuarios',
-      icon: 'people',
-      route: '/admin/users',
+      title: 'Seguridad y Usuarios',
+      items: [
+        {
+          id: 'users',
+          label: 'Usuarios',
+          icon: 'people',
+          route: '/admin/users',
+        },
+        {
+          id: 'civil-associations',
+          label: 'Asoc. Civiles',
+          icon: 'business',
+          route: '/admin/civil-associations',
+        },
+      ],
     },
     {
-      id: 'documents',
-      label: 'Documentos',
-      icon: 'document-text',
-      route: '/admin/documents',
+      title: 'Flota y Control',
+      items: [
+        {
+          id: 'documents',
+          label: 'Documentos',
+          icon: 'document-text',
+          route: '/admin/documents',
+        },
+        {
+          id: 'transport-units',
+          label: 'Unidades',
+          icon: 'bus',
+          route: '/admin/transport-units',
+        },
+        {
+          id: 'owner-requests',
+          label: 'Solicitudes Socios',
+          icon: 'file-tray-full',
+          route: '/admin/owner-requests',
+        },
+      ],
     },
     {
-      id: 'transport-units',
-      label: 'Unidades',
-      icon: 'bus',
-      route: '/admin/transport-units',
-    },
-    {
-      id: 'owner-requests',
-      label: 'Solicitudes Socios',
-      icon: 'file-tray-full',
-      route: '/admin/owner-requests',
+      title: 'Finanzas',
+      items: [
+        {
+          id: 'rates',
+          label: 'Tasas y Tarifas',
+          icon: 'trending-up',
+          route: '/admin/rates',
+        },
+      ],
     },
   ];
 
@@ -142,35 +175,42 @@ export function AdminSidebar() {
           </View>
         </View>
 
-        {/* Navigation Items List */}
-        <View style={styles.menuList}>
-          {menuItems.map((item) => {
-            const isActive = pathname === item.route;
-            return (
-              <Pressable
-                key={item.id}
-                style={[styles.menuItem, isActive && styles.menuItemActive]}
-                onPress={() => handleNavigate(item.route)}
-              >
-                <Ionicons
-                  name={
-                    isActive
-                      ? (item.icon as any)
-                      : (`${item.icon}-outline` as any)
-                  }
-                  size={20}
-                  color={isActive ? tokens.colors.primary : '#64748B'}
-                  style={styles.menuIcon}
-                />
-                <Text
-                  style={[styles.menuLabel, isActive && styles.menuLabelActive]}
-                >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        {/* Navigation Items List grouped by sections */}
+        <ScrollView style={styles.menuScroll} contentContainerStyle={styles.menuScrollContent} showsVerticalScrollIndicator={false}>
+          {menuSections.map((section, secIdx) => (
+            <View key={section.title} style={[styles.sectionContainer, secIdx > 0 && { marginTop: 14 }]}>
+              <Text style={styles.sectionHeader}>{section.title}</Text>
+              <View style={styles.sectionItems}>
+                {section.items.map((item) => {
+                  const isActive = pathname === item.route;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      style={[styles.menuItem, isActive && styles.menuItemActive]}
+                      onPress={() => handleNavigate(item.route)}
+                    >
+                      <Ionicons
+                        name={
+                          isActive
+                            ? (item.icon as any)
+                            : (`${item.icon}-outline` as any)
+                        }
+                        size={20}
+                        color={isActive ? tokens.colors.primary : '#64748B'}
+                        style={styles.menuIcon}
+                      />
+                      <Text
+                        style={[styles.menuLabel, isActive && styles.menuLabelActive]}
+                      >
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
 
         {/* Footer Section (User Profile and Logout) */}
         <View style={styles.sidebarFooter}>
@@ -254,9 +294,27 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     letterSpacing: 0.5,
   },
-  menuList: {
+  menuScroll: {
     flex: 1,
-    gap: 8,
+    marginVertical: 4,
+  },
+  menuScrollContent: {
+    paddingBottom: 16,
+  },
+  sectionContainer: {
+    marginBottom: 8,
+  },
+  sectionHeader: {
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 1.0,
+    marginBottom: 6,
+    paddingHorizontal: 12,
+  },
+  sectionItems: {
+    gap: 4,
   },
   menuItem: {
     flexDirection: 'row',

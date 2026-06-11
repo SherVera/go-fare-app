@@ -1,5 +1,6 @@
 export interface UserProfile {
   uid: string;
+  backendUuid?: string;
   fullName: string;
   displayName?: string;
   idNumber: string; // Cédula venezolana
