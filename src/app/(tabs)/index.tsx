@@ -128,20 +128,28 @@ export default function HomeDashboard() {
       );
 
       // Sincronizar el rol del usuario para evitar desvíos o incoherencias
+      const isAdmin = (backendUser as any).roles?.some(
+        (role: any) => role.name === 'platform_admin',
+      );
       const isOwner = (backendUser as any).roles?.some(
         (role: any) => role.name === 'transport_owner',
       );
       const isDriver = (backendUser as any).roles?.some(
         (role: any) => role.name === 'driver',
       );
-      const newRole = isOwner
-        ? 'transport_owner'
-        : isDriver
-          ? 'driver'
-          : 'passenger';
+      const newRole = isAdmin
+        ? 'platform_admin'
+        : isOwner
+          ? 'transport_owner'
+          : isDriver
+            ? 'driver'
+            : 'passenger';
       await AsyncStorage.setItem('user_role', newRole);
 
-      if (isOwner) {
+      if (isAdmin) {
+        console.log('[Home] User is platform admin, redirecting...');
+        router.replace('/admin/dashboard' as any);
+      } else if (isOwner) {
         console.log('[Home] User is transport owner, redirecting...');
         router.replace('/vehicle-owner/dashboard' as any);
       } else if (isDriver) {

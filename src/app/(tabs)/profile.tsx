@@ -23,6 +23,7 @@ import type {
   UserProfile,
 } from '@/interfaces';
 import {
+  BASE_URL,
   clearGoFareToken,
   getBackendProfile,
   getFareAccountByUserId,
@@ -61,6 +62,7 @@ export default function ProfileScreen() {
 
         const updatedProfile: UserProfile = {
           uid: user.uid,
+          backendUuid: backendUser.id,
           fullName:
             backendUser.displayName ||
             `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
@@ -87,20 +89,28 @@ export default function ProfileScreen() {
           JSON.stringify(updatedProfile),
         );
 
+        const isAdmin = (backendUser as any).roles?.some(
+          (role: any) => role.name === 'platform_admin',
+        );
         const isOwner = (backendUser as any).roles?.some(
           (role: any) => role.name === 'transport_owner',
         );
         const isDriver = (backendUser as any).roles?.some(
           (role: any) => role.name === 'driver',
         );
-        const newRole = isOwner
-          ? 'transport_owner'
-          : isDriver
-            ? 'driver'
-            : 'passenger';
+        const newRole = isAdmin
+          ? 'platform_admin'
+          : isOwner
+            ? 'transport_owner'
+            : isDriver
+              ? 'driver'
+              : 'passenger';
         await AsyncStorage.setItem('user_role', newRole);
 
-        if (isOwner) {
+        if (isAdmin) {
+          console.log('[Profile] User is platform admin, redirecting...');
+          router.replace('/admin/dashboard' as any);
+        } else if (isOwner) {
           console.log('[Profile] User is transport owner, redirecting...');
           router.replace('/vehicle-owner/dashboard' as any);
         } else if (isDriver) {
@@ -337,6 +347,14 @@ export default function ProfileScreen() {
           </Text>
         </Pressable>
 
+        {/* Debug Info */}
+        <View style={styles.debugCard}>
+          <Text style={styles.debugTitle}>Información de Diagnóstico</Text>
+          <Text style={styles.debugText}>API URL: {BASE_URL}</Text>
+          <Text style={styles.debugText}>Firebase UID: {userProfile?.uid || 'N/A'}</Text>
+          <Text style={styles.debugText}>Backend UUID: {userProfile?.backendUuid || 'Cargando o Fallido...'}</Text>
+        </View>
+
         {/* Space for the absolute tab bar */}
         <View style={{ height: 120 }} />
       </ScrollView>
@@ -541,5 +559,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#10B981',
+  },
+  debugCard: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#475569',
+    marginBottom: 8,
+  },
+  debugText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginBottom: 4,
   },
 });

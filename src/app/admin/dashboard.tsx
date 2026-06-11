@@ -19,6 +19,7 @@ import {
   getAllOwnerRequests,
   getAllTransportUnits,
   getAllUsers,
+  getAllCivilAssociations,
 } from '@/lib/api';
 import { sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -35,17 +36,19 @@ export default function AdminDashboardScreen() {
     units: 0,
     pendingDocs: 0,
     pendingOwners: 0,
+    civilAssociations: 0,
   });
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
 
   const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      const [users, units, docs, ownerReqs] = await Promise.all([
+      const [users, units, docs, ownerReqs, civils] = await Promise.all([
         getAllUsers().catch(() => []),
         getAllTransportUnits().catch(() => []),
         getAllDocuments().catch(() => []),
         getAllOwnerRequests().catch(() => []),
+        getAllCivilAssociations().catch(() => []),
       ]);
 
       // Calcular estadísticas
@@ -57,11 +60,13 @@ export default function AdminDashboardScreen() {
         const roles = (u as any).roles || [];
         const isOwner = roles.some((r: any) => r.name === 'transport_owner');
         const isDriver = roles.some((r: any) => r.name === 'driver');
+        const isCivil = roles.some((r: any) => r.name === 'civil_association');
         const isAdmin = roles.some((r: any) => r.name === 'platform_admin');
 
         if (isAdmin) continue;
         if (isOwner) ownerCount++;
         else if (isDriver) driverCount++;
+        else if (isCivil) continue;
         else passengerCount++;
       }
 
@@ -80,6 +85,7 @@ export default function AdminDashboardScreen() {
         units: units.length,
         pendingDocs: pendingCount,
         pendingOwners: pendingOwnersCount,
+        civilAssociations: civils.length,
       });
 
       // Ordenar por fecha de creación (descendente) y tomar los 3 más recientes
@@ -219,6 +225,17 @@ export default function AdminDashboardScreen() {
           </View>
 
           <Pressable
+            style={styles.statBox}
+            onPress={() => router.push('/admin/civil-associations' as any)}
+          >
+            <View style={[styles.statIconCircle, { backgroundColor: '#FFF7ED' }]}>
+              <Ionicons name="business" size={20} color="#EA580C" />
+            </View>
+            <Text style={styles.statValue}>{stats.civilAssociations}</Text>
+            <Text style={styles.statLabel}>Asoc. Civiles</Text>
+          </Pressable>
+
+          <Pressable
             style={[
               styles.statBox,
               stats.pendingDocs > 0 && {
@@ -251,7 +268,43 @@ export default function AdminDashboardScreen() {
             >
               {stats.pendingDocs}
             </Text>
-            <Text style={styles.statLabel}>Por Aprobar</Text>
+            <Text style={styles.statLabel}>Doc. Pendientes</Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.statBox,
+              stats.pendingOwners > 0 && {
+                borderColor: '#EF4444',
+                borderWidth: 1.5,
+              },
+            ]}
+            onPress={() => router.push('/admin/owner-requests')}
+          >
+            <View
+              style={[
+                styles.statIconCircle,
+                {
+                  backgroundColor:
+                    stats.pendingOwners > 0 ? '#FEE2E2' : '#F3F4F6',
+                },
+              ]}
+            >
+              <Ionicons
+                name="file-tray-full"
+                size={20}
+                color={stats.pendingOwners > 0 ? '#EF4444' : '#9E9E9E'}
+              />
+            </View>
+            <Text
+              style={[
+                styles.statValue,
+                stats.pendingOwners > 0 && { color: '#EF4444' },
+              ]}
+            >
+              {stats.pendingOwners}
+            </Text>
+            <Text style={styles.statLabel}>Solic. Socios</Text>
           </Pressable>
         </View>
 
@@ -268,7 +321,23 @@ export default function AdminDashboardScreen() {
             <View style={styles.actionInfoText}>
               <Text style={styles.actionName}>Usuarios de la Plataforma</Text>
               <Text style={styles.actionSub}>
-                Ver listado, roles y detalles
+                Ver listado, roles and detalles
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </Pressable>
+
+          <Pressable
+            style={styles.actionRow}
+            onPress={() => router.push('/admin/civil-associations' as any)}
+          >
+            <View style={[styles.actionIcon, { backgroundColor: '#FFF7ED' }]}>
+              <Ionicons name="business-outline" size={22} color="#EA580C" />
+            </View>
+            <View style={styles.actionInfoText}>
+              <Text style={styles.actionName}>Asociaciones Civiles</Text>
+              <Text style={styles.actionSub}>
+                Registrar representantes y cooperativas
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
@@ -278,8 +347,8 @@ export default function AdminDashboardScreen() {
             style={styles.actionRow}
             onPress={() => router.push('/admin/documents')}
           >
-            <View style={[styles.actionIcon, { backgroundColor: '#FFF7ED' }]}>
-              <Ionicons name="checkbox-outline" size={22} color="#EA580C" />
+            <View style={[styles.actionIcon, { backgroundColor: '#EEF2F6' }]}>
+              <Ionicons name="checkbox-outline" size={22} color="#475569" />
             </View>
             <View style={styles.actionInfoText}>
               <Text style={styles.actionName}>Validación de Documentos</Text>
@@ -292,26 +361,10 @@ export default function AdminDashboardScreen() {
 
           <Pressable
             style={styles.actionRow}
-            onPress={() => router.push('/admin/transport-units')}
-          >
-            <View style={[styles.actionIcon, { backgroundColor: '#F0FDF4' }]}>
-              <Ionicons name="git-network-outline" size={22} color="#16A34A" />
-            </View>
-            <View style={styles.actionInfoText}>
-              <Text style={styles.actionName}>Unidades registradas</Text>
-              <Text style={styles.actionSub}>
-                Códigos de invitación y placa
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-          </Pressable>
-
-          <Pressable
-            style={styles.actionRow}
             onPress={() => router.push('/admin/owner-requests')}
           >
             <View style={[styles.actionIcon, { backgroundColor: '#F5F3FF' }]}>
-              <Ionicons name="business-outline" size={22} color="#7C3AED" />
+              <Ionicons name="file-tray-full-outline" size={22} color="#7C3AED" />
             </View>
             <View style={styles.actionInfoText}>
               <Text style={styles.actionName}>Solicitudes de Socios</Text>

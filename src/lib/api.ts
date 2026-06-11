@@ -12,6 +12,27 @@ import {
 // Determinar la URL base de forma inteligente para desarrollo local y producción
 const getBaseUrl = () => {
   const envUrl = process.env.EXPO_PUBLIC_API_URL;
+  console.log(
+    '[API] getBaseUrl: EXPO_PUBLIC_API_URL =',
+    envUrl,
+    '__DEV__ =',
+    __DEV__,
+  );
+
+  // Si no estamos en modo desarrollo (es una APK de release compilada), forzar URL de producción
+  if (!__DEV__) {
+    if (
+      envUrl &&
+      !envUrl.includes('localhost') &&
+      !envUrl.includes('127.0.0.1') &&
+      !envUrl.includes('10.0.2.2')
+    ) {
+      return envUrl;
+    }
+    return 'https://go-fare-backend-1.onrender.com/api/v1';
+  }
+
+  // De aquí en adelante, estamos en modo desarrollo (__DEV__ === true)
 
   // En el emulador de Android, forzar el uso de 10.0.2.2 si está configurado en el env
   if (Platform.OS === 'android' && envUrl?.includes('10.0.2.2')) {
@@ -43,7 +64,8 @@ const getBaseUrl = () => {
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { auth, sigOutAccount } from './firebase';
 
-const BASE_URL = getBaseUrl();
+export const BASE_URL = getBaseUrl();
+console.log('[API] Resolved BASE_URL:', BASE_URL);
 const GOFARE_JWT_KEY = 'gofare_jwt_token';
 const BACKEND_JWT_KEY = 'backend_jwt';
 
@@ -356,9 +378,27 @@ export async function updateBackendProfile(
     nationalId?: string;
   },
 ): Promise<BackendUser> {
+  // Filtrar los campos para enviar solo los soportados por UpdateUserDto en el backend
+  // y evitar errores de validación de tipo 400 (forbidNonWhitelisted).
+  const whitelistedData: Partial<{
+    displayName: string;
+    firstName: string;
+    lastName: string;
+  }> = {};
+
+  if (data.displayName !== undefined) {
+    whitelistedData.displayName = data.displayName;
+  }
+  if (data.firstName !== undefined) {
+    whitelistedData.firstName = data.firstName;
+  }
+  if (data.lastName !== undefined) {
+    whitelistedData.lastName = data.lastName;
+  }
+
   const responseData = await fetchWithAuth(`/users/${userId}`, {
     method: 'PUT',
-    body: JSON.stringify(data),
+    body: JSON.stringify(whitelistedData),
   });
   const user = responseData?.user || responseData;
   if (user) {
@@ -1135,6 +1175,223 @@ export async function updateUserRoles(
   });
 }
 
+const CIVIL_ASSOC_METADATA_KEY = 'gofare_civil_assoc_metadata';
+const CIVIL_ASSOC_MOCKS_KEY = 'gofare_civil_assoc_mocks';
+
+export async function getRoles(): Promise<any[]> {
+  try {
+    return await fetchWithAuth('/roles');
+  } catch (err) {
+    console.warn('[API] Error al obtener roles del backend:', err);
+    return [];
+  }
+}
+
+export async function resolveRoleUuid(roleName: string): Promise<string | null> {
+  try {
+    const roles = await getRoles();
+    const found = roles.find((r: any) => r.name === roleName);
+    if (found) return found.uuid || found.id;
+  } catch (_) {}
+
+  // Fallback: buscar en los usuarios existentes
+  try {
+    const users = await getAllUsers();
+    for (const u of users) {
+      const roles = (u as any).roles || [];
+      const found = roles.find((r: any) => r.name === roleName);
+      if (found) return found.uuid || found.id;
+    }
+  } catch (_) {}
+
+  return null;
+}
+
+export async function getCivilAssociationsMetadata(): Promise<Record<string, { position: string, status: string }>> {
+  try {
+    const str = await AsyncStorage.getItem(CIVIL_ASSOC_METADATA_KEY);
+    return str ? JSON.parse(str) : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+export async function saveCivilAssociationMetadata(
+  userUuid: string,
+  position: string,
+  status: string,
+): Promise<void> {
+  try {
+    const metadata = await getCivilAssociationsMetadata();
+    metadata[userUuid] = { position, status };
+    await AsyncStorage.setItem(CIVIL_ASSOC_METADATA_KEY, JSON.stringify(metadata));
+  } catch (err) {
+    console.warn('[API] Error al guardar metadatos de asociación civil:', err);
+  }
+}
+
+export async function getAllCivilAssociations(): Promise<any[]> {
+  let realAssocs: any[] = [];
+  let users: any[] = [];
+
+  try {
+    users = await getAllUsers();
+    realAssocs = users.filter((u: any) => {
+      const roles = u.roles || [];
+      return roles.some((r: any) => r.name === 'civil_association');
+    });
+  } catch (err) {
+    console.warn('[API] Falló la obtención de usuarios reales para asociaciones:', err);
+  }
+
+  const metadata = await getCivilAssociationsMetadata();
+
+  // Enriquecer asociaciones reales con sus metadatos
+  const enrichedReal = realAssocs.map((u: any) => {
+    const meta = metadata[u.uuid] || { position: 'Presidente', status: 'approved', rejectionReason: '' };
+    return {
+      ...u,
+      position: meta.position,
+      status: meta.status,
+      rejectionReason: (meta as any).rejectionReason || '',
+    };
+  });
+
+  // Cargar también las asociaciones simuladas (para pruebas sin conexión a Neon DB)
+  let mockAssocs: any[] = [];
+  try {
+    const cachedMocks = await AsyncStorage.getItem(CIVIL_ASSOC_MOCKS_KEY);
+    if (cachedMocks) {
+      mockAssocs = JSON.parse(cachedMocks);
+      // Limpiar los mocks por defecto que confunden al usuario
+      if (mockAssocs.some((m: any) => m.uuid === 'mock-ca-1')) {
+        mockAssocs = [];
+        await AsyncStorage.removeItem(CIVIL_ASSOC_MOCKS_KEY);
+      }
+    } else {
+      mockAssocs = [];
+    }
+  } catch (_) {}
+
+  // Si el backend falló o no tiene asociaciones reales, retornar la lista de mocks.
+  // Si hay reales, las combinamos (excluyendo duplicados por correo o cédula si es necesario)
+  const combined = [...enrichedReal];
+  for (const mock of mockAssocs) {
+    const exists = combined.some(
+      (r) => r.email === mock.email || r.nationalId === mock.nationalId
+    );
+    if (!exists) {
+      combined.push(mock);
+    }
+  }
+
+  return combined;
+}
+
+export async function registerCivilAssociation(data: {
+  userUuid?: string; // Si se promueve uno existente
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phoneNumber?: string;
+  nationalId?: string;
+  position: string;
+  status: string;
+}): Promise<any> {
+  // Si estamos promoviendo a un usuario real
+  if (data.userUuid) {
+    // Buscar el UUID del rol civil_association
+    const roleUuid = await resolveRoleUuid('civil_association');
+    if (!roleUuid) {
+      throw new Error('No se pudo resolver el identificador del rol Asociación Civil.');
+    }
+
+    // Asignar el rol real en el backend
+    try {
+      await updateUserRoles(data.userUuid, [roleUuid]);
+    } catch (err) {
+      console.warn('[API] Error al asignar rol en backend, procediendo con simulación local:', err);
+    }
+
+    // Guardar metadatos locales (cargo y estado)
+    await saveCivilAssociationMetadata(data.userUuid, data.position, data.status);
+    return { success: true, userUuid: data.userUuid };
+  }
+
+  // Si estamos creando uno nuevo y no tenemos conexión o el usuario prefiere registro local
+  const newMock = {
+    uuid: `mock-ca-${Date.now()}`,
+    firstName: data.firstName || 'Sin Nombre',
+    lastName: data.lastName || '',
+    displayName: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
+    email: data.email || `ca-${Date.now()}@gofare.local`,
+    phoneNumber: data.phoneNumber || '',
+    nationalId: data.nationalId || '',
+    position: data.position,
+    status: data.status,
+    roles: [{ name: 'civil_association', uuid: 'mock-role-civil' }],
+    createdAt: new Date().toISOString(),
+  };
+
+  try {
+    const cachedMocks = await AsyncStorage.getItem(CIVIL_ASSOC_MOCKS_KEY);
+    const mocks = cachedMocks ? JSON.parse(cachedMocks) : [];
+    mocks.unshift(newMock);
+    await AsyncStorage.setItem(CIVIL_ASSOC_MOCKS_KEY, JSON.stringify(mocks));
+  } catch (err) {
+    console.warn('[API] Error al registrar asociación simulada:', err);
+  }
+
+  return newMock;
+}
+
+export async function updateCivilAssociationProfile(
+  uuid: string,
+  data: {
+    position?: string;
+    status?: string;
+    rejectionReason?: string;
+  }
+): Promise<any> {
+  // Si es un mock local
+  if (uuid.startsWith('mock-ca-')) {
+    try {
+      const cachedMocks = await AsyncStorage.getItem(CIVIL_ASSOC_MOCKS_KEY);
+      if (cachedMocks) {
+        const mocks = JSON.parse(cachedMocks);
+        const updated = mocks.map((m: any) => {
+          if (m.uuid === uuid) {
+            return { ...m, ...data };
+          }
+          return m;
+        });
+        await AsyncStorage.setItem(CIVIL_ASSOC_MOCKS_KEY, JSON.stringify(updated));
+      }
+    } catch (_) {}
+    return { uuid, ...data };
+  }
+
+  // Si es un usuario real, guardamos su cargo y estado localmente
+  const metadata = await getCivilAssociationsMetadata();
+  const current = metadata[uuid] || { position: 'Presidente', status: 'approved', rejectionReason: '' };
+  
+  const updatedMeta = {
+    position: data.position !== undefined ? data.position : current.position,
+    status: data.status !== undefined ? data.status : current.status,
+    rejectionReason: data.rejectionReason !== undefined ? data.rejectionReason : (current as any).rejectionReason || '',
+  };
+
+  try {
+    const fullMeta = await getCivilAssociationsMetadata();
+    fullMeta[uuid] = updatedMeta;
+    await AsyncStorage.setItem(CIVIL_ASSOC_METADATA_KEY, JSON.stringify(fullMeta));
+  } catch (err) {
+    console.warn('[API] Error al guardar metadatos de asociación civil:', err);
+  }
+
+  return { uuid, ...data };
+}
+
 /**
  * Obtiene la lista de todos los documentos presentados en la plataforma.
  * Intenta consumir del backend, si no existe el endpoint usa datos mock de AsyncStorage.
@@ -1485,3 +1742,109 @@ export async function rejectOwnerRequest(
 
   return { requestUuid, status: 'rejected', rejectionReason: reason };
 }
+
+/**
+ * Obtiene las tasas actuales del fare y BCV del backend.
+ */
+export async function getCurrentRates(): Promise<{
+  fareUsdValue: number;
+  bcvRate: number;
+  bcvRateDate: string;
+}> {
+  try {
+    return await fetchWithAuth('/rates/current');
+  } catch (error) {
+    console.warn('[API] getCurrentRates falló, usando datos simulados:', error);
+    // Intentar leer de AsyncStorage si falló el backend o estamos offline
+    try {
+      const cached = await AsyncStorage.getItem('gofare_rates_cache');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch {}
+    return {
+      fareUsdValue: 0.25,
+      bcvRate: 40.00,
+      bcvRateDate: new Date().toISOString().slice(0, 10),
+    };
+  }
+}
+
+/**
+ * Registra el valor del fare en USD.
+ */
+export async function updateFareValue(usdValue: number): Promise<any> {
+  // Guardar en el backend (lanzará un error si falla)
+  const result = await fetchWithAuth('/rates/fare-value', {
+    method: 'POST',
+    body: JSON.stringify({ usdValue }),
+  });
+
+  // Si tiene éxito, actualizamos la caché local de lectura
+  try {
+    const current = await getCurrentRates();
+    const updated = { ...current, fareUsdValue: usdValue };
+    await AsyncStorage.setItem('gofare_rates_cache', JSON.stringify(updated));
+  } catch (err) {
+    console.warn('[API] Error guardando caché local de rates:', err);
+  }
+
+  return result;
+}
+
+/**
+ * Registra la tasa BCV del día.
+ */
+export async function updateBcvRate(rate: number, rateDate?: string): Promise<any> {
+  const targetDate = rateDate ?? new Date().toISOString().slice(0, 10);
+  
+  // Guardar en el backend (lanzará un error si falla)
+  const result = await fetchWithAuth('/rates/bcv', {
+    method: 'POST',
+    body: JSON.stringify({ rate, rateDate: targetDate }),
+  });
+
+  // Si tiene éxito, actualizamos la caché local de lectura
+  try {
+    const current = await getCurrentRates();
+    const updated = { ...current, bcvRate: rate, bcvRateDate: targetDate };
+    await AsyncStorage.setItem('gofare_rates_cache', JSON.stringify(updated));
+  } catch (err) {
+    console.warn('[API] Error guardando caché local de rates:', err);
+  }
+
+  return result;
+}
+
+/**
+ * Consulta la API externa de DolarApi para obtener la tasa BCV oficial más reciente.
+ * Retorna la tasa promedio y la fecha de actualización, o null si falla.
+ */
+export async function getExternalBcvRate(): Promise<{
+  rate: number;
+  date: string;
+} | null> {
+  try {
+    const apiRes = await fetch('https://ve.dolarapi.com/v1/dolares');
+    if (apiRes.ok) {
+      const list = await apiRes.json();
+      const oficial = list.find((item: any) => item.fuente === 'oficial');
+      if (oficial && oficial.promedio) {
+        const suggestedRateVal = oficial.promedio;
+        const suggestedDateVal = oficial.fechaActualizacion
+          ? oficial.fechaActualizacion.slice(0, 10)
+          : new Date().toISOString().slice(0, 10);
+        return {
+          rate: suggestedRateVal,
+          date: suggestedDateVal,
+        };
+      }
+    }
+    return null;
+  } catch (error) {
+    console.warn('[API] getExternalBcvRate falló:', error);
+    return null;
+  }
+}
+
+

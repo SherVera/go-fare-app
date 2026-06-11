@@ -26,6 +26,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import {
   AppState,
   AppStateStatus,
+  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -41,7 +42,7 @@ import {
   syncWithBackend,
 } from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
-import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
+import { auth, listenToAuthState, sendVerificationEmail, sigOutAccount } from '@/lib/firebase';
 import {
   getFcmToken,
   getInitialNotification,
@@ -240,9 +241,54 @@ export default function RootLayout() {
 
       const currentUser = auth.currentUser || user;
       const isPhoneUser = !!currentUser.phoneNumber;
-      const isVerified = currentUser.emailVerified || isPhoneUser;
+      const isVerified = currentUser ? (currentUser.emailVerified || isPhoneUser) : false;
 
-      if (!isVerified) {
+      if (currentUser && !isVerified) {
+        Alert.alert(
+          'Correo No Verificado',
+          `Por favor, verifica tu correo electrónico (${currentUser.email}) para poder acceder a la aplicación.\n\nSi no recibiste el enlace de verificación, puedes solicitar que se reenvíe.`,
+          [
+            {
+              text: 'Cerrar Sesión',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await sigOutAccount();
+                  await clearBackendJwt();
+                } catch (err) {
+                  console.warn('[Layout] Error al cerrar sesión de usuario no verificado:', err);
+                }
+              },
+            },
+            {
+              text: 'Reenviar Correo',
+              onPress: async () => {
+                try {
+                  await sendVerificationEmail(currentUser);
+                  Alert.alert(
+                    'Correo Enviado',
+                    'Se ha enviado un enlace de verificación a tu correo electrónico. Por favor revisa tu bandeja de entrada o carpeta de spam.'
+                  );
+                } catch {
+                  Alert.alert(
+                    'Error',
+                    'No se pudo enviar el correo de verificación. Inténtalo de nuevo más tarde.'
+                  );
+                }
+                try {
+                  await sigOutAccount();
+                  await clearBackendJwt();
+                } catch {}
+              },
+            },
+          ]
+        );
+        if (!cancelled) setPhase('signed_out');
+        return;
+      }
+
+      if (!currentUser) {
+        await clearBackendJwt();
         if (!cancelled) setPhase('signed_out');
         return;
       }

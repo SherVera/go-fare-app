@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { deleteUser, getAllUsers, updateUserRoles } from '@/lib/api';
+import { deleteUser, getAllUsers, updateUserRoles, resolveRoleUuid } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function AdminUsersScreen() {
@@ -27,7 +27,7 @@ export default function AdminUsersScreen() {
   const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<
-    'all' | 'passenger' | 'driver' | 'transport_owner'
+    'all' | 'passenger' | 'driver' | 'transport_owner' | 'civil_association'
   >('all');
 
   // Estado para el modal de detalles/acciones
@@ -38,7 +38,7 @@ export default function AdminUsersScreen() {
     (
       allUsers: any[],
       query: string,
-      roleTab: 'all' | 'passenger' | 'driver' | 'transport_owner',
+      roleTab: 'all' | 'passenger' | 'driver' | 'transport_owner' | 'civil_association',
     ) => {
       let result = [...allUsers];
 
@@ -48,10 +48,12 @@ export default function AdminUsersScreen() {
           const roles = (u as any).roles || [];
           const isOwner = roles.some((r: any) => r.name === 'transport_owner');
           const isDriver = roles.some((r: any) => r.name === 'driver');
+          const isCivil = roles.some((r: any) => r.name === 'civil_association');
 
           if (roleTab === 'transport_owner') return isOwner;
           if (roleTab === 'driver') return isDriver;
-          if (roleTab === 'passenger') return !isOwner && !isDriver;
+          if (roleTab === 'civil_association') return isCivil;
+          if (roleTab === 'passenger') return !isOwner && !isDriver && !isCivil;
           return false;
         });
       }
@@ -161,18 +163,10 @@ export default function AdminUsersScreen() {
   };
 
   const handleChangeRole = (
-    targetRole: 'passenger' | 'driver' | 'transport_owner',
+    targetRole: 'passenger' | 'driver' | 'transport_owner' | 'civil_association',
   ) => {
     if (!selectedUser) return;
     setActionsModalVisible(false);
-
-    // Mapear nombres a UUIDs/IDs típicos del backend
-    // ID 1: passenger, ID 2: driver, ID 3: transport_owner
-    const roleIdMap = {
-      passenger: '1',
-      driver: '2',
-      transport_owner: '3',
-    };
 
     Alert.alert(
       'Cambiar Rol',
@@ -181,7 +175,9 @@ export default function AdminUsersScreen() {
           ? 'Pasajero'
           : targetRole === 'driver'
             ? 'Conductor'
-            : 'Socio'
+            : targetRole === 'civil_association'
+              ? 'Asoc. Civil'
+              : 'Socio'
       }?`,
       [
         { text: 'Cancelar', style: 'cancel' },
@@ -190,8 +186,11 @@ export default function AdminUsersScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              const roleId = roleIdMap[targetRole];
-              await updateUserRoles(selectedUser.uuid, [roleId]);
+              const roleUuid = await resolveRoleUuid(targetRole);
+              if (!roleUuid) {
+                throw new Error('No se pudo resolver el ID de rol en el servidor.');
+              }
+              await updateUserRoles(selectedUser.uuid, [roleUuid]);
               Alert.alert('Éxito', 'El rol del usuario ha sido actualizado.');
               fetchUsers();
             } catch (err: any) {
@@ -242,6 +241,7 @@ export default function AdminUsersScreen() {
             { id: 'passenger', label: 'Pasajeros' },
             { id: 'driver', label: 'Conductores' },
             { id: 'transport_owner', label: 'Socios' },
+            { id: 'civil_association', label: 'Asoc. Civiles' },
           ]}
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -284,20 +284,23 @@ export default function AdminUsersScreen() {
           onRefresh={onRefresh}
           renderItem={({ item }) => {
             const roles = item.roles || [];
-            const isOwner = roles.some(
-              (r: any) => r.name === 'transport_owner',
-            );
+            const isOwner = roles.some((r: any) => r.name === 'transport_owner');
             const isDriver = roles.some((r: any) => r.name === 'driver');
+            const isCivil = roles.some((r: any) => r.name === 'civil_association');
             const roleText = isOwner
               ? 'Socio'
               : isDriver
                 ? 'Conductor'
-                : 'Pasajero';
+                : isCivil
+                  ? 'Asoc. Civil'
+                  : 'Pasajero';
             const roleColor = isOwner
               ? '#8B5CF6'
               : isDriver
                 ? '#10B981'
-                : '#3B82F6';
+                : isCivil
+                  ? '#F59E0B'
+                  : '#3B82F6';
 
             return (
               <Pressable
@@ -423,6 +426,14 @@ export default function AdminUsersScreen() {
               >
                 <Ionicons name="bus-outline" size={20} color="#8B5CF6" />
                 <Text style={styles.modalActionBtnText}>Socio (Dueño)</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.modalActionBtn}
+                onPress={() => handleChangeRole('civil_association')}
+              >
+                <Ionicons name="business-outline" size={20} color="#F59E0B" />
+                <Text style={styles.modalActionBtnText}>Asoc. Civil</Text>
               </Pressable>
             </View>
 
@@ -639,7 +650,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   modalActionBtn: {
-    width: '31%',
+    width: '23%',
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -649,10 +660,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modalActionBtnText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#475569',
     marginTop: 6,
+    textAlign: 'center',
   },
   deleteActionBtn: {
     flexDirection: 'row',

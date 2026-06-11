@@ -125,12 +125,18 @@ export default function LoginScreen() {
           }
 
           const roles = (backendUser as any).roles || [];
+          const isAdmin = roles.some(
+            (role: any) => role.name === 'platform_admin',
+          );
           const isOwner = roles.some(
             (role: any) => role.name === 'transport_owner',
           );
           const isDriver = roles.some((role: any) => role.name === 'driver');
 
-          if (isOwner) {
+          if (isAdmin) {
+            await AsyncStorage.setItem('user_role', 'platform_admin');
+            router.replace('/admin/dashboard' as any);
+          } else if (isOwner) {
             await AsyncStorage.setItem('user_role', 'transport_owner');
             router.replace('/vehicle-owner/dashboard' as any);
           } else if (isDriver) {
@@ -170,6 +176,15 @@ export default function LoginScreen() {
           await syncWithBackend(credential.user);
         } catch (backendErr) {
           console.warn('[google] backend sync failed:', backendErr);
+          try {
+            await sigOutAccount();
+          } catch {}
+          Alert.alert(
+            'Error de Conexión',
+            'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.'
+          );
+          setLoading(false);
+          return;
         }
       }
     } catch (error: any) {
@@ -274,10 +289,17 @@ export default function LoginScreen() {
         const response = await syncWithBackend(currentUser);
         backendUser = response.user;
       } catch (backendError) {
-        console.warn(
-          '[backend] sync failed, proceeding with Firebase auth only:',
-          backendError,
+        console.warn('[backend] sync failed:', backendError);
+        // Cerrar sesión localmente en Firebase para mantener consistencia
+        try {
+          await sigOutAccount();
+        } catch {}
+        Alert.alert(
+          'Error de Conexión',
+          'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.'
         );
+        setLoading(false);
+        return; // Detener flujo de inicio de sesión!
       }
 
       // Guardar credenciales encriptadas para inicio rápido
@@ -294,42 +316,44 @@ export default function LoginScreen() {
         );
       }
 
-      if (backendUser) {
-        // Sincronizar o crear la cuenta de tarifa (Fare Account) del usuario
+      // Sincronizar o crear la cuenta de tarifa (Fare Account) del usuario
+      try {
+        await getFareAccountByUserId(backendUser.id);
+      } catch {
         try {
-          await getFareAccountByUserId(backendUser.id);
-        } catch {
-          try {
-            await createFareAccount(backendUser.id);
-          } catch (createError) {
-            console.warn(
-              '[Login] Error al crear la cuenta de tarifa:',
-              createError,
-            );
-          }
+          await createFareAccount(backendUser.id);
+        } catch (createError) {
+          console.warn(
+            '[Login] Error al crear la cuenta de tarifa:',
+            createError,
+          );
         }
+      }
 
-        const roles = (backendUser as any).roles || [];
-        const isOwner = roles.some(
-          (role: any) => role.name === 'transport_owner',
-        );
-        const isDriver = roles.some((role: any) => role.name === 'driver');
-        const userRole = isOwner
+      const roles = (backendUser as any).roles || [];
+      const isAdmin = roles.some(
+        (role: any) => role.name === 'platform_admin',
+      );
+      const isOwner = roles.some(
+        (role: any) => role.name === 'transport_owner',
+      );
+      const isDriver = roles.some((role: any) => role.name === 'driver');
+      const userRole = isAdmin
+        ? 'platform_admin'
+        : isOwner
           ? 'transport_owner'
           : isDriver
             ? 'driver'
             : 'passenger';
-        await AsyncStorage.setItem('user_role', userRole);
+      await AsyncStorage.setItem('user_role', userRole);
 
-        if (isOwner) {
-          router.replace('/vehicle-owner/dashboard' as any);
-        } else if (isDriver) {
-          router.replace('/driver/dashboard' as any);
-        } else {
-          router.replace('/(tabs)' as any);
-        }
+      if (isAdmin) {
+        router.replace('/admin/dashboard' as any);
+      } else if (isOwner) {
+        router.replace('/vehicle-owner/dashboard' as any);
+      } else if (isDriver) {
+        router.replace('/driver/dashboard' as any);
       } else {
-        await AsyncStorage.setItem('user_role', 'passenger');
         router.replace('/(tabs)' as any);
       }
     } catch (error: any) {

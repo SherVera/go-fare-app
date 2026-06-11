@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +16,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { syncWithBackend, updateBackendProfile } from '@/lib/api';
+import {
+  getBackendProfile,
+  syncWithBackend,
+  updateBackendProfile,
+} from '@/lib/api';
 import { refreshAuthSessionPhase } from '@/lib/auth-session';
 import { auth, sigOutAccount, updateUser } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -37,6 +41,56 @@ export default function OnboardingScreen() {
     vePhoneFromE164(user?.phoneNumber ?? undefined),
   );
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadProfileData = async () => {
+      try {
+        // Intentar obtener de la caché primero
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached && active) {
+          const parsed = JSON.parse(cached);
+          if (parsed.displayName) setFullName(parsed.displayName);
+          if (parsed.nationalId || parsed.idNumber) {
+            const rawId = parsed.nationalId || parsed.idNumber || '';
+            setIdNumber(
+              typeof rawId === 'string' ? rawId.replace('V-', '').trim() : '',
+            );
+          }
+          if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
+        }
+
+        // Luego intentar del backend para frescura
+        const freshProfile = await getBackendProfile();
+        if (freshProfile && active) {
+          if (freshProfile.displayName) {
+            setFullName(freshProfile.displayName);
+          } else if (freshProfile.firstName || freshProfile.lastName) {
+            setFullName(
+              `${freshProfile.firstName || ''} ${freshProfile.lastName || ''}`.trim(),
+            );
+          }
+
+          if (freshProfile.nationalId) {
+            const rawId = freshProfile.nationalId;
+            setIdNumber(
+              typeof rawId === 'string' ? rawId.replace('V-', '').trim() : '',
+            );
+          }
+          if (freshProfile.phoneNumber) {
+            setPhoneNumber(freshProfile.phoneNumber);
+          }
+        }
+      } catch (err) {
+        console.log('[onboarding] Error pre-populating profile fields:', err);
+      }
+    };
+
+    loadProfileData();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (!user) {
     return null;
