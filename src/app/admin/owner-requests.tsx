@@ -49,8 +49,12 @@ export default function AdminOwnerRequestsScreen() {
         result = result.filter((r) => {
           const nameMatch = r.displayName?.toLowerCase().includes(cleanQuery);
           const emailMatch = r.email?.toLowerCase().includes(cleanQuery);
-          const nationalIdMatch = r.nationalId?.toLowerCase().includes(cleanQuery);
-          const businessNameMatch = r.businessName?.toLowerCase().includes(cleanQuery);
+          const nationalIdMatch = r.nationalId
+            ?.toLowerCase()
+            .includes(cleanQuery);
+          const businessNameMatch = r.businessName
+            ?.toLowerCase()
+            .includes(cleanQuery);
           const idNumberMatch = r.idNumber?.toLowerCase().includes(cleanQuery);
           return (
             nameMatch ||

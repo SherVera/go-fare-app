@@ -176,9 +176,16 @@ export function AdminSidebar() {
         </View>
 
         {/* Navigation Items List grouped by sections */}
-        <ScrollView style={styles.menuScroll} contentContainerStyle={styles.menuScrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.menuScroll}
+          contentContainerStyle={styles.menuScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
           {menuSections.map((section, secIdx) => (
-            <View key={section.title} style={[styles.sectionContainer, secIdx > 0 && { marginTop: 14 }]}>
+            <View
+              key={section.title}
+              style={[styles.sectionContainer, secIdx > 0 && { marginTop: 14 }]}
+            >
               <Text style={styles.sectionHeader}>{section.title}</Text>
               <View style={styles.sectionItems}>
                 {section.items.map((item) => {
@@ -186,7 +193,10 @@ export function AdminSidebar() {
                   return (
                     <Pressable
                       key={item.id}
-                      style={[styles.menuItem, isActive && styles.menuItemActive]}
+                      style={[
+                        styles.menuItem,
+                        isActive && styles.menuItemActive,
+                      ]}
                       onPress={() => handleNavigate(item.route)}
                     >
                       <Ionicons
@@ -200,7 +210,10 @@ export function AdminSidebar() {
                         style={styles.menuIcon}
                       />
                       <Text
-                        style={[styles.menuLabel, isActive && styles.menuLabelActive]}
+                        style={[
+                          styles.menuLabel,
+                          isActive && styles.menuLabelActive,
+                        ]}
                       >
                         {item.label}
                       </Text>

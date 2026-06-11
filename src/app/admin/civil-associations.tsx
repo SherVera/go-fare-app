@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -14,17 +15,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
-  getAllUsers,
   getAllCivilAssociations,
+  getAllUsers,
   registerCivilAssociation,
+  resolveRoleUuid,
   updateCivilAssociationProfile,
   updateUserRoles,
-  resolveRoleUuid,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
@@ -37,7 +37,9 @@ export default function AdminCivilAssociationsScreen() {
   const [associations, setAssociations] = useState<any[]>([]);
   const [filteredAssocs, setFilteredAssocs] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'approved' | 'pending_review' | 'rejected' | 'suspended'>('all');
+  const [activeTab, setActiveTab] = useState<
+    'all' | 'approved' | 'pending_review' | 'rejected' | 'suspended'
+  >('all');
 
   // Modal de Detalles / Acciones
   const [selectedAssoc, setSelectedAssoc] = useState<any | null>(null);
@@ -51,9 +53,13 @@ export default function AdminCivilAssociationsScreen() {
 
   // Formulario de Promoción
   const [availableUsers, setAvailableUsers] = useState<any[]>([]);
-  const [filteredAvailableUsers, setFilteredAvailableUsers] = useState<any[]>([]);
+  const [filteredAvailableUsers, setFilteredAvailableUsers] = useState<any[]>(
+    [],
+  );
   const [userSearch, setUserSearch] = useState('');
-  const [selectedUserToPromote, setSelectedUserToPromote] = useState<any | null>(null);
+  const [selectedUserToPromote, setSelectedUserToPromote] = useState<
+    any | null
+  >(null);
   const [promotePosition, setPromotePosition] = useState('Presidente');
 
   // Formulario de Nuevo Representante
@@ -68,7 +74,12 @@ export default function AdminCivilAssociationsScreen() {
     (
       allList: any[],
       query: string,
-      statusTab: 'all' | 'approved' | 'pending_review' | 'rejected' | 'suspended',
+      statusTab:
+        | 'all'
+        | 'approved'
+        | 'pending_review'
+        | 'rejected'
+        | 'suspended',
     ) => {
       let result = [...allList];
 
@@ -112,7 +123,10 @@ export default function AdminCivilAssociationsScreen() {
         applyFilters(list, search, activeTab);
       } catch (err) {
         console.warn('[AdminCivilAssociations] Error loading:', err);
-        Alert.alert('Error', 'No se pudo cargar la lista de asociaciones civiles.');
+        Alert.alert(
+          'Error',
+          'No se pudo cargar la lista de asociaciones civiles.',
+        );
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -172,7 +186,10 @@ export default function AdminCivilAssociationsScreen() {
       await updateCivilAssociationProfile(selectedAssoc.uuid, {
         position: editPosition.trim(),
       });
-      Alert.alert('Éxito', 'Los detalles de la asociación civil han sido actualizados.');
+      Alert.alert(
+        'Éxito',
+        'Los detalles de la asociación civil han sido actualizados.',
+      );
       fetchAssociations();
     } catch (err: any) {
       Alert.alert('Error', err.message || 'No se pudo actualizar el perfil.');
@@ -182,10 +199,13 @@ export default function AdminCivilAssociationsScreen() {
 
   const handleStatusChange = async (newStatus: string) => {
     if (!selectedAssoc) return;
-    
+
     // Si se rechaza, validar motivo
     if (newStatus === 'rejected' && rejectionReason.trim().length < 4) {
-      Alert.alert('Motivo Requerido', 'Por favor ingresa un motivo para el rechazo (mínimo 4 letras).');
+      Alert.alert(
+        'Motivo Requerido',
+        'Por favor ingresa un motivo para el rechazo (mínimo 4 letras).',
+      );
       return;
     }
 
@@ -196,7 +216,10 @@ export default function AdminCivilAssociationsScreen() {
         status: newStatus,
         rejectionReason: newStatus === 'rejected' ? rejectionReason.trim() : '',
       });
-      Alert.alert('Éxito', `Estado cambiado a: ${newStatus === 'approved' ? 'Aprobado' : newStatus === 'rejected' ? 'Rechazado' : newStatus === 'suspended' ? 'Suspendido' : 'Pendiente'}`);
+      Alert.alert(
+        'Éxito',
+        `Estado cambiado a: ${newStatus === 'approved' ? 'Aprobado' : newStatus === 'rejected' ? 'Rechazado' : newStatus === 'suspended' ? 'Suspendido' : 'Pendiente'}`,
+      );
       fetchAssociations();
     } catch (err: any) {
       Alert.alert('Error', err.message || 'No se pudo cambiar el estado.');
@@ -222,19 +245,28 @@ export default function AdminCivilAssociationsScreen() {
               if (selectedAssoc.uuid.startsWith('mock-ca-')) {
                 // Es un mock local, lo eliminamos de la lista simulada
                 const cached = await getAllCivilAssociations();
-                const updated = cached.filter((m: any) => m.uuid !== selectedAssoc.uuid);
+                const updated = cached.filter(
+                  (m: any) => m.uuid !== selectedAssoc.uuid,
+                );
                 // AsyncStorage helper local save
                 const mockKey = 'gofare_civil_assoc_mocks';
-                const filteredMocks = updated.filter((r: any) => r.uuid.startsWith('mock-ca-'));
-                await AsyncStorage.setItem(mockKey, JSON.stringify(filteredMocks));
+                const filteredMocks = updated.filter((r: any) =>
+                  r.uuid.startsWith('mock-ca-'),
+                );
+                await AsyncStorage.setItem(
+                  mockKey,
+                  JSON.stringify(filteredMocks),
+                );
               } else {
                 // Es real, lo degradamos a Passenger (ID '1')
                 const roleUuid = await resolveRoleUuid('passenger');
                 if (!roleUuid) {
-                  throw new Error('No se pudo resolver el ID de rol de pasajero.');
+                  throw new Error(
+                    'No se pudo resolver el ID de rol de pasajero.',
+                  );
                 }
                 await updateUserRoles(selectedAssoc.uuid, [roleUuid]);
-                
+
                 // Limpiar metadatos
                 const metaKey = 'gofare_civil_assoc_metadata';
                 const metadataStr = await AsyncStorage.getItem(metaKey);
@@ -247,7 +279,10 @@ export default function AdminCivilAssociationsScreen() {
               Alert.alert('Éxito', 'Rol quitado correctamente.');
               fetchAssociations();
             } catch (err: any) {
-              Alert.alert('Error', err.message || 'No se pudo degradar el usuario.');
+              Alert.alert(
+                'Error',
+                err.message || 'No se pudo degradar el usuario.',
+              );
               setLoading(false);
             }
           },
@@ -261,7 +296,7 @@ export default function AdminCivilAssociationsScreen() {
     setSelectedUserToPromote(null);
     setPromotePosition('Presidente');
     setUserSearch('');
-    
+
     // Reset new form
     setNewFirstName('');
     setNewLastName('');
@@ -280,7 +315,9 @@ export default function AdminCivilAssociationsScreen() {
     } else {
       const q = text.toLowerCase();
       const filtered = availableUsers.filter((u) => {
-        const name = (u.displayName || `${u.firstName || ''} ${u.lastName || ''}`).toLowerCase();
+        const name = (
+          u.displayName || `${u.firstName || ''} ${u.lastName || ''}`
+        ).toLowerCase();
         const email = (u.email || '').toLowerCase();
         const nationalId = (u.nationalId || '').toLowerCase();
         return name.includes(q) || email.includes(q) || nationalId.includes(q);
@@ -307,7 +344,10 @@ export default function AdminCivilAssociationsScreen() {
         position: promotePosition.trim(),
         status: 'approved',
       });
-      Alert.alert('Éxito', 'Usuario promovido a Representante de Asociación Civil correctamente.');
+      Alert.alert(
+        'Éxito',
+        'Usuario promovido a Representante de Asociación Civil correctamente.',
+      );
       fetchAssociations();
     } catch (err: any) {
       Alert.alert('Error', err.message || 'No se pudo promover al usuario.');
@@ -347,7 +387,10 @@ export default function AdminCivilAssociationsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScreenHeader title="Asociaciones Civiles" onMenu={() => setIsOpen(true)} />
+      <ScreenHeader
+        title="Asociaciones Civiles"
+        onMenu={() => setIsOpen(true)}
+      />
 
       {/* Estadísticas */}
       <View style={styles.statsRow}>
@@ -373,7 +416,12 @@ export default function AdminCivilAssociationsScreen() {
 
       {/* Buscador */}
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={20} color="#94A3B8" style={{ marginRight: 10 }} />
+        <Ionicons
+          name="search-outline"
+          size={20}
+          color="#94A3B8"
+          style={{ marginRight: 10 }}
+        />
         <TextInput
           style={styles.searchInput}
           placeholder="Buscar representante, correo o cargo..."
@@ -409,7 +457,9 @@ export default function AdminCivilAssociationsScreen() {
                 style={[styles.tabBtn, isActive && styles.tabBtnActive]}
                 onPress={() => handleTabChange(item.id as any)}
               >
-                <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+                <Text
+                  style={[styles.tabLabel, isActive && styles.tabLabelActive]}
+                >
                   {item.label}
                 </Text>
               </Pressable>
@@ -454,7 +504,10 @@ export default function AdminCivilAssociationsScreen() {
                     : 'Suspendido';
 
             return (
-              <Pressable style={styles.card} onPress={() => handleOpenDetails(item)}>
+              <Pressable
+                style={styles.card}
+                onPress={() => handleOpenDetails(item)}
+              >
                 <View style={styles.cardHeader}>
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>
@@ -465,14 +518,22 @@ export default function AdminCivilAssociationsScreen() {
                   </View>
                   <View style={styles.meta}>
                     <Text style={styles.name} numberOfLines={1}>
-                      {item.displayName || `${item.firstName || ''} ${item.lastName || ''}`}
+                      {item.displayName ||
+                        `${item.firstName || ''} ${item.lastName || ''}`}
                     </Text>
                     <Text style={styles.subtext} numberOfLines={1}>
                       {item.email}
                     </Text>
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: `${statusColor}12` }]}>
-                    <Text style={[styles.statusBadgeText, { color: statusColor }]}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: `${statusColor}12` },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.statusBadgeText, { color: statusColor }]}
+                    >
                       {statusLabel}
                     </Text>
                   </View>
@@ -480,19 +541,40 @@ export default function AdminCivilAssociationsScreen() {
 
                 <View style={styles.cardBody}>
                   <View style={styles.detail}>
-                    <Ionicons name="briefcase-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                    <Text style={styles.detailText}>Cargo: {item.position || 'Representante'}</Text>
+                    <Ionicons
+                      name="briefcase-outline"
+                      size={14}
+                      color="#64748B"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.detailText}>
+                      Cargo: {item.position || 'Representante'}
+                    </Text>
                   </View>
                   {item.nationalId && (
                     <View style={styles.detail}>
-                      <Ionicons name="card-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                      <Text style={styles.detailText}>Cédula: {item.nationalId}</Text>
+                      <Ionicons
+                        name="card-outline"
+                        size={14}
+                        color="#64748B"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={styles.detailText}>
+                        Cédula: {item.nationalId}
+                      </Text>
                     </View>
                   )}
                   {item.phoneNumber && (
                     <View style={styles.detail}>
-                      <Ionicons name="call-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                      <Text style={styles.detailText}>Telf: {item.phoneNumber}</Text>
+                      <Ionicons
+                        name="call-outline"
+                        size={14}
+                        color="#64748B"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={styles.detailText}>
+                        Telf: {item.phoneNumber}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -519,7 +601,11 @@ export default function AdminCivilAssociationsScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Acciones de Representante</Text>
               <Pressable onPress={() => setDetailsModalVisible(false)}>
-                <Ionicons name="close-circle-outline" size={24} color="#64748B" />
+                <Ionicons
+                  name="close-circle-outline"
+                  size={24}
+                  color="#64748B"
+                />
               </Pressable>
             </View>
 
@@ -527,10 +613,17 @@ export default function AdminCivilAssociationsScreen() {
               <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.modalInfoBox}>
                   <Text style={styles.modalInfoName}>
-                    {selectedAssoc.displayName || `${selectedAssoc.firstName || ''} ${selectedAssoc.lastName || ''}`}
+                    {selectedAssoc.displayName ||
+                      `${selectedAssoc.firstName || ''} ${selectedAssoc.lastName || ''}`}
                   </Text>
-                  <Text style={styles.modalInfoEmail}>{selectedAssoc.email}</Text>
-                  {selectedAssoc.nationalId && <Text style={styles.modalInfoSub}>Cédula: {selectedAssoc.nationalId}</Text>}
+                  <Text style={styles.modalInfoEmail}>
+                    {selectedAssoc.email}
+                  </Text>
+                  {selectedAssoc.nationalId && (
+                    <Text style={styles.modalInfoSub}>
+                      Cédula: {selectedAssoc.nationalId}
+                    </Text>
+                  )}
                   <Text style={[styles.modalInfoSub, { marginTop: 4 }]}>
                     Estado Actual:{' '}
                     <Text style={{ fontWeight: 'bold' }}>
@@ -546,7 +639,9 @@ export default function AdminCivilAssociationsScreen() {
                 </View>
 
                 {/* Cargo */}
-                <Text style={styles.modalLabel}>CARGO / POSICIÓN DENTRO DE LA LÍNEA:</Text>
+                <Text style={styles.modalLabel}>
+                  CARGO / POSICIÓN DENTRO DE LA LÍNEA:
+                </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={editPosition}
@@ -555,19 +650,30 @@ export default function AdminCivilAssociationsScreen() {
                   placeholderTextColor="#94A3B8"
                 />
 
-                <Pressable style={styles.primarySaveBtn} onPress={handleSaveDetails}>
+                <Pressable
+                  style={styles.primarySaveBtn}
+                  onPress={handleSaveDetails}
+                >
                   <Text style={styles.primarySaveBtnText}>Guardar Cargo</Text>
                 </Pressable>
 
                 {/* Estado */}
-                <Text style={[styles.modalLabel, { marginTop: 16 }]}>CAMBIAR ESTADO DE APROBACIÓN:</Text>
+                <Text style={[styles.modalLabel, { marginTop: 16 }]}>
+                  CAMBIAR ESTADO DE APROBACIÓN:
+                </Text>
                 <View style={styles.statusButtonsGrid}>
                   <Pressable
                     style={[styles.statusBtn, { borderColor: '#10B981' }]}
                     onPress={() => handleStatusChange('approved')}
                   >
-                    <Ionicons name="checkmark-circle-outline" size={18} color="#10B981" />
-                    <Text style={[styles.statusBtnText, { color: '#10B981' }]}>Aprobar</Text>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color="#10B981"
+                    />
+                    <Text style={[styles.statusBtnText, { color: '#10B981' }]}>
+                      Aprobar
+                    </Text>
                   </Pressable>
 
                   <Pressable
@@ -575,19 +681,29 @@ export default function AdminCivilAssociationsScreen() {
                     onPress={() => handleStatusChange('pending_review')}
                   >
                     <Ionicons name="time-outline" size={18} color="#EA580C" />
-                    <Text style={[styles.statusBtnText, { color: '#EA580C' }]}>Pendiente</Text>
+                    <Text style={[styles.statusBtnText, { color: '#EA580C' }]}>
+                      Pendiente
+                    </Text>
                   </Pressable>
 
                   <Pressable
                     style={[styles.statusBtn, { borderColor: '#64748B' }]}
                     onPress={() => handleStatusChange('suspended')}
                   >
-                    <Ionicons name="pause-circle-outline" size={18} color="#64748B" />
-                    <Text style={[styles.statusBtnText, { color: '#64748B' }]}>Suspender</Text>
+                    <Ionicons
+                      name="pause-circle-outline"
+                      size={18}
+                      color="#64748B"
+                    />
+                    <Text style={[styles.statusBtnText, { color: '#64748B' }]}>
+                      Suspender
+                    </Text>
                   </Pressable>
                 </View>
 
-                <Text style={[styles.modalLabel, { marginTop: 10 }]}>SI DESEAS RECHAZAR, INGRESA EL MOTIVO Y CONFIRMA:</Text>
+                <Text style={[styles.modalLabel, { marginTop: 10 }]}>
+                  SI DESEAS RECHAZAR, INGRESA EL MOTIVO Y CONFIRMA:
+                </Text>
                 <TextInput
                   style={[styles.modalInput, { height: 60 }]}
                   multiline
@@ -598,18 +714,37 @@ export default function AdminCivilAssociationsScreen() {
                   placeholderTextColor="#94A3B8"
                 />
                 <Pressable
-                  style={[styles.statusBtn, { borderColor: '#EF4444', alignSelf: 'stretch', height: 44, marginTop: 8 }]}
+                  style={[
+                    styles.statusBtn,
+                    {
+                      borderColor: '#EF4444',
+                      alignSelf: 'stretch',
+                      height: 44,
+                      marginTop: 8,
+                    },
+                  ]}
                   onPress={() => handleStatusChange('rejected')}
                 >
-                  <Ionicons name="close-circle-outline" size={18} color="#EF4444" />
-                  <Text style={[styles.statusBtnText, { color: '#EF4444' }]}>Rechazar y Notificar</Text>
+                  <Ionicons
+                    name="close-circle-outline"
+                    size={18}
+                    color="#EF4444"
+                  />
+                  <Text style={[styles.statusBtnText, { color: '#EF4444' }]}>
+                    Rechazar y Notificar
+                  </Text>
                 </Pressable>
 
                 {/* Quitar Rol */}
                 <View style={styles.divider} />
-                <Pressable style={styles.removeRoleBtn} onPress={handleRemoveRole}>
+                <Pressable
+                  style={styles.removeRoleBtn}
+                  onPress={handleRemoveRole}
+                >
                   <Ionicons name="trash-outline" size={18} color="#EF4444" />
-                  <Text style={styles.removeRoleBtnText}>Degradar y Quitar Rol de Asoc. Civil</Text>
+                  <Text style={styles.removeRoleBtnText}>
+                    Degradar y Quitar Rol de Asoc. Civil
+                  </Text>
                 </Pressable>
               </ScrollView>
             )}
@@ -629,25 +764,45 @@ export default function AdminCivilAssociationsScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Registrar Representante</Text>
               <Pressable onPress={() => setRegisterModalVisible(false)}>
-                <Ionicons name="close-circle-outline" size={24} color="#64748B" />
+                <Ionicons
+                  name="close-circle-outline"
+                  size={24}
+                  color="#64748B"
+                />
               </Pressable>
             </View>
 
             {/* Pestañas del Modal */}
             <View style={styles.modalSubtabs}>
               <Pressable
-                style={[styles.modalSubtab, registerTab === 'promote' && styles.modalSubtabActive]}
+                style={[
+                  styles.modalSubtab,
+                  registerTab === 'promote' && styles.modalSubtabActive,
+                ]}
                 onPress={() => setRegisterTab('promote')}
               >
-                <Text style={[styles.modalSubtabText, registerTab === 'promote' && styles.modalSubtabTextActive]}>
+                <Text
+                  style={[
+                    styles.modalSubtabText,
+                    registerTab === 'promote' && styles.modalSubtabTextActive,
+                  ]}
+                >
                   Promover Usuario
                 </Text>
               </Pressable>
               <Pressable
-                style={[styles.modalSubtab, registerTab === 'new' && styles.modalSubtabActive]}
+                style={[
+                  styles.modalSubtab,
+                  registerTab === 'new' && styles.modalSubtabActive,
+                ]}
                 onPress={() => setRegisterTab('new')}
               >
-                <Text style={[styles.modalSubtabText, registerTab === 'new' && styles.modalSubtabTextActive]}>
+                <Text
+                  style={[
+                    styles.modalSubtabText,
+                    registerTab === 'new' && styles.modalSubtabTextActive,
+                  ]}
+                >
                   Registrar Nuevo
                 </Text>
               </Pressable>
@@ -657,7 +812,12 @@ export default function AdminCivilAssociationsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalLabel}>BUSCAR USUARIO EXISTENTE:</Text>
                 <View style={styles.userSearchBox}>
-                  <Ionicons name="search" size={16} color="#94A3B8" style={{ marginRight: 8 }} />
+                  <Ionicons
+                    name="search"
+                    size={16}
+                    color="#94A3B8"
+                    style={{ marginRight: 8 }}
+                  />
                   <TextInput
                     style={styles.userSearchInput}
                     placeholder="Buscar por nombre, correo o cédula..."
@@ -673,10 +833,13 @@ export default function AdminCivilAssociationsScreen() {
                       <Text style={styles.selectedUserText}>
                         Seleccionado:{' '}
                         <Text style={{ fontWeight: 'bold' }}>
-                          {selectedUserToPromote.displayName || selectedUserToPromote.firstName}
+                          {selectedUserToPromote.displayName ||
+                            selectedUserToPromote.firstName}
                         </Text>
                       </Text>
-                      <Text style={styles.selectedUserSub}>{selectedUserToPromote.email}</Text>
+                      <Text style={styles.selectedUserSub}>
+                        {selectedUserToPromote.email}
+                      </Text>
                     </View>
                     <Pressable onPress={() => setSelectedUserToPromote(null)}>
                       <Ionicons name="close-circle" size={20} color="#EF4444" />
@@ -688,25 +851,39 @@ export default function AdminCivilAssociationsScreen() {
                     keyExtractor={(item) => item.uuid}
                     style={styles.candidatesList}
                     renderItem={({ item }) => (
-                      <Pressable style={styles.candidateRow} onPress={() => setSelectedUserToPromote(item)}>
+                      <Pressable
+                        style={styles.candidateRow}
+                        onPress={() => setSelectedUserToPromote(item)}
+                      >
                         <View style={styles.candidateAvatar}>
                           <Text style={styles.candidateAvatarText}>
-                            {(item.displayName || item.firstName || 'U').charAt(0).toUpperCase()}
+                            {(item.displayName || item.firstName || 'U')
+                              .charAt(0)
+                              .toUpperCase()}
                           </Text>
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.candidateName}>
-                            {item.displayName || `${item.firstName || ''} ${item.lastName || ''}`}
+                            {item.displayName ||
+                              `${item.firstName || ''} ${item.lastName || ''}`}
                           </Text>
-                          <Text style={styles.candidateEmail}>{item.email}</Text>
+                          <Text style={styles.candidateEmail}>
+                            {item.email}
+                          </Text>
                         </View>
-                        <Ionicons name="add-circle-outline" size={20} color={tokens.colors.primary} />
+                        <Ionicons
+                          name="add-circle-outline"
+                          size={20}
+                          color={tokens.colors.primary}
+                        />
                       </Pressable>
                     )}
                   />
                 )}
 
-                <Text style={[styles.modalLabel, { marginTop: 12 }]}>CARGO DENTRO DE LA ASOCIACIÓN:</Text>
+                <Text style={[styles.modalLabel, { marginTop: 12 }]}>
+                  CARGO DENTRO DE LA ASOCIACIÓN:
+                </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={promotePosition}
@@ -715,12 +892,20 @@ export default function AdminCivilAssociationsScreen() {
                   placeholderTextColor="#94A3B8"
                 />
 
-                <Pressable style={styles.primarySaveBtn} onPress={handleRegisterPromote}>
-                  <Text style={styles.primarySaveBtnText}>Promover y Asignar Cargo</Text>
+                <Pressable
+                  style={styles.primarySaveBtn}
+                  onPress={handleRegisterPromote}
+                >
+                  <Text style={styles.primarySaveBtnText}>
+                    Promover y Asignar Cargo
+                  </Text>
                 </Pressable>
               </View>
             ) : (
-              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={{ flex: 1 }}
+              >
                 <Text style={styles.modalLabel}>NOMBRES:</Text>
                 <TextInput
                   style={styles.modalInput}
@@ -769,7 +954,9 @@ export default function AdminCivilAssociationsScreen() {
                   placeholderTextColor="#94A3B8"
                 />
 
-                <Text style={styles.modalLabel}>CARGO / POSICIÓN DENTRO DE LA LÍNEA:</Text>
+                <Text style={styles.modalLabel}>
+                  CARGO / POSICIÓN DENTRO DE LA LÍNEA:
+                </Text>
                 <TextInput
                   style={styles.modalInput}
                   value={newPosition}
@@ -778,8 +965,13 @@ export default function AdminCivilAssociationsScreen() {
                   placeholderTextColor="#94A3B8"
                 />
 
-                <Pressable style={[styles.primarySaveBtn, { marginTop: 12 }]} onPress={handleRegisterNew}>
-                  <Text style={styles.primarySaveBtnText}>Registrar como Asociación Civil</Text>
+                <Pressable
+                  style={[styles.primarySaveBtn, { marginTop: 12 }]}
+                  onPress={handleRegisterNew}
+                >
+                  <Text style={styles.primarySaveBtnText}>
+                    Registrar como Asociación Civil
+                  </Text>
                 </Pressable>
               </ScrollView>
             )}

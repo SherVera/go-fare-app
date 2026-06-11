@@ -15,7 +15,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { deleteUser, getAllUsers, updateUserRoles, resolveRoleUuid } from '@/lib/api';
+import {
+  deleteUser,
+  getAllUsers,
+  resolveRoleUuid,
+  updateUserRoles,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function AdminUsersScreen() {
@@ -38,7 +43,12 @@ export default function AdminUsersScreen() {
     (
       allUsers: any[],
       query: string,
-      roleTab: 'all' | 'passenger' | 'driver' | 'transport_owner' | 'civil_association',
+      roleTab:
+        | 'all'
+        | 'passenger'
+        | 'driver'
+        | 'transport_owner'
+        | 'civil_association',
     ) => {
       let result = [...allUsers];
 
@@ -48,7 +58,9 @@ export default function AdminUsersScreen() {
           const roles = (u as any).roles || [];
           const isOwner = roles.some((r: any) => r.name === 'transport_owner');
           const isDriver = roles.some((r: any) => r.name === 'driver');
-          const isCivil = roles.some((r: any) => r.name === 'civil_association');
+          const isCivil = roles.some(
+            (r: any) => r.name === 'civil_association',
+          );
 
           if (roleTab === 'transport_owner') return isOwner;
           if (roleTab === 'driver') return isDriver;
@@ -163,7 +175,11 @@ export default function AdminUsersScreen() {
   };
 
   const handleChangeRole = (
-    targetRole: 'passenger' | 'driver' | 'transport_owner' | 'civil_association',
+    targetRole:
+      | 'passenger'
+      | 'driver'
+      | 'transport_owner'
+      | 'civil_association',
   ) => {
     if (!selectedUser) return;
     setActionsModalVisible(false);
@@ -188,7 +204,9 @@ export default function AdminUsersScreen() {
             try {
               const roleUuid = await resolveRoleUuid(targetRole);
               if (!roleUuid) {
-                throw new Error('No se pudo resolver el ID de rol en el servidor.');
+                throw new Error(
+                  'No se pudo resolver el ID de rol en el servidor.',
+                );
               }
               await updateUserRoles(selectedUser.uuid, [roleUuid]);
               Alert.alert('Éxito', 'El rol del usuario ha sido actualizado.');
@@ -284,9 +302,13 @@ export default function AdminUsersScreen() {
           onRefresh={onRefresh}
           renderItem={({ item }) => {
             const roles = item.roles || [];
-            const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+            const isOwner = roles.some(
+              (r: any) => r.name === 'transport_owner',
+            );
             const isDriver = roles.some((r: any) => r.name === 'driver');
-            const isCivil = roles.some((r: any) => r.name === 'civil_association');
+            const isCivil = roles.some(
+              (r: any) => r.name === 'civil_association',
+            );
             const roleText = isOwner
               ? 'Socio'
               : isDriver

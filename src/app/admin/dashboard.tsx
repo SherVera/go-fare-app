@@ -15,11 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import {
   clearBackendJwt,
+  getAllCivilAssociations,
   getAllDocuments,
   getAllOwnerRequests,
   getAllTransportUnits,
   getAllUsers,
-  getAllCivilAssociations,
 } from '@/lib/api';
 import { sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -228,7 +228,9 @@ export default function AdminDashboardScreen() {
             style={styles.statBox}
             onPress={() => router.push('/admin/civil-associations' as any)}
           >
-            <View style={[styles.statIconCircle, { backgroundColor: '#FFF7ED' }]}>
+            <View
+              style={[styles.statIconCircle, { backgroundColor: '#FFF7ED' }]}
+            >
               <Ionicons name="business" size={20} color="#EA580C" />
             </View>
             <Text style={styles.statValue}>{stats.civilAssociations}</Text>
@@ -364,7 +366,11 @@ export default function AdminDashboardScreen() {
             onPress={() => router.push('/admin/owner-requests')}
           >
             <View style={[styles.actionIcon, { backgroundColor: '#F5F3FF' }]}>
-              <Ionicons name="file-tray-full-outline" size={22} color="#7C3AED" />
+              <Ionicons
+                name="file-tray-full-outline"
+                size={22}
+                color="#7C3AED"
+              />
             </View>
             <View style={styles.actionInfoText}>
               <Text style={styles.actionName}>Solicitudes de Socios</Text>

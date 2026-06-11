@@ -351,8 +351,12 @@ export default function ProfileScreen() {
         <View style={styles.debugCard}>
           <Text style={styles.debugTitle}>Información de Diagnóstico</Text>
           <Text style={styles.debugText}>API URL: {BASE_URL}</Text>
-          <Text style={styles.debugText}>Firebase UID: {userProfile?.uid || 'N/A'}</Text>
-          <Text style={styles.debugText}>Backend UUID: {userProfile?.backendUuid || 'Cargando o Fallido...'}</Text>
+          <Text style={styles.debugText}>
+            Firebase UID: {userProfile?.uid || 'N/A'}
+          </Text>
+          <Text style={styles.debugText}>
+            Backend UUID: {userProfile?.backendUuid || 'Cargando o Fallido...'}
+          </Text>
         </View>
 
         {/* Space for the absolute tab bar */}
