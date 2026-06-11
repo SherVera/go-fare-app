@@ -181,7 +181,7 @@ export default function LoginScreen() {
           } catch {}
           Alert.alert(
             'Error de Conexión',
-            'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.'
+            'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.',
           );
           setLoading(false);
           return;
@@ -296,7 +296,7 @@ export default function LoginScreen() {
         } catch {}
         Alert.alert(
           'Error de Conexión',
-          'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.'
+          'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.',
         );
         setLoading(false);
         return; // Detener flujo de inicio de sesión!
@@ -331,9 +331,7 @@ export default function LoginScreen() {
       }
 
       const roles = (backendUser as any).roles || [];
-      const isAdmin = roles.some(
-        (role: any) => role.name === 'platform_admin',
-      );
+      const isAdmin = roles.some((role: any) => role.name === 'platform_admin');
       const isOwner = roles.some(
         (role: any) => role.name === 'transport_owner',
       );

@@ -16,7 +16,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { getCurrentRates, updateBcvRate, updateFareValue, getExternalBcvRate } from '@/lib/api';
+import {
+  getCurrentRates,
+  getExternalBcvRate,
+  updateBcvRate,
+  updateFareValue,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 // Obtener fecha local YYYY-MM-DD
@@ -70,11 +75,16 @@ export default function AdminRatesScreen() {
   });
 
   // Tasa sugerida por la API externa (DolarApi)
-  const [apiSuggestedRate, setApiSuggestedRate] = useState<{ rate: number; date: string } | null>(null);
+  const [apiSuggestedRate, setApiSuggestedRate] = useState<{
+    rate: number;
+    date: string;
+  } | null>(null);
   // Valores de los formularios
   const [newFareValue, setNewFareValue] = useState('');
   const [newBcvRate, setNewBcvRate] = useState('');
-  const [bcvRateDate, setBcvRateDate] = useState(formatDateToDdMmYyyy(new Date().toISOString().slice(0, 10)));
+  const [bcvRateDate, setBcvRateDate] = useState(
+    formatDateToDdMmYyyy(new Date().toISOString().slice(0, 10)),
+  );
 
   const handleDateChange = (text: string) => {
     let cleaned = text.replace(/\D/g, '');
@@ -103,14 +113,18 @@ export default function AdminRatesScreen() {
       setCurrentRates(data);
       setNewFareValue(data.fareUsdValue.toFixed(2));
       setNewBcvRate(data.bcvRate.toFixed(2));
-      setBcvRateDate(formatDateToDdMmYyyy(data.bcvRateDate || getLocalDateString()));
+      setBcvRateDate(
+        formatDateToDdMmYyyy(data.bcvRateDate || getLocalDateString()),
+      );
 
       // 2. Consultar la API externa para la tasa oficial del BCV SOLO si no es la de hoy
       const todayStr = getLocalDateString();
       const registeredDate = (data.bcvRateDate || '').split('T')[0] || todayStr;
-      
+
       if (registeredDate !== todayStr) {
-        console.log('[AdminRates] La tasa registrada es anterior a hoy. Consultando tasa externa...');
+        console.log(
+          '[AdminRates] La tasa registrada es anterior a hoy. Consultando tasa externa...',
+        );
         const apiData = await getExternalBcvRate();
         if (apiData) {
           setApiSuggestedRate(apiData);
@@ -123,7 +137,9 @@ export default function AdminRatesScreen() {
           }
         }
       } else {
-        console.log('[AdminRates] La tasa registrada ya es la más reciente (hoy). Se omite consulta a la API.');
+        console.log(
+          '[AdminRates] La tasa registrada ya es la más reciente (hoy). Se omite consulta a la API.',
+        );
       }
     } catch (err) {
       console.warn('[AdminRates] Error fetching current rates:', err);
@@ -140,7 +156,10 @@ export default function AdminRatesScreen() {
   const handleUpdateFare = async () => {
     const parsed = parseFloat(newFareValue);
     if (isNaN(parsed) || parsed <= 0) {
-      Alert.alert('Valor inválido', 'El precio del fare debe ser un número positivo mayor que cero.');
+      Alert.alert(
+        'Valor inválido',
+        'El precio del fare debe ser un número positivo mayor que cero.',
+      );
       return;
     }
 
@@ -149,12 +168,15 @@ export default function AdminRatesScreen() {
       await updateFareValue(parsed);
       Alert.alert(
         'Éxito',
-        'El valor del fare en USD ha sido actualizado exitosamente.'
+        'El valor del fare en USD ha sido actualizado exitosamente.',
       );
       await fetchRates();
     } catch (err: any) {
       console.warn('[AdminRates] Error updating fare value:', err);
-      Alert.alert('Error', err.message || 'No se pudo actualizar el precio del fare.');
+      Alert.alert(
+        'Error',
+        err.message || 'No se pudo actualizar el precio del fare.',
+      );
     } finally {
       setUpdatingFare(false);
     }
@@ -163,14 +185,20 @@ export default function AdminRatesScreen() {
   const handleUpdateBcv = async () => {
     const parsed = parseFloat(newBcvRate);
     if (isNaN(parsed) || parsed <= 0) {
-      Alert.alert('Valor inválido', 'La tasa BCV debe ser un número positivo mayor que cero.');
+      Alert.alert(
+        'Valor inválido',
+        'La tasa BCV debe ser un número positivo mayor que cero.',
+      );
       return;
     }
 
     // Validar formato de fecha DD/MM/AAAA
     const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
     if (!dateRegex.test(bcvRateDate)) {
-      Alert.alert('Fecha inválida', 'La fecha debe estar en formato DD/MM/AAAA.');
+      Alert.alert(
+        'Fecha inválida',
+        'La fecha debe estar en formato DD/MM/AAAA.',
+      );
       return;
     }
 
@@ -179,7 +207,7 @@ export default function AdminRatesScreen() {
       await updateBcvRate(parsed, formatDateToYyyyMmDd(bcvRateDate));
       Alert.alert(
         'Éxito',
-        'La tasa BCV oficial del día ha sido registrada exitosamente.'
+        'La tasa BCV oficial del día ha sido registrada exitosamente.',
       );
       await fetchRates();
     } catch (err: any) {
@@ -194,7 +222,10 @@ export default function AdminRatesScreen() {
     if (apiSuggestedRate) {
       setNewBcvRate(apiSuggestedRate.rate.toFixed(2));
       setBcvRateDate(formatDateToDdMmYyyy(apiSuggestedRate.date));
-      Alert.alert('Aplicado', 'Se cargó la tasa oficial sugerida al formulario.');
+      Alert.alert(
+        'Aplicado',
+        'Se cargó la tasa oficial sugerida al formulario.',
+      );
     }
   };
 
@@ -205,9 +236,13 @@ export default function AdminRatesScreen() {
   const newFareInBs = enteredFare * (enteredBcv || currentRates.bcvRate);
 
   // Validaciones del botón registrar BCV
-  const isBcvAlreadyRegistered = currentRates.bcvRateDate === getLocalDateString();
-  const inputMatchesSystem = enteredBcv === currentRates.bcvRate && formatDateToYyyyMmDd(bcvRateDate) === currentRates.bcvRateDate;
-  const isBcvButtonDisabled = updatingBcv || (isBcvAlreadyRegistered && inputMatchesSystem);
+  const isBcvAlreadyRegistered =
+    currentRates.bcvRateDate === getLocalDateString();
+  const inputMatchesSystem =
+    enteredBcv === currentRates.bcvRate &&
+    formatDateToYyyyMmDd(bcvRateDate) === currentRates.bcvRateDate;
+  const isBcvButtonDisabled =
+    updatingBcv || (isBcvAlreadyRegistered && inputMatchesSystem);
 
   if (loading) {
     return (
@@ -215,7 +250,9 @@ export default function AdminRatesScreen() {
         <ScreenHeader title="Tasas y Tarifas" onMenu={() => setIsOpen(true)} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={tokens.colors.primary} />
-          <Text style={styles.loadingText}>Sincronizando tasas vigentes...</Text>
+          <Text style={styles.loadingText}>
+            Sincronizando tasas vigentes...
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -237,7 +274,12 @@ export default function AdminRatesScreen() {
             color={activeTab === 'fare' ? tokens.colors.primary : '#64748B'}
             style={{ marginRight: 6 }}
           />
-          <Text style={[styles.tabLabel, activeTab === 'fare' && styles.tabLabelActive]}>
+          <Text
+            style={[
+              styles.tabLabel,
+              activeTab === 'fare' && styles.tabLabelActive,
+            ]}
+          >
             Precio del Fare
           </Text>
         </Pressable>
@@ -252,7 +294,12 @@ export default function AdminRatesScreen() {
             color={activeTab === 'bcv' ? tokens.colors.primary : '#64748B'}
             style={{ marginRight: 6 }}
           />
-          <Text style={[styles.tabLabel, activeTab === 'bcv' && styles.tabLabelActive]}>
+          <Text
+            style={[
+              styles.tabLabel,
+              activeTab === 'bcv' && styles.tabLabelActive,
+            ]}
+          >
             Tasa BCV (Bs/$)
           </Text>
         </Pressable>
@@ -263,29 +310,48 @@ export default function AdminRatesScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-
           {/* SECCIÓN 1: PRECIO DEL FARE */}
           {activeTab === 'fare' && (
             <View style={styles.tabSection}>
               {/* Tarjeta Informativa del Fare */}
               <View style={styles.summaryCard}>
-                <Text style={styles.summaryTitle}>Valor del Fare en el Sistema</Text>
-                
+                <Text style={styles.summaryTitle}>
+                  Valor del Fare en el Sistema
+                </Text>
+
                 <View style={styles.summaryItem}>
-                  <View style={[styles.iconContainer, { backgroundColor: '#DBEAFE' }]}>
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      { backgroundColor: '#DBEAFE' },
+                    ]}
+                  >
                     <Ionicons name="ticket" size={26} color="#1D4ED8" />
                   </View>
                   <View style={styles.summaryInfo}>
-                    <Text style={styles.summaryLabel}>Tarifa Actual del Fare</Text>
-                    <Text style={styles.summaryValue}>${currentRates.fareUsdValue.toFixed(2)} USD</Text>
-                    <Text style={styles.summarySubtext}>Valor referencial de 1 ticket digital</Text>
+                    <Text style={styles.summaryLabel}>
+                      Tarifa Actual del Fare
+                    </Text>
+                    <Text style={styles.summaryValue}>
+                      ${currentRates.fareUsdValue.toFixed(2)} USD
+                    </Text>
+                    <Text style={styles.summarySubtext}>
+                      Valor referencial de 1 ticket digital
+                    </Text>
                   </View>
                 </View>
 
                 <View style={[styles.conversionAlert, { marginTop: 16 }]}>
-                  <Ionicons name="calculator-outline" size={18} color="#1E40AF" />
+                  <Ionicons
+                    name="calculator-outline"
+                    size={18}
+                    color="#1E40AF"
+                  />
                   <Text style={styles.conversionText}>
-                    En bolívares equivale a: <Text style={styles.boldText}>{currentFareInBs.toFixed(2)} Bs.</Text>
+                    En bolívares equivale a:{' '}
+                    <Text style={styles.boldText}>
+                      {currentFareInBs.toFixed(2)} Bs.
+                    </Text>
                   </Text>
                 </View>
               </View>
@@ -293,16 +359,26 @@ export default function AdminRatesScreen() {
               {/* Formulario de ajuste del Fare */}
               <View style={styles.formCard}>
                 <View style={styles.cardHeader}>
-                  <Ionicons name="options-outline" size={20} color={tokens.colors.primary} />
-                  <Text style={styles.cardHeaderTitle}>Ajustar Precio del Fare</Text>
+                  <Ionicons
+                    name="options-outline"
+                    size={20}
+                    color={tokens.colors.primary}
+                  />
+                  <Text style={styles.cardHeaderTitle}>
+                    Ajustar Precio del Fare
+                  </Text>
                 </View>
-                
+
                 <Text style={styles.cardDescription}>
-                  El fare es la unidad monetaria virtual de GoFare. Ajustar su valor en USD modificará el costo de recarga de todos los pasajeros en base a la tasa de cambio.
+                  El fare es la unidad monetaria virtual de GoFare. Ajustar su
+                  valor en USD modificará el costo de recarga de todos los
+                  pasajeros en base a la tasa de cambio.
                 </Text>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Nuevo Valor del Fare (USD)</Text>
+                  <Text style={styles.inputLabel}>
+                    Nuevo Valor del Fare (USD)
+                  </Text>
                   <View style={styles.inputWrapper}>
                     <Text style={styles.currencyPrefix}>$</Text>
                     <TextInput
@@ -321,14 +397,22 @@ export default function AdminRatesScreen() {
                 {enteredFare > 0 && (
                   <View style={styles.previewContainer}>
                     <Text style={styles.previewText}>
-                      Previsualización: 1 Fare costará <Text style={styles.previewBold}>${enteredFare.toFixed(2)} USD</Text>
-                      {enteredBcv || currentRates.bcvRate ? ` (~${newFareInBs.toFixed(2)} Bs.)` : ''}
+                      Previsualización: 1 Fare costará{' '}
+                      <Text style={styles.previewBold}>
+                        ${enteredFare.toFixed(2)} USD
+                      </Text>
+                      {enteredBcv || currentRates.bcvRate
+                        ? ` (~${newFareInBs.toFixed(2)} Bs.)`
+                        : ''}
                     </Text>
                   </View>
                 )}
 
                 <Pressable
-                  style={[styles.submitButton, updatingFare && styles.submitButtonDisabled]}
+                  style={[
+                    styles.submitButton,
+                    updatingFare && styles.submitButtonDisabled,
+                  ]}
                   onPress={handleUpdateFare}
                   disabled={updatingFare}
                 >
@@ -337,7 +421,9 @@ export default function AdminRatesScreen() {
                   ) : (
                     <>
                       <Ionicons name="save-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.submitButtonText}>Guardar Precio del Fare</Text>
+                      <Text style={styles.submitButtonText}>
+                        Guardar Precio del Fare
+                      </Text>
                     </>
                   )}
                 </Pressable>
@@ -351,15 +437,27 @@ export default function AdminRatesScreen() {
               {/* Tarjeta Informativa de la Tasa BCV */}
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryTitle}>Tasa BCV en el Sistema</Text>
-                
+
                 <View style={styles.summaryItem}>
-                  <View style={[styles.iconContainer, { backgroundColor: '#D1FAE5' }]}>
+                  <View
+                    style={[
+                      styles.iconContainer,
+                      { backgroundColor: '#D1FAE5' },
+                    ]}
+                  >
                     <Ionicons name="cash" size={26} color="#0F766E" />
                   </View>
                   <View style={styles.summaryInfo}>
-                    <Text style={styles.summaryLabel}>Tasa de Cambio Registrada</Text>
-                    <Text style={styles.summaryValue}>{currentRates.bcvRate.toFixed(2)} Bs/$</Text>
-                    <Text style={styles.summarySubtext}>Vigente para la fecha: {formatDateToDdMmYyyy(currentRates.bcvRateDate)}</Text>
+                    <Text style={styles.summaryLabel}>
+                      Tasa de Cambio Registrada
+                    </Text>
+                    <Text style={styles.summaryValue}>
+                      {currentRates.bcvRate.toFixed(2)} Bs/$
+                    </Text>
+                    <Text style={styles.summarySubtext}>
+                      Vigente para la fecha:{' '}
+                      {formatDateToDdMmYyyy(currentRates.bcvRateDate)}
+                    </Text>
                   </View>
                 </View>
               </View>
@@ -368,14 +466,29 @@ export default function AdminRatesScreen() {
               {apiSuggestedRate && (
                 <View style={styles.suggestionBanner}>
                   <View style={styles.suggestionHeader}>
-                    <Ionicons name="cloud-download" size={20} color="#065F46" style={{ marginRight: 8 }} />
-                    <Text style={styles.suggestionTitle}>Tasa Oficial Detectada (Internet)</Text>
+                    <Ionicons
+                      name="cloud-download"
+                      size={20}
+                      color="#065F46"
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={styles.suggestionTitle}>
+                      Tasa Oficial Detectada (Internet)
+                    </Text>
                   </View>
-                  
+
                   <Text style={styles.suggestionBody}>
-                    El valor más reciente publicado por el BCV es de <Text style={styles.boldText}>{apiSuggestedRate.rate.toFixed(2)} Bs/$</Text> (tasa para la fecha <Text style={styles.boldText}>{formatDateToDdMmYyyy(apiSuggestedRate.date)}</Text>).
+                    El valor más reciente publicado por el BCV es de{' '}
+                    <Text style={styles.boldText}>
+                      {apiSuggestedRate.rate.toFixed(2)} Bs/$
+                    </Text>{' '}
+                    (tasa para la fecha{' '}
+                    <Text style={styles.boldText}>
+                      {formatDateToDdMmYyyy(apiSuggestedRate.date)}
+                    </Text>
+                    ).
                   </Text>
-                  
+
                   {currentRates.bcvRate !== apiSuggestedRate.rate ? (
                     <View style={styles.suggestionActionBox}>
                       <Text style={styles.suggestionSubtitle}>
@@ -385,15 +498,34 @@ export default function AdminRatesScreen() {
                         style={styles.applySuggestionBtn}
                         onPress={applySuggestedRateValues}
                       >
-                        <Ionicons name="checkmark-done-outline" size={14} color="#065F46" />
-                        <Text style={styles.applySuggestionBtnText}>Cargar tasa de Internet</Text>
+                        <Ionicons
+                          name="checkmark-done-outline"
+                          size={14}
+                          color="#065F46"
+                        />
+                        <Text style={styles.applySuggestionBtnText}>
+                          Cargar tasa de Internet
+                        </Text>
                       </Pressable>
                     </View>
                   ) : (
                     <View style={styles.suggestionActionBox}>
-                      <Ionicons name="checkmark-circle" size={16} color="#059669" />
-                      <Text style={[styles.suggestionSubtitle, { color: '#059669', fontFamily: tokens.typography.fontFamily.bold }]}>
-                        El sistema ya se encuentra sincronizado con la tasa oficial.
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={16}
+                        color="#059669"
+                      />
+                      <Text
+                        style={[
+                          styles.suggestionSubtitle,
+                          {
+                            color: '#059669',
+                            fontFamily: tokens.typography.fontFamily.bold,
+                          },
+                        ]}
+                      >
+                        El sistema ya se encuentra sincronizado con la tasa
+                        oficial.
                       </Text>
                     </View>
                   )}
@@ -403,16 +535,26 @@ export default function AdminRatesScreen() {
               {/* Formulario de ajuste de BCV */}
               <View style={styles.formCard}>
                 <View style={styles.cardHeader}>
-                  <Ionicons name="trending-up-outline" size={20} color="#10B981" />
-                  <Text style={styles.cardHeaderTitle}>Ajustar Tasa del Dólar (BCV)</Text>
+                  <Ionicons
+                    name="trending-up-outline"
+                    size={20}
+                    color="#10B981"
+                  />
+                  <Text style={styles.cardHeaderTitle}>
+                    Ajustar Tasa del Dólar (BCV)
+                  </Text>
                 </View>
 
                 <Text style={styles.cardDescription}>
-                  Modifica la tasa de cambio oficial en Bolívares por cada Dólar (USD) para las recargas de pasajes vigentes en la fecha indicada.
+                  Modifica la tasa de cambio oficial en Bolívares por cada Dólar
+                  (USD) para las recargas de pasajes vigentes en la fecha
+                  indicada.
                 </Text>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Tasa de Cambio Oficial (Bs/USD)</Text>
+                  <Text style={styles.inputLabel}>
+                    Tasa de Cambio Oficial (Bs/USD)
+                  </Text>
                   <View style={styles.inputWrapper}>
                     <TextInput
                       style={[styles.textInput, { paddingLeft: 16 }]}
@@ -427,9 +569,16 @@ export default function AdminRatesScreen() {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Fecha de la Tasa (DD/MM/AAAA)</Text>
+                  <Text style={styles.inputLabel}>
+                    Fecha de la Tasa (DD/MM/AAAA)
+                  </Text>
                   <View style={[styles.inputWrapper, { paddingLeft: 16 }]}>
-                    <Ionicons name="calendar-outline" size={16} color="#64748B" style={{ marginRight: 8 }} />
+                    <Ionicons
+                      name="calendar-outline"
+                      size={16}
+                      color="#64748B"
+                      style={{ marginRight: 8 }}
+                    />
                     <TextInput
                       style={[styles.textInput, { paddingLeft: 0 }]}
                       value={bcvRateDate}
@@ -445,7 +594,11 @@ export default function AdminRatesScreen() {
                   style={[
                     styles.submitButton,
                     { backgroundColor: '#10B981' },
-                    isBcvButtonDisabled && { backgroundColor: '#CBD5E1', shadowOpacity: 0, elevation: 0 }
+                    isBcvButtonDisabled && {
+                      backgroundColor: '#CBD5E1',
+                      shadowOpacity: 0,
+                      elevation: 0,
+                    },
                   ]}
                   onPress={handleUpdateBcv}
                   disabled={isBcvButtonDisabled}
@@ -454,15 +607,15 @@ export default function AdminRatesScreen() {
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <>
-                      <Ionicons 
-                        name="cloud-upload-outline" 
-                        size={18} 
-                        color={isBcvButtonDisabled ? '#94A3B8' : '#FFFFFF'} 
+                      <Ionicons
+                        name="cloud-upload-outline"
+                        size={18}
+                        color={isBcvButtonDisabled ? '#94A3B8' : '#FFFFFF'}
                       />
-                      <Text 
+                      <Text
                         style={[
                           styles.submitButtonText,
-                          isBcvButtonDisabled && { color: '#94A3B8' }
+                          isBcvButtonDisabled && { color: '#94A3B8' },
                         ]}
                       >
                         {isBcvAlreadyRegistered && inputMatchesSystem
@@ -475,7 +628,6 @@ export default function AdminRatesScreen() {
               </View>
             </View>
           )}
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

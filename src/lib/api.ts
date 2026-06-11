@@ -1187,7 +1187,9 @@ export async function getRoles(): Promise<any[]> {
   }
 }
 
-export async function resolveRoleUuid(roleName: string): Promise<string | null> {
+export async function resolveRoleUuid(
+  roleName: string,
+): Promise<string | null> {
   try {
     const roles = await getRoles();
     const found = roles.find((r: any) => r.name === roleName);
@@ -1207,7 +1209,9 @@ export async function resolveRoleUuid(roleName: string): Promise<string | null> 
   return null;
 }
 
-export async function getCivilAssociationsMetadata(): Promise<Record<string, { position: string, status: string }>> {
+export async function getCivilAssociationsMetadata(): Promise<
+  Record<string, { position: string; status: string }>
+> {
   try {
     const str = await AsyncStorage.getItem(CIVIL_ASSOC_METADATA_KEY);
     return str ? JSON.parse(str) : {};
@@ -1224,7 +1228,10 @@ export async function saveCivilAssociationMetadata(
   try {
     const metadata = await getCivilAssociationsMetadata();
     metadata[userUuid] = { position, status };
-    await AsyncStorage.setItem(CIVIL_ASSOC_METADATA_KEY, JSON.stringify(metadata));
+    await AsyncStorage.setItem(
+      CIVIL_ASSOC_METADATA_KEY,
+      JSON.stringify(metadata),
+    );
   } catch (err) {
     console.warn('[API] Error al guardar metadatos de asociación civil:', err);
   }
@@ -1241,14 +1248,21 @@ export async function getAllCivilAssociations(): Promise<any[]> {
       return roles.some((r: any) => r.name === 'civil_association');
     });
   } catch (err) {
-    console.warn('[API] Falló la obtención de usuarios reales para asociaciones:', err);
+    console.warn(
+      '[API] Falló la obtención de usuarios reales para asociaciones:',
+      err,
+    );
   }
 
   const metadata = await getCivilAssociationsMetadata();
 
   // Enriquecer asociaciones reales con sus metadatos
   const enrichedReal = realAssocs.map((u: any) => {
-    const meta = metadata[u.uuid] || { position: 'Presidente', status: 'approved', rejectionReason: '' };
+    const meta = metadata[u.uuid] || {
+      position: 'Presidente',
+      status: 'approved',
+      rejectionReason: '',
+    };
     return {
       ...u,
       position: meta.position,
@@ -1278,7 +1292,7 @@ export async function getAllCivilAssociations(): Promise<any[]> {
   const combined = [...enrichedReal];
   for (const mock of mockAssocs) {
     const exists = combined.some(
-      (r) => r.email === mock.email || r.nationalId === mock.nationalId
+      (r) => r.email === mock.email || r.nationalId === mock.nationalId,
     );
     if (!exists) {
       combined.push(mock);
@@ -1303,18 +1317,27 @@ export async function registerCivilAssociation(data: {
     // Buscar el UUID del rol civil_association
     const roleUuid = await resolveRoleUuid('civil_association');
     if (!roleUuid) {
-      throw new Error('No se pudo resolver el identificador del rol Asociación Civil.');
+      throw new Error(
+        'No se pudo resolver el identificador del rol Asociación Civil.',
+      );
     }
 
     // Asignar el rol real en el backend
     try {
       await updateUserRoles(data.userUuid, [roleUuid]);
     } catch (err) {
-      console.warn('[API] Error al asignar rol en backend, procediendo con simulación local:', err);
+      console.warn(
+        '[API] Error al asignar rol en backend, procediendo con simulación local:',
+        err,
+      );
     }
 
     // Guardar metadatos locales (cargo y estado)
-    await saveCivilAssociationMetadata(data.userUuid, data.position, data.status);
+    await saveCivilAssociationMetadata(
+      data.userUuid,
+      data.position,
+      data.status,
+    );
     return { success: true, userUuid: data.userUuid };
   }
 
@@ -1351,7 +1374,7 @@ export async function updateCivilAssociationProfile(
     position?: string;
     status?: string;
     rejectionReason?: string;
-  }
+  },
 ): Promise<any> {
   // Si es un mock local
   if (uuid.startsWith('mock-ca-')) {
@@ -1365,7 +1388,10 @@ export async function updateCivilAssociationProfile(
           }
           return m;
         });
-        await AsyncStorage.setItem(CIVIL_ASSOC_MOCKS_KEY, JSON.stringify(updated));
+        await AsyncStorage.setItem(
+          CIVIL_ASSOC_MOCKS_KEY,
+          JSON.stringify(updated),
+        );
       }
     } catch (_) {}
     return { uuid, ...data };
@@ -1373,18 +1399,28 @@ export async function updateCivilAssociationProfile(
 
   // Si es un usuario real, guardamos su cargo y estado localmente
   const metadata = await getCivilAssociationsMetadata();
-  const current = metadata[uuid] || { position: 'Presidente', status: 'approved', rejectionReason: '' };
-  
+  const current = metadata[uuid] || {
+    position: 'Presidente',
+    status: 'approved',
+    rejectionReason: '',
+  };
+
   const updatedMeta = {
     position: data.position !== undefined ? data.position : current.position,
     status: data.status !== undefined ? data.status : current.status,
-    rejectionReason: data.rejectionReason !== undefined ? data.rejectionReason : (current as any).rejectionReason || '',
+    rejectionReason:
+      data.rejectionReason !== undefined
+        ? data.rejectionReason
+        : (current as any).rejectionReason || '',
   };
 
   try {
     const fullMeta = await getCivilAssociationsMetadata();
     fullMeta[uuid] = updatedMeta;
-    await AsyncStorage.setItem(CIVIL_ASSOC_METADATA_KEY, JSON.stringify(fullMeta));
+    await AsyncStorage.setItem(
+      CIVIL_ASSOC_METADATA_KEY,
+      JSON.stringify(fullMeta),
+    );
   } catch (err) {
     console.warn('[API] Error al guardar metadatos de asociación civil:', err);
   }
@@ -1764,7 +1800,7 @@ export async function getCurrentRates(): Promise<{
     } catch {}
     return {
       fareUsdValue: 0.25,
-      bcvRate: 40.00,
+      bcvRate: 40.0,
       bcvRateDate: new Date().toISOString().slice(0, 10),
     };
   }
@@ -1795,9 +1831,12 @@ export async function updateFareValue(usdValue: number): Promise<any> {
 /**
  * Registra la tasa BCV del día.
  */
-export async function updateBcvRate(rate: number, rateDate?: string): Promise<any> {
+export async function updateBcvRate(
+  rate: number,
+  rateDate?: string,
+): Promise<any> {
   const targetDate = rateDate ?? new Date().toISOString().slice(0, 10);
-  
+
   // Guardar en el backend (lanzará un error si falla)
   const result = await fetchWithAuth('/rates/bcv', {
     method: 'POST',
@@ -1846,5 +1885,3 @@ export async function getExternalBcvRate(): Promise<{
     return null;
   }
 }
-
-

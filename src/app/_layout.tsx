@@ -24,9 +24,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
+  Alert,
   AppState,
   AppStateStatus,
-  Alert,
   Platform,
   Pressable,
   StyleSheet,
@@ -42,7 +42,12 @@ import {
   syncWithBackend,
 } from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
-import { auth, listenToAuthState, sendVerificationEmail, sigOutAccount } from '@/lib/firebase';
+import {
+  auth,
+  listenToAuthState,
+  sendVerificationEmail,
+  sigOutAccount,
+} from '@/lib/firebase';
 import {
   getFcmToken,
   getInitialNotification,
@@ -241,7 +246,9 @@ export default function RootLayout() {
 
       const currentUser = auth.currentUser || user;
       const isPhoneUser = !!currentUser.phoneNumber;
-      const isVerified = currentUser ? (currentUser.emailVerified || isPhoneUser) : false;
+      const isVerified = currentUser
+        ? currentUser.emailVerified || isPhoneUser
+        : false;
 
       if (currentUser && !isVerified) {
         Alert.alert(
@@ -256,7 +263,10 @@ export default function RootLayout() {
                   await sigOutAccount();
                   await clearBackendJwt();
                 } catch (err) {
-                  console.warn('[Layout] Error al cerrar sesión de usuario no verificado:', err);
+                  console.warn(
+                    '[Layout] Error al cerrar sesión de usuario no verificado:',
+                    err,
+                  );
                 }
               },
             },
@@ -267,12 +277,12 @@ export default function RootLayout() {
                   await sendVerificationEmail(currentUser);
                   Alert.alert(
                     'Correo Enviado',
-                    'Se ha enviado un enlace de verificación a tu correo electrónico. Por favor revisa tu bandeja de entrada o carpeta de spam.'
+                    'Se ha enviado un enlace de verificación a tu correo electrónico. Por favor revisa tu bandeja de entrada o carpeta de spam.',
                   );
                 } catch {
                   Alert.alert(
                     'Error',
-                    'No se pudo enviar el correo de verificación. Inténtalo de nuevo más tarde.'
+                    'No se pudo enviar el correo de verificación. Inténtalo de nuevo más tarde.',
                   );
                 }
                 try {
@@ -281,7 +291,7 @@ export default function RootLayout() {
                 } catch {}
               },
             },
-          ]
+          ],
         );
         if (!cancelled) setPhase('signed_out');
         return;
