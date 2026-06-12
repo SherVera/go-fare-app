@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -9,6 +8,8 @@ import {
   Alert,
   Image,
   Keyboard,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,43 +18,21 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getUsedTicketsByRoute, validateTicketByQr } from '@/lib/api';
+import {
+  getCurrentSession,
+  getSessionQr,
+  getSessionRides,
+  validateTicketByQr,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
-
-interface RouteOption {
-  id: string;
-  name: string;
-  fare: number;
-  plate: string;
-}
-
-const ROUTE_OPTIONS: RouteOption[] = [
-  {
-    id: 'r1',
-    name: 'Ruta 201: Chacaíto - El Hatillo',
-    fare: 15.0,
-    plate: 'xy987zt',
-  },
-  {
-    id: 'r2',
-    name: 'Ruta L1: Propatria - Palo Verde',
-    fare: 20.0,
-    plate: 'ab123cd',
-  },
-  {
-    id: 'r3',
-    name: 'Ruta 102: Plaza Venezuela - Baruta',
-    fare: 12.0,
-    plate: 'ef456gh',
-  },
-];
 
 export default function DriverScanScreen() {
   const router = useRouter();
-  const [isEnServicio, setIsEnServicio] = useState(false);
-  const [activeRoute, setActiveRoute] = useState<RouteOption>(ROUTE_OPTIONS[0]);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
+  const [activeSession, setActiveSession] = useState<any | null>(null);
+
+  // QR dinámico de la sesión
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
 
   // Lista de cobros validados recientes
   const [recentPayments, setRecentPayments] = useState<any[]>([]);
@@ -69,78 +48,87 @@ export default function DriverScanScreen() {
   const [qrCodeInput, setQrCodeInput] = useState('');
   const [manualProcessing, setManualProcessing] = useState(false);
 
-  // Polling de pagos en tiempo real — consulta la tabla `tickets` del backend PostgreSQL
-  // No usa Firebase. Filtra por placa+ruta de la unidad activa del conductor.
-  useEffect(() => {
-    if (!isEnServicio) return;
+  // Detalle de pago seleccionado para mostrar en el modal
+  const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
 
-    const sessionStartedAt = Date.now();
-    const processedIds = new Set<string>();
+  // Cargar estado inicial del turno
+  const checkServiceStatus = useCallback(async () => {
+    try {
+      setLoading(true);
+      const session = await getCurrentSession();
+      if (session && session.status === 'open') {
+        setActiveSession(session);
+        // Cargar QR y viajes
+        const qrRes = await getSessionQr(session.uuid);
+        setQrCodeData(qrRes.qr);
+
+        const rides = await getSessionRides(session.uuid);
+        setRecentPayments(rides.slice(0, 5));
+      } else {
+        setActiveSession(null);
+        setQrCodeData(null);
+        setRecentPayments([]);
+      }
+    } catch (err) {
+      console.warn('[Scan] Error loading service status:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkServiceStatus();
+    }, [checkServiceStatus]),
+  );
+
+  // Polling de pagos y renovación del QR cifrado cada 4 segundos
+  useEffect(() => {
+    if (!activeSession || activeSession.status !== 'open') return;
 
     const pollInterval = setInterval(async () => {
       try {
-        // Keywords: placa de la unidad + id de ruta para filtrar en la tabla tickets
-        const keywords = [
-          activeRoute.plate,
-          activeRoute.id,
-          activeRoute.name.toLowerCase().split(':')[0].trim(),
-        ];
+        // 1. Verificar si la sesión sigue activa/abierta
+        const current = await getCurrentSession();
+        if (!current || current.status !== 'open') {
+          setActiveSession(null);
+          setQrCodeData(null);
+          setRecentPayments([]);
+          return;
+        }
 
-        const usedTickets = await getUsedTicketsByRoute(
-          keywords,
-          sessionStartedAt,
-        );
+        // 2. Renovar el QR dinámico (Omitido para mantener el QR estático)
+        // const qrRes = await getSessionQr(current.uuid);
+        // setQrCodeData(qrRes.qr);
 
-        for (const ticket of usedTickets) {
-          if (processedIds.has(ticket.id)) continue;
-          processedIds.add(ticket.id);
-
-          const ticketTime = new Date(
-            ticket.updatedAt || ticket.createdAt,
-          ).getTime();
-          const fare = Number(ticket.price) || activeRoute.fare;
-          const timeStr = new Date(ticketTime).toLocaleTimeString('es-VE', {
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-
-          const validationRecord = {
-            id: ticket.id,
-            code: ticket.qrCode || `GF-${ticket.id.slice(-4).toUpperCase()}`,
-            fare,
-            route: activeRoute.name,
-            time: timeStr,
-            date: new Date(ticketTime).toLocaleDateString('es-VE'),
-            passengerName: 'Pasajero',
-          };
-
-          // 1. Guardar en AsyncStorage
-          const localListStr = await AsyncStorage.getItem(
-            'mock_validated_tickets',
+        // 3. Consultar viajes recientes de la sesión en base de datos
+        const rides = await getSessionRides(current.uuid);
+        
+        // Detectar si hay nuevos cobros para alertas
+        if (rides.length > recentPayments.length) {
+          const newRides = rides.filter(
+            (r: any) => !recentPayments.some((prev: any) => prev.uuid === r.uuid)
           );
-          const localList = localListStr ? JSON.parse(localListStr) : [];
 
-          if (!localList.some((p: any) => p.id === ticket.id)) {
-            localList.unshift(validationRecord);
-            await AsyncStorage.setItem(
-              'mock_validated_tickets',
-              JSON.stringify(localList),
-            );
-
-            // 2. Actualizar feed de cobros recientes
-            setRecentPayments((prev) => {
-              if (prev.some((p) => p.id === ticket.id)) return prev;
-              return [validationRecord, ...prev].slice(0, 5);
+          for (const newRide of newRides) {
+            const passengerName =
+              newRide.passenger?.displayName ||
+              `${newRide.passenger?.firstName || ''} ${newRide.passenger?.lastName || ''}`.trim() ||
+              'Pasajero';
+            
+            const timeStr = new Date(newRide.createdAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
             });
 
-            // 3. Banner de notificación flotante
+            // Disparar banner
             setSuccessNotification({
-              passengerName: 'Pasajero',
-              fare,
+              passengerName,
+              fare: Number(newRide.fareCost),
               time: timeStr,
             });
 
-            // 4. Haptic feedback
+            // Vibración
             try {
               await Haptics.notificationAsync(
                 Haptics.NotificationFeedbackType.Success,
@@ -150,107 +138,18 @@ export default function DriverScanScreen() {
             setTimeout(() => setSuccessNotification(null), 4000);
           }
         }
+
+        setActiveSession(current);
+        setRecentPayments(rides.slice(0, 5));
       } catch (err) {
-        console.warn('[Scan] Error polling tickets:', err);
+        console.warn('[Scan] Error during polling in scan:', err);
       }
-    }, 4000); // Poll cada 4 segundos
+    }, 4000);
 
     return () => clearInterval(pollInterval);
-  }, [isEnServicio, activeRoute]);
+  }, [activeSession, recentPayments]);
 
-  // Cargar lista de cobros recientes desde AsyncStorage
-  const loadRecentPayments = useCallback(async () => {
-    try {
-      const localListStr = await AsyncStorage.getItem('mock_validated_tickets');
-      const localList = localListStr ? JSON.parse(localListStr) : [];
-      setRecentPayments(localList.slice(0, 5)); // Mostrar solo los últimos 5
-    } catch (err) {
-      console.warn('[Scan] Error loading recent payments:', err);
-    }
-  }, []);
-
-  // Cargar estado de servicio y ruta activa
-  const checkServiceStatus = useCallback(async () => {
-    try {
-      setLoading(true);
-      const status = await AsyncStorage.getItem('driver_service_status');
-      setIsEnServicio(status === 'active');
-
-      const routeId = await AsyncStorage.getItem('driver_active_route_id');
-      if (routeId) {
-        const found = ROUTE_OPTIONS.find((r) => r.id === routeId);
-        if (found) setActiveRoute(found);
-      }
-
-      await loadRecentPayments();
-    } catch (err) {
-      console.warn('[Scan] Error loading service status:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadRecentPayments]);
-
-  useFocusEffect(
-    useCallback(() => {
-      checkServiceStatus();
-    }, [checkServiceStatus]),
-  );
-
-  // Simular escaneo y cobro de un pasajero
-  const handleSimulatePassengerScan = async (
-    fare: number,
-    passengerName: string,
-  ) => {
-    if (processing) return;
-    setProcessing(true);
-
-    try {
-      const timeStr = new Date().toLocaleTimeString('es-VE', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-
-      const validationRecord = {
-        id: `val-${Date.now()}`,
-        code: `PASSENGER-${Date.now().toString().slice(-4)}`,
-        fare: fare,
-        route: activeRoute.name,
-        time: timeStr,
-        date: new Date().toLocaleDateString('es-VE'),
-        passengerName: passengerName,
-      };
-
-      // 1. Guardar en AsyncStorage
-      const localListStr = await AsyncStorage.getItem('mock_validated_tickets');
-      const localList = localListStr ? JSON.parse(localListStr) : [];
-      localList.unshift(validationRecord);
-      await AsyncStorage.setItem(
-        'mock_validated_tickets',
-        JSON.stringify(localList),
-      );
-
-      // 2. Cargar recientes de inmediato en el estado
-      setRecentPayments(localList.slice(0, 5));
-
-      // 3. Mostrar banner de éxito flotante
-      setSuccessNotification({
-        passengerName,
-        fare,
-        time: timeStr,
-      });
-
-      // Ocultar banner automáticamente
-      setTimeout(() => {
-        setSuccessNotification(null);
-      }, 3500);
-    } catch (error) {
-      console.warn('[Scan] Error simulating passenger scan:', error);
-    } finally {
-      setProcessing(false);
-    }
-  };
-
-  // Validación manual de código de boleto
+  // Validación manual de código de boleto (pasaje QR)
   const handleManualValidateTicket = async (code: string) => {
     if (manualProcessing) return;
     const sanitizedCode = code.trim();
@@ -267,63 +166,28 @@ export default function DriverScanScreen() {
 
     try {
       console.log('[Scan] Validating ticket:', sanitizedCode);
-      let ticketName = 'Boleto Pasajero';
-      let fareValue = activeRoute.fare;
-
-      try {
-        const ticket = await validateTicketByQr(sanitizedCode);
-        ticketName = 'Pasajero Verificado';
-        fareValue = ticket.price || activeRoute.fare;
-      } catch (_e) {
-        // Fallback simulación
-        const codeUpper = sanitizedCode.toUpperCase();
-        if (codeUpper.startsWith('USED') || codeUpper === 'USADO') {
-          throw new Error('El boleto ya ha sido usado.');
-        } else if (
-          codeUpper.startsWith('EXPIRED') ||
-          codeUpper === 'EXPIRADO'
-        ) {
-          throw new Error('El boleto ha expirado.');
-        } else if (codeUpper.startsWith('SALDO') || codeUpper === 'NO-MONEY') {
-          throw new Error('Saldo insuficiente en la cuenta del pasajero.');
-        }
-
-        if (codeUpper.includes('CARLOS')) {
-          ticketName = 'Carlos Pérez';
-          fareValue = 20.0;
-        } else if (codeUpper.includes('RAFAEL')) {
-          ticketName = 'Rafael Castellano';
-          fareValue = 15.0;
-        }
-      }
+      const ticket = await validateTicketByQr(sanitizedCode) as any;
+      const ticketName =
+        ticket.user?.displayName ||
+        `${ticket.user?.firstName || ''} ${ticket.user?.lastName || ''}`.trim() ||
+        'Pasajero Verificado';
+      
+      const fareValue = Number(ticket.price) || (activeSession ? Number(activeSession.fareCost) : 15);
 
       const timeStr = new Date().toLocaleTimeString('es-VE', {
         hour: '2-digit',
         minute: '2-digit',
       });
 
-      const validationRecord = {
-        id: `val-${Date.now()}`,
-        code: sanitizedCode,
-        fare: fareValue,
-        route: activeRoute.name,
-        time: timeStr,
-        date: new Date().toLocaleDateString('es-VE'),
-        passengerName: ticketName,
-      };
+      // Recargar cobros recientes para reflejar el cambio en la sesión
+      if (activeSession) {
+        const rides = await getSessionRides(activeSession.uuid);
+        setRecentPayments(rides.slice(0, 5));
+      }
 
-      const localListStr = await AsyncStorage.getItem('mock_validated_tickets');
-      const localList = localListStr ? JSON.parse(localListStr) : [];
-      localList.unshift(validationRecord);
-      await AsyncStorage.setItem(
-        'mock_validated_tickets',
-        JSON.stringify(localList),
-      );
-
-      setRecentPayments(localList.slice(0, 5));
       setQrCodeInput('');
 
-      // Mostrar banner flotante
+      // Mostrar banner flotante de éxito
       setSuccessNotification({
         passengerName: ticketName,
         fare: fareValue,
@@ -333,6 +197,11 @@ export default function DriverScanScreen() {
       setTimeout(() => {
         setSuccessNotification(null);
       }, 3500);
+
+      Alert.alert(
+        'Boleto Validado',
+        `El boleto fue verificado y cobrado con éxito. Pasajero: ${ticketName}`,
+      );
     } catch (err: any) {
       Alert.alert(
         'Error de Validación',
@@ -351,6 +220,8 @@ export default function DriverScanScreen() {
     );
   }
 
+  const isEnServicio = activeSession?.status === 'open';
+
   // Vista fuera de servicio
   if (!isEnServicio) {
     return (
@@ -366,7 +237,7 @@ export default function DriverScanScreen() {
           <Text style={styles.offlineTitle}>Turno Fuera de Servicio</Text>
           <Text style={styles.offlineSubtitle}>
             Debes iniciar tu turno de trabajo ("En Servicio") en la pestaña de
-            Inicio para poder cobrar a los pasajeros.
+            Inicio para poder generar el código QR de cobro.
           </Text>
           <Pressable
             style={({ pressed }) => [
@@ -402,7 +273,7 @@ export default function DriverScanScreen() {
             <Text style={styles.notificationText}>
               {successNotification.passengerName} pagó{' '}
               <Text style={{ fontWeight: 'bold' }}>
-                {successNotification.fare.toFixed(2)} Bs
+                {successNotification.fare.toFixed(2)} Fare
               </Text>
             </Text>
           </View>
@@ -417,34 +288,39 @@ export default function DriverScanScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Código QR de Cobro */}
+        {/* Código QR de Cobro Dinámico */}
         <View style={styles.qrCard}>
           <View style={styles.routeHeader}>
             <Text style={styles.routeHeaderLabel}>TARIFA Y RUTA ACTIVA</Text>
-            <Text style={styles.routeHeaderValue}>{activeRoute.name}</Text>
+            <Text style={styles.routeHeaderValue}>
+              {activeSession.route?.name}
+            </Text>
           </View>
 
           <View style={styles.qrContainer}>
-            <Image
-              source={{
-                uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&color=0f172a&data=${encodeURIComponent(
-                  activeRoute.name,
-                )}`,
-              }}
-              style={styles.qrImage}
-              resizeMode="contain"
-            />
+            {qrCodeData ? (
+              <Image
+                source={{
+                  uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&color=0f172a&data=${encodeURIComponent(
+                    qrCodeData,
+                  )}`,
+                }}
+                style={styles.qrImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <ActivityIndicator size="large" color={tokens.colors.primary} />
+            )}
             {/* Indicador de Escaneo Pulsante */}
             <View style={styles.scanPulse} />
           </View>
 
           <Text style={styles.qrFareValue}>
-            {activeRoute.fare.toFixed(2)} Bs
+            {Number(activeSession.fareCost).toFixed(2)} Fare
           </Text>
 
           <Text style={styles.qrInstruction}>
-            Muestra este código al pasajero al abordar para cobrar el pasaje de
-            la ruta.
+            Muestra este código al pasajero para cobrar de forma rápida y segura.
           </Text>
         </View>
 
@@ -459,98 +335,69 @@ export default function DriverScanScreen() {
               </Text>
             </View>
           ) : (
-            recentPayments.map((item, index) => (
-              <View key={item.id}>
-                {index > 0 && <View style={styles.feedDivider} />}
-                <View style={styles.feedItem}>
-                  <View style={styles.feedLeft}>
-                    <View style={styles.feedIconWrapper}>
-                      <Ionicons
-                        name="person"
-                        size={16}
-                        color={tokens.colors.primary}
-                      />
+            recentPayments.map((item, index) => {
+              const passengerName =
+                `${item.passenger?.firstName || ''} ${item.passenger?.lastName || ''}`.trim() ||
+                item.passenger?.displayName ||
+                'Pasajero';
+              
+              const passengerCedula = item.passenger?.nationalId 
+                ? `C.I. ${item.passenger.nationalId}` 
+                : 'C.I. No registrada';
+
+              const timeStr = new Date(item.createdAt).toLocaleTimeString('es-VE', {
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+
+              return (
+                <View key={item.uuid}>
+                  {index > 0 && <View style={styles.feedDivider} />}
+                  <View style={styles.feedItem}>
+                    <View style={styles.feedLeft}>
+                      <View style={styles.feedIconWrapper}>
+                        <Ionicons
+                          name="person"
+                          size={16}
+                          color={tokens.colors.primary}
+                        />
+                      </View>
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <Text style={styles.feedPassenger} numberOfLines={1}>
+                          {passengerName}
+                        </Text>
+                        <Text style={styles.feedCedula}>
+                          {passengerCedula}
+                        </Text>
+                        <Text style={styles.feedTime}>
+                          Cobro exitoso • {timeStr}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ marginLeft: 12 }}>
-                      <Text style={styles.feedPassenger}>
-                        {item.passengerName}
-                      </Text>
-                      <Text style={styles.feedTime}>
-                        Cobro exitoso • {item.time}
-                      </Text>
+                    <View style={styles.feedRightContainer}>
+                      <View style={styles.feedRight}>
+                        <Text style={styles.feedAmount}>
+                          +{Number(item.fareCost).toFixed(2)} Fare
+                        </Text>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={16}
+                          color="#16A34A"
+                          style={{ marginLeft: 6 }}
+                        />
+                      </View>
+                      <Pressable
+                        style={styles.detailsBtn}
+                        onPress={() => setSelectedPayment(item)}
+                      >
+                        <Text style={styles.detailsBtnText}>Detalles</Text>
+                      </Pressable>
                     </View>
-                  </View>
-                  <View style={styles.feedRight}>
-                    <Text style={styles.feedAmount}>
-                      +{item.fare.toFixed(2)} Bs
-                    </Text>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={16}
-                      color="#16A34A"
-                      style={{ marginLeft: 6 }}
-                    />
                   </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
-        </View>
-
-        {/* Simular Escaneo de Pasajero */}
-        <Text style={styles.sectionTitle}>Simular Escaneo de Pasajero</Text>
-        <View style={styles.simulationGrid}>
-          <Pressable
-            style={styles.simBtnSuccess}
-            onPress={() => handleSimulatePassengerScan(15.0, 'Juan Pérez')}
-          >
-            <Ionicons
-              name="person-add-outline"
-              size={16}
-              color="#FFFFFF"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.simBtnText}>Juan P. (Bs 15)</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.simBtnSuccess}
-            onPress={() => handleSimulatePassengerScan(15.0, 'María Rodríguez')}
-          >
-            <Ionicons
-              name="person-add-outline"
-              size={16}
-              color="#FFFFFF"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.simBtnText}>María R. (Bs 15)</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.simBtnSuccess}
-            onPress={() => handleSimulatePassengerScan(20.0, 'Carlos Gómez')}
-          >
-            <Ionicons
-              name="person-add-outline"
-              size={16}
-              color="#FFFFFF"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.simBtnText}>Carlos G. (Bs 20)</Text>
-          </Pressable>
-
-          <Pressable
-            style={styles.simBtnSuccess}
-            onPress={() => handleSimulatePassengerScan(12.0, 'Ana Silva')}
-          >
-            <Ionicons
-              name="person-add-outline"
-              size={16}
-              color="#FFFFFF"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.simBtnText}>Ana S. (Bs 12)</Text>
-          </Pressable>
         </View>
 
         {/* Validación Manual de Boleto */}
@@ -586,6 +433,125 @@ export default function DriverScanScreen() {
         {/* Espacio final */}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Modal de Detalle de Pago del Usuario */}
+      <Modal
+        visible={!!selectedPayment}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setSelectedPayment(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Header del Modal */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detalle del Pago</Text>
+              <Pressable onPress={() => setSelectedPayment(null)} hitSlop={12}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </Pressable>
+            </View>
+
+            {selectedPayment && (() => {
+              const passenger = selectedPayment.passenger || {};
+              const passName =
+                `${passenger.firstName || ''} ${passenger.lastName || ''}`.trim() ||
+                passenger.displayName ||
+                'Pasajero';
+              const passCedula = passenger.nationalId || 'No registrada';
+              const passEmail = passenger.email || 'No registrado';
+              const passPhone = passenger.phoneNumber || 'No registrado';
+              
+              const dateObj = new Date(selectedPayment.createdAt);
+              const dateStr = dateObj.toLocaleDateString('es-VE');
+              const timeStr = dateObj.toLocaleTimeString('es-VE', {
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+
+              return (
+                <View style={styles.receiptContainer}>
+                  {/* Icono de ticket / exito */}
+                  <View style={styles.receiptHeader}>
+                    <View style={styles.receiptSuccessIcon}>
+                      <Ionicons name="checkmark" size={28} color="#16A34A" />
+                    </View>
+                    <Text style={styles.receiptStatusText}>Pago Exitoso</Text>
+                    <Text style={styles.receiptAmount}>
+                      {Number(selectedPayment.fareCost).toFixed(2)} fares
+                    </Text>
+                  </View>
+
+                  {/* Cuerpo del ticket decorativo */}
+                  <View style={styles.ticketBody}>
+                    <View style={styles.ticketDividerWrapper}>
+                      <View style={styles.ticketDashedLine} />
+                    </View>
+
+                    {/* Información del Pasajero */}
+                    <Text style={styles.receiptSectionTitle}>PASAJERO</Text>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Nombre:</Text>
+                      <Text style={styles.receiptValue}>{passName}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Cédula:</Text>
+                      <Text style={styles.receiptValue}>{passCedula}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Teléfono:</Text>
+                      <Text style={styles.receiptValue}>{passPhone}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Email:</Text>
+                      <Text style={styles.receiptValue} numberOfLines={1}>{passEmail}</Text>
+                    </View>
+
+                    <View style={styles.ticketDividerWrapper}>
+                      <View style={styles.ticketDashedLine} />
+                    </View>
+
+                    {/* Detalles del Pago */}
+                    <Text style={styles.receiptSectionTitle}>TRANSACCIÓN</Text>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>ID de Viaje:</Text>
+                      <Text style={[styles.receiptValue, styles.receiptCode]}>
+                        GF-{selectedPayment.uuid?.slice(0, 8).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Fecha y Hora:</Text>
+                      <Text style={styles.receiptValue}>{dateStr} - {timeStr}</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Tarifa cobrada:</Text>
+                      <Text style={styles.receiptValue}>{Number(selectedPayment.fareCost).toFixed(2)} fares</Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Tasa BCV:</Text>
+                      <Text style={styles.receiptValue}>
+                        {Number(selectedPayment.bcvRate || 36.50).toFixed(2)} Bs/$
+                      </Text>
+                    </View>
+                    <View style={styles.receiptRow}>
+                      <Text style={styles.receiptLabel}>Equivalente Bs:</Text>
+                      <Text style={[styles.receiptValue, { fontFamily: tokens.typography.fontFamily.bold }]}>
+                        {Number(selectedPayment.bsAmount || 0).toFixed(2)} Bs
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    style={styles.closeModalBtn}
+                    onPress={() => setSelectedPayment(null)}
+                  >
+                    <Text style={styles.closeModalBtnText}>Entendido</Text>
+                  </Pressable>
+                </View>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -768,32 +734,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F1F5F9',
   },
-  simulationGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  simBtnSuccess: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: tokens.colors.primary,
-    borderRadius: 14,
-    height: 44,
-    width: '48%',
-    marginBottom: 10,
-    shadowColor: tokens.colors.primary,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  simBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12.5,
-    fontFamily: tokens.typography.fontFamily.bold,
-  },
   inputCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -902,5 +842,158 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#FFFFFF',
     opacity: 0.8,
+  },
+  // Nuevos estilos para detalles de pasajero y modal de recibo
+  feedCedula: {
+    fontSize: 11.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  feedRightContainer: {
+    alignItems: 'flex-end',
+  },
+  detailsBtn: {
+    marginTop: 4,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  detailsBtnText: {
+    fontSize: 10.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    width: '100%',
+    maxWidth: 380,
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+  },
+  receiptContainer: {
+    alignItems: 'center',
+  },
+  receiptHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  receiptSuccessIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  receiptStatusText: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#16A34A',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  receiptAmount: {
+    fontSize: 24,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#1E293B',
+  },
+  ticketBody: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  ticketDividerWrapper: {
+    marginVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ticketDashedLine: {
+    width: '100%',
+    height: 1,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+  },
+  receiptSectionTitle: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#64748B',
+    letterSpacing: 1.1,
+    marginBottom: 8,
+  },
+  receiptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  receiptLabel: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+  },
+  receiptValue: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+    textAlign: 'right',
+  },
+  receiptCode: {
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 12,
+    color: '#475569',
+  },
+  closeModalBtn: {
+    backgroundColor: tokens.colors.primary,
+    borderRadius: 14,
+    width: '100%',
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    shadowColor: tokens.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  closeModalBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14.5,
+    fontFamily: tokens.typography.fontFamily.bold,
   },
 });

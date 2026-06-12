@@ -17,12 +17,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import type { QRScanResult } from '@/interfaces';
 import {
-  createFareTransaction,
-  createTicket,
   getBackendProfile,
   getFareAccountByUserId,
   getTicketByQr,
   validateTicketByQr,
+  previewRide,
+  confirmRide,
 } from '@/lib/api';
 import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -40,47 +40,27 @@ export default function PayTripScreen() {
     'details' | 'processing' | 'success'
   >('details');
   const [scannedQr, setScannedQr] = useState('');
+  const [rideUuid, setRideUuid] = useState('');
 
   // Modelo de Saldo / Fare
   const [balance, setBalance] = useState(0.0);
-  const [fareAccount, setFareAccount] = useState<any>(null);
   const [routeFare, setRouteFare] = useState(15.0);
-  const [backendUserData, setBackendUserData] = useState<any>(null);
   const [routeLabel, setRouteLabel] = useState('General');
 
   const handleExecuteDirectPayment = async () => {
-    if (!backendUserData || !fareAccount || !scannedQr) return;
+    if (!scannedQr) return;
 
     try {
       setConfirmStep('processing');
-      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      // 1. Crear el ticket como "used" en el backend (PostgreSQL table `tickets`)
-      const ticket = await createTicket({
-        userId: backendUserData.id,
-        price: routeFare,
-        status: 'used',
-        route: routeLabel,
-        qrCode: scannedQr,
-        origin: 'Origen',
-        destination: 'Destino',
-      });
+      // Ejecutar el cobro en el backend
+      const response = await confirmRide(scannedQr);
 
-      // 2. Crear la transacción de débito en `fare_transactions` (descuenta saldo y asocia el ticket en BD)
-      await createFareTransaction({
-        fareAccountId: fareAccount.id,
-        amount: routeFare,
-        type: 'debit',
-        transactionType: 'payment',
-        description: `Pago de viaje en ruta: ${routeLabel}`,
-        ticketId: ticket.id,
-      });
-
-      // 3. Acreditar cambio localmente
-      setBalance((prev) => prev - routeFare);
+      setRideUuid(response.rideUuid);
+      setBalance(response.balanceFares);
       setConfirmStep('success');
     } catch (error: any) {
-      console.error('[Scanner] Error processing direct payment:', error);
+      console.error('[Scanner] Error processing live payment:', error);
       Alert.alert(
         'Error de Pago',
         error.message ||
@@ -153,45 +133,19 @@ export default function PayTripScreen() {
           ],
         );
       } else {
-        // 2. Si no es un boleto, es el QR de una unidad de transporte
-        //    Verificar si el pasajero tiene saldo suficiente en su cuenta de tarifa
-        const backendUser = await getBackendProfile();
-        const account = await getFareAccountByUserId(backendUser.id);
-        const userBalance = Number(account.balance);
+        // 2. Es el QR de una unidad de transporte (encriptado).
+        //    Llamar al backend para descifrar el QR y obtener los datos del viaje.
+        const preview = await previewRide(scannedData);
+        
+        setRouteLabel(`${preview.routeName} (${preview.vehiclePlate})`);
+        setRouteFare(preview.fareCost);
+        setBalance(preview.balanceFares);
+        setScannedQr(scannedData);
 
-        // Detectar ruta según el QR
-        let detectedRoute = 'Ruta General';
-        const dataLower = scannedData.toLowerCase();
-        if (
-          dataLower.includes('hatillo') ||
-          dataLower.includes('201') ||
-          dataLower.includes('r1')
-        ) {
-          detectedRoute = 'Ruta 201: Chacaíto - El Hatillo';
-        } else if (
-          dataLower.includes('propatria') ||
-          dataLower.includes('l1') ||
-          dataLower.includes('verde')
-        ) {
-          detectedRoute = 'Ruta L1: Propatria - Palo Verde';
-        } else if (
-          dataLower.includes('venezuela') ||
-          dataLower.includes('baruta') ||
-          dataLower.includes('r3') ||
-          dataLower.includes('102')
-        ) {
-          detectedRoute = 'Ruta 102: Plaza Venezuela - Baruta';
-        } else {
-          detectedRoute =
-            scannedData.length < 30 ? scannedData : 'Ruta General';
-        }
-
-        const costInTickets = 1;
-        if (userBalance < costInTickets) {
-          // No tiene fares suficientes — redirigir a comprar
+        if (!preview.sufficient) {
           Alert.alert(
             'Fares Insuficientes',
-            `No tienes fares disponibles para este viaje.\nTu Saldo: ${userBalance.toFixed(2)} fares\n\n¿Deseas comprar más fares ahora?`,
+            `No tienes fares disponibles para este viaje.\nTu Saldo: ${preview.balanceFares.toFixed(2)} fares\n\n¿Deseas comprar más fares ahora?`,
             [
               {
                 text: 'Cancelar',
@@ -211,15 +165,8 @@ export default function PayTripScreen() {
         }
 
         // Tiene saldo suficiente — mostrar confirmación del fare
-        setBackendUserData(backendUser);
-        setFareAccount(account);
-        setBalance(userBalance);
-        setRouteLabel(detectedRoute);
-        setRouteFare(costInTickets);
-        setScannedQr(scannedData);
         setConfirmStep('details');
         setShowConfirmModal(true);
-        setProcessing(false);
       }
     } catch (error: any) {
       console.error('[Scanner] Error processing scan payment:', error);
@@ -480,7 +427,7 @@ export default function PayTripScreen() {
                     <View style={styles.ticketRouteRow}>
                       <Text style={styles.ticketLabel}>UNIDAD / RUTA</Text>
                       <Text style={styles.ticketValueLarge} numberOfLines={1}>
-                        {scannedQr}
+                        {routeLabel}
                       </Text>
                     </View>
 
@@ -628,7 +575,7 @@ export default function PayTripScreen() {
                     <View style={styles.ticketRouteRow}>
                       <Text style={styles.ticketLabel}>UNIDAD / RUTA</Text>
                       <Text style={styles.ticketValueLarge} numberOfLines={1}>
-                        {scannedQr}
+                        {routeLabel}
                       </Text>
                     </View>
 
@@ -699,7 +646,9 @@ export default function PayTripScreen() {
                         size={60}
                         color="#6B7280"
                       />
-                      <Text style={styles.barcodeText}>GF-582910</Text>
+                      <Text style={styles.barcodeText}>
+                        {rideUuid ? `GF-${rideUuid.slice(0, 8).toUpperCase()}` : 'GF-582910'}
+                      </Text>
                     </View>
                   </View>
                 </View>

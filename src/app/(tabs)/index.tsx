@@ -129,7 +129,7 @@ export default function HomeDashboard() {
 
       // Sincronizar el rol del usuario para evitar desvíos o incoherencias
       const isAdmin = (backendUser as any).roles?.some(
-        (role: any) => role.name === 'platform_admin',
+        (role: any) => role.name === 'platform_admin' || role.name === 'admin',
       );
       const isOwner = (backendUser as any).roles?.some(
         (role: any) => role.name === 'transport_owner',
@@ -137,22 +137,42 @@ export default function HomeDashboard() {
       const isDriver = (backendUser as any).roles?.some(
         (role: any) => role.name === 'driver',
       );
-      const newRole = isAdmin
+      let newRole = isAdmin
         ? 'platform_admin'
         : isOwner
           ? 'transport_owner'
           : isDriver
             ? 'driver'
             : 'passenger';
+
+      // Fallback a Firebase Custom Claims si el backend devuelve 'passenger'
+      if (newRole === 'passenger') {
+        try {
+          const { auth: firebaseAuth } = await import('@/lib/firebase');
+          const fbUser = firebaseAuth.currentUser;
+          if (fbUser) {
+            const idTokenResult = await fbUser.getIdTokenResult(false);
+            const claimRole = (idTokenResult.claims as any)?.role as string | undefined;
+            const PRIVILEGED_ROLES = ['platform_admin', 'admin', 'transport_owner', 'driver'];
+            if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+              console.log('[Home] Usando Custom Claim para rol:', claimRole);
+              newRole = claimRole;
+            }
+          }
+        } catch (claimErr) {
+          console.warn('[Home] Error leyendo custom claims:', claimErr);
+        }
+      }
+
       await AsyncStorage.setItem('user_role', newRole);
 
-      if (isAdmin) {
+      if (newRole === 'platform_admin' || newRole === 'admin') {
         console.log('[Home] User is platform admin, redirecting...');
         router.replace('/admin/dashboard' as any);
-      } else if (isOwner) {
+      } else if (newRole === 'transport_owner') {
         console.log('[Home] User is transport owner, redirecting...');
         router.replace('/vehicle-owner/dashboard' as any);
-      } else if (isDriver) {
+      } else if (newRole === 'driver') {
         console.log('[Home] User is driver, redirecting...');
         router.replace('/driver/dashboard' as any);
       }

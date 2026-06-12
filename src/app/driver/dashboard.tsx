@@ -11,59 +11,38 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getBackendProfile, getUsedTicketsByRoute } from '@/lib/api';
+import {
+  getBackendProfile,
+  getCurrentSession,
+  openSession,
+  pauseSession,
+  resumeSession,
+  closeSession,
+  getAssignedVehicles,
+  getAssignedRoutes,
+} from '@/lib/api';
 import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
-interface RouteOption {
-  id: string;
-  name: string;
-  fare: number;
-  plate: string;
-}
-
-const ROUTE_OPTIONS: RouteOption[] = [
-  {
-    id: 'r1',
-    name: 'Ruta 201: Chacaíto - El Hatillo',
-    fare: 15.0,
-    plate: 'xy987zt',
-  },
-  {
-    id: 'r2',
-    name: 'Ruta L1: Propatria - Palo Verde',
-    fare: 20.0,
-    plate: 'ab123cd',
-  },
-  {
-    id: 'r3',
-    name: 'Ruta 102: Plaza Venezuela - Baruta',
-    fare: 12.0,
-    plate: 'ef456gh',
-  },
-];
-
 export default function DriverDashboard() {
-  const _router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [isEnServicio, setIsEnServicio] = useState(false);
-  const [selectedRoute, setSelectedRoute] = useState<RouteOption>(
-    ROUTE_OPTIONS[0],
-  );
-  const [showRouteDropdown, setShowRouteDropdown] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [activeSession, setActiveSession] = useState<any | null>(null);
 
-  // Driver stats
+  // Datos del conductor y listas del backend (mockeadas con UUIDs de DB)
   const [driverName, setDriverName] = useState('Conductor');
-  const [vehicleInfo, _setVehicleInfo] = useState(
-    'Encava ENT-610 (Placa: XY987ZT)',
-  );
-  const [todayTripsCount, setTodayTripsCount] = useState(0);
-  const [todayEarnings, setTodayEarnings] = useState(0.0);
+  const [assignedVehicles, setAssignedVehicles] = useState<any[]>([]);
+  const [assignedRoutes, setAssignedRoutes] = useState<any[]>([]);
+  const [selectedVehicle, setSelectedVehicle] = useState<any | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<any | null>(null);
+
+  // Dropdowns del UI para selección
+  const [showVehicleDropdown, setShowVehicleDropdown] = useState(false);
+  const [showRouteDropdown, setShowRouteDropdown] = useState(false);
 
   // Notificación flotante de pago recibido
   const [payNotification, setPayNotification] = useState<{
@@ -96,83 +75,40 @@ export default function DriverDashboard() {
     [notifAnim],
   );
 
-  // Polling de pagos en tiempo real desde backend PostgreSQL (tabla tickets)
-  // No usa Firebase — solo el endpoint REST /tickets
+  // Polling de estadísticas de sesión y estado en tiempo real (cada 4 segundos)
   useEffect(() => {
-    if (!isEnServicio) return;
-
-    const sessionStartedAt = Date.now();
-    const processedIds = new Set<string>();
+    if (!activeSession || activeSession.status !== 'open') return;
 
     const pollInterval = setInterval(async () => {
       try {
-        // Keywords para filtrar: placa de la unidad + id de ruta
-        const keywords = [
-          selectedRoute.plate,
-          selectedRoute.id,
-          selectedRoute.name.toLowerCase().split(':')[0].trim(),
-        ];
+        const session = await getCurrentSession();
+        if (session && session.uuid) {
+          setActiveSession((prev: any) => {
+            if (prev && Number(session.ridesCount) > Number(prev.ridesCount)) {
+              const diff = Number(session.ridesCount) - Number(prev.ridesCount);
+              const amount = Number(session.totalFares) - Number(prev.totalFares);
+              showPayNotification(amount / (diff || 1));
 
-        const usedTickets = await getUsedTicketsByRoute(
-          keywords,
-          sessionStartedAt,
-        );
-
-        for (const ticket of usedTickets) {
-          if (processedIds.has(ticket.id)) continue;
-          processedIds.add(ticket.id);
-
-          const fare = Number(ticket.price) || selectedRoute.fare;
-
-          // Actualizar estadísticas en tiempo real
-          setTodayTripsCount((prev) => prev + 1);
-          setTodayEarnings((prev) => prev + fare);
-
-          // Mostrar banner de notificación animado
-          showPayNotification(fare);
-
-          // Vibración/haptics de confirmación
-          try {
-            await Haptics.notificationAsync(
-              Haptics.NotificationFeedbackType.Success,
-            );
-          } catch (_) {}
-
-          // Guardar en caché local para histórico
-          try {
-            const localStr = await AsyncStorage.getItem(
-              'mock_validated_tickets',
-            );
-            const localList = localStr ? JSON.parse(localStr) : [];
-            if (!localList.some((p: any) => p.id === ticket.id)) {
-              localList.unshift({
-                id: ticket.id,
-                code:
-                  ticket.qrCode || `GF-${ticket.id.slice(-4).toUpperCase()}`,
-                fare,
-                route: selectedRoute.name,
-                time: new Date().toLocaleTimeString('es-VE', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                }),
-                date: new Date().toLocaleDateString('es-VE'),
-                passengerName: 'Pasajero',
-              });
-              await AsyncStorage.setItem(
-                'mock_validated_tickets',
-                JSON.stringify(localList),
-              );
+              try {
+                Haptics.notificationAsync(
+                  Haptics.NotificationFeedbackType.Success,
+                );
+              } catch (_) {}
             }
-          } catch (_) {}
+            return session;
+          });
+        } else {
+          setActiveSession(null);
         }
       } catch (err) {
-        console.warn('[Dashboard] Error polling tickets:', err);
+        console.warn('[Dashboard] Error polling session:', err);
       }
-    }, 4000); // Poll cada 4 segundos
+    }, 4000);
 
     return () => clearInterval(pollInterval);
-  }, [isEnServicio, selectedRoute, showPayNotification]);
+  }, [activeSession, showPayNotification]);
 
+  // Carga inicial de datos del conductor y sesión activa
   const loadDriverData = useCallback(async () => {
     try {
       setLoading(true);
@@ -190,34 +126,31 @@ export default function DriverDashboard() {
         }
       }
 
-      // Cargar estado de servicio
-      const serviceStatus = await AsyncStorage.getItem('driver_service_status');
-      setIsEnServicio(serviceStatus === 'active');
+      // Cargar listas de vehículos y rutas asociadas (simuladas en frontend con UUIDs reales de Neon)
+      const vehicles = await getAssignedVehicles();
+      const routes = await getAssignedRoutes();
+      setAssignedVehicles(vehicles);
+      setAssignedRoutes(routes);
 
-      // Cargar ruta seleccionada
-      const cachedRouteId = await AsyncStorage.getItem(
-        'driver_active_route_id',
-      );
-      if (cachedRouteId) {
-        const found = ROUTE_OPTIONS.find((r) => r.id === cachedRouteId);
-        if (found) setSelectedRoute(found);
+      if (vehicles.length > 0) setSelectedVehicle(vehicles[0]);
+      if (routes.length > 0) setSelectedRoute(routes[0]);
+
+      // Consultar si hay una sesión activa de caja en el backend
+      const session = await getCurrentSession();
+      if (session && session.uuid) {
+        setActiveSession(session);
+        // Sincronizar ruta y vehículo locales con los de la sesión activa
+        if (session.vehicle) {
+          const foundVehicle = vehicles.find((v) => v.uuid === session.vehicle.uuid);
+          if (foundVehicle) setSelectedVehicle(foundVehicle);
+        }
+        if (session.route) {
+          const foundRoute = routes.find((r) => r.uuid === session.route.uuid);
+          if (foundRoute) setSelectedRoute(foundRoute);
+        }
       } else {
-        await AsyncStorage.setItem(
-          'driver_active_route_id',
-          ROUTE_OPTIONS[0].id,
-        );
+        setActiveSession(null);
       }
-
-      // Cargar estadísticas del día desde historial local
-      const validatedStr = await AsyncStorage.getItem('mock_validated_tickets');
-      const validatedList = validatedStr ? JSON.parse(validatedStr) : [];
-      const localCount = validatedList.length;
-      const localEarnings = validatedList.reduce(
-        (sum: number, tx: any) => sum + (tx.fare || 15.0),
-        0,
-      );
-      setTodayTripsCount(localCount);
-      setTodayEarnings(localEarnings);
     } catch (err) {
       console.warn('[DriverDashboard] Error loading data:', err);
     } finally {
@@ -231,32 +164,111 @@ export default function DriverDashboard() {
     }, [loadDriverData]),
   );
 
-  const handleToggleService = async (value: boolean) => {
-    try {
-      setIsEnServicio(value);
-      await AsyncStorage.setItem(
-        'driver_service_status',
-        value ? 'active' : 'inactive',
-      );
+  // 1. INICIAR TURNO (Abrir sesión de caja en el backend)
+  const handleStartShift = async () => {
+    if (!selectedVehicle || !selectedRoute) {
       Alert.alert(
-        value ? 'Servicio Iniciado' : 'Servicio Finalizado',
-        value
-          ? 'Ya estás disponible. Los pasajeros pueden escanear tu código QR y recibirás notificaciones de cobro.'
-          : 'Has finalizado tu jornada. Los pasajeros no podrán escanear tu unidad.',
+        'Atención',
+        'Por favor, selecciona un vehículo y una ruta para iniciar tu turno.',
       );
-    } catch (err) {
-      console.error('[DriverDashboard] Error toggling status:', err);
+      return;
+    }
+    try {
+      setActionLoading(true);
+      const session = await openSession(selectedVehicle.uuid, selectedRoute.uuid);
+      setActiveSession(session);
+      Alert.alert(
+        'Turno Iniciado',
+        'Tu turno ha sido registrado con éxito. Ya puedes ir a la pestaña "Cobrar" para generar tu código QR.',
+      );
+    } catch (err: any) {
+      console.error('[Dashboard] Error opening session:', err);
+      Alert.alert(
+        'Error de Inicio',
+        err.message || 'No se pudo iniciar el turno en el servidor. Intenta de nuevo.',
+      );
+    } finally {
+      setActionLoading(false);
     }
   };
 
-  const handleSelectRoute = async (route: RouteOption) => {
-    setSelectedRoute(route);
-    setShowRouteDropdown(false);
+  // 2. PAUSAR TURNO (Pausar sesión en el backend)
+  const handlePauseShift = async () => {
+    if (!activeSession) return;
     try {
-      await AsyncStorage.setItem('driver_active_route_id', route.id);
-    } catch (err) {
-      console.warn('[DriverDashboard] Error saving active route:', err);
+      setActionLoading(true);
+      const session = await pauseSession(activeSession.uuid);
+      setActiveSession(session);
+      Alert.alert(
+        'Turno Pausado',
+        'Tu turno está en pausa. Las solicitudes de cobro de pasajeros se deshabilitarán hasta que reanudes.',
+      );
+    } catch (err: any) {
+      console.error('[Dashboard] Error pausing session:', err);
+      Alert.alert(
+        'Error',
+        err.message || 'No se pudo pausar el turno. Intenta de nuevo.',
+      );
+    } finally {
+      setActionLoading(false);
     }
+  };
+
+  // 3. REANUDAR TURNO (Reanudar sesión en el backend)
+  const handleResumeShift = async () => {
+    if (!activeSession) return;
+    try {
+      setActionLoading(true);
+      const session = await resumeSession(activeSession.uuid);
+      setActiveSession(session);
+      Alert.alert(
+        'Turno Reanudado',
+        'Turno activo. Los pasajeros ya pueden escanear tu unidad nuevamente.',
+      );
+    } catch (err: any) {
+      console.error('[Dashboard] Error resuming session:', err);
+      Alert.alert(
+        'Error',
+        err.message || 'No se pudo reanudar el turno. Intenta de nuevo.',
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 4. FINALIZAR TURNO (Cerrar sesión de caja en el backend y liquidar)
+  const handleCloseShift = async () => {
+    if (!activeSession) return;
+    Alert.alert(
+      'Confirmar Cierre de Turno',
+      `¿Estás seguro de que deseas finalizar tu turno de trabajo?\n\nSe validarán ${activeSession.ridesCount} boletos y se liquidará el monto de ${Number(activeSession.totalFares).toFixed(2).replace('.', ',')} fares a la cuenta del transportista.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Finalizar y Liquidar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              await closeSession(activeSession.uuid);
+              setActiveSession(null);
+              Alert.alert(
+                'Turno Cerrado',
+                'Tu turno ha finalizado correctamente y los fondos han sido transferidos al transportista.',
+              );
+            } catch (err: any) {
+              console.error('[Dashboard] Error closing session:', err);
+              Alert.alert(
+                'Error al Cerrar',
+                err.message || 'No se pudo cerrar el turno. Intenta de nuevo.',
+              );
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading) {
@@ -267,6 +279,21 @@ export default function DriverDashboard() {
     );
   }
 
+  const isEnServicio = activeSession?.status === 'open';
+  const isPausado = activeSession?.status === 'paused';
+
+  const displayVehicle = activeSession
+    ? `${activeSession.vehicle?.brand} ${activeSession.vehicle?.model} (Placa: ${activeSession.vehicle?.plate})`
+    : selectedVehicle
+      ? `${selectedVehicle.brand} ${selectedVehicle.model} (Placa: ${selectedVehicle.plate})`
+      : 'Sin Unidad Asignada';
+
+  const displayRouteName = activeSession
+    ? activeSession.route?.name
+    : selectedRoute
+      ? selectedRoute.name
+      : 'Selecciona una Ruta';
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
@@ -275,9 +302,27 @@ export default function DriverDashboard() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Panel de Conductor</Text>
         {isEnServicio && (
-          <View style={styles.activePill}>
-            <View style={styles.activeDot} />
-            <Text style={styles.activePillText}>EN RUTA</Text>
+          <View style={[styles.activePill, { backgroundColor: '#DCFCE7' }]}>
+            <View style={[styles.activeDot, { backgroundColor: '#16A34A' }]} />
+            <Text style={[styles.activePillText, { color: '#16A34A' }]}>
+              EN RUTA
+            </Text>
+          </View>
+        )}
+        {isPausado && (
+          <View style={[styles.activePill, { backgroundColor: '#FEF3C7' }]}>
+            <View style={[styles.activeDot, { backgroundColor: '#D97706' }]} />
+            <Text style={[styles.activePillText, { color: '#D97706' }]}>
+              EN PAUSA
+            </Text>
+          </View>
+        )}
+        {!activeSession && (
+          <View style={[styles.activePill, { backgroundColor: '#F1F5F9' }]}>
+            <View style={[styles.activeDot, { backgroundColor: '#64748B' }]} />
+            <Text style={[styles.activePillText, { color: '#64748B' }]}>
+              INACTIVO
+            </Text>
           </View>
         )}
       </View>
@@ -306,7 +351,7 @@ export default function DriverDashboard() {
           <View style={styles.payBannerInfo}>
             <Text style={styles.payBannerLabel}>¡COBRO RECIBIDO!</Text>
             <Text style={styles.payBannerAmount}>
-              +{payNotification.amount.toFixed(2).replace('.', ',')} Bs
+              +{payNotification.amount.toFixed(2).replace('.', ',')} fares
             </Text>
           </View>
           <Text style={styles.payBannerTime}>{payNotification.time}</Text>
@@ -330,37 +375,122 @@ export default function DriverDashboard() {
         <View
           style={[
             styles.statusCard,
-            isEnServicio ? styles.statusCardActive : styles.statusCardInactive,
+            isEnServicio
+              ? styles.statusCardActive
+              : isPausado
+                ? styles.statusCardPaused
+                : styles.statusCardInactive,
           ]}
         >
           <View style={styles.statusInfoRow}>
             <View
               style={[
                 styles.statusIconWrapper,
-                isEnServicio ? styles.iconActive : styles.iconInactive,
+                isEnServicio
+                  ? styles.iconActive
+                  : isPausado
+                    ? styles.iconPaused
+                    : styles.iconInactive,
               ]}
             >
-              <Ionicons name="bus" size={24} color="#FFFFFF" />
+              <Ionicons
+                name={isPausado ? 'pause' : 'bus'}
+                size={24}
+                color="#FFFFFF"
+              />
             </View>
             <View style={styles.statusTexts}>
               <Text style={styles.statusPillLabel}>ESTADO DEL TURNO</Text>
               <Text style={styles.statusPillValue}>
                 {isEnServicio
                   ? 'En Servicio / Disponible'
-                  : 'Fuera de Servicio'}
+                  : isPausado
+                    ? 'Turno en Pausa'
+                    : 'Fuera de Servicio'}
               </Text>
               {isEnServicio && (
                 <Text style={styles.statusSubNote}>
                   Recibiendo notificaciones de cobro en tiempo real
                 </Text>
               )}
+              {isPausado && (
+                <Text style={[styles.statusSubNote, { color: '#D97706' }]}>
+                  Cobros inhabilitados temporalmente
+                </Text>
+              )}
             </View>
-            <Switch
-              value={isEnServicio}
-              onValueChange={handleToggleService}
-              trackColor={{ false: '#94A3B8', true: '#DCFCE7' }}
-              thumbColor={isEnServicio ? '#16A34A' : '#64748B'}
-            />
+          </View>
+
+          {/* Botones de Control de Turno */}
+          <View style={styles.controlButtonsContainer}>
+            {actionLoading ? (
+              <ActivityIndicator
+                size="small"
+                color={tokens.colors.primary}
+                style={{ marginVertical: 8 }}
+              />
+            ) : !activeSession ? (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.primaryActionButton,
+                  pressed && { opacity: 0.9 },
+                ]}
+                onPress={handleStartShift}
+              >
+                <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.actionButtonText}>Iniciar Turno</Text>
+              </Pressable>
+            ) : isEnServicio ? (
+              <View style={styles.actionRowButtons}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryActionButton,
+                    styles.btnPause,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  onPress={handlePauseShift}
+                >
+                  <Ionicons name="pause" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.actionButtonText}>Pausar</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryActionButton,
+                    styles.btnStop,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  onPress={handleCloseShift}
+                >
+                  <Ionicons name="stop" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.actionButtonText}>Cerrar</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.actionRowButtons}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryActionButton,
+                    styles.btnResume,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  onPress={handleResumeShift}
+                >
+                  <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.actionButtonText}>Reanudar</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryActionButton,
+                    styles.btnStop,
+                    pressed && { opacity: 0.9 },
+                  ]}
+                  onPress={handleCloseShift}
+                >
+                  <Ionicons name="stop" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.actionButtonText}>Cerrar</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
         </View>
 
@@ -374,66 +504,130 @@ export default function DriverDashboard() {
               color={tokens.colors.primary}
               style={{ marginRight: 12 }}
             />
-            <View style={styles.vehicleInfo}>
-              <Text style={styles.vehicleNameText}>{vehicleInfo}</Text>
-              <Text style={styles.vehicleCoopText}>
-                Cooperativa Caracas Move R.L.
-              </Text>
-            </View>
+            {activeSession ? (
+              <View style={styles.vehicleInfo}>
+                <Text style={styles.vehicleNameText}>{displayVehicle}</Text>
+                <Text style={styles.vehicleCoopText}>
+                  Cooperativa Caracas Move R.L.
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.dropdownPickerContainer}>
+                <Pressable
+                  style={styles.inlineDropdownBtn}
+                  onPress={() => setShowVehicleDropdown(!showVehicleDropdown)}
+                >
+                  <Text style={styles.inlineDropdownBtnText}>
+                    {selectedVehicle
+                      ? `${selectedVehicle.brand} ${selectedVehicle.model} (${selectedVehicle.plate})`
+                      : 'Seleccionar Unidad'}
+                  </Text>
+                  <Ionicons
+                    name={showVehicleDropdown ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color="#8594AB"
+                  />
+                </Pressable>
+
+                {showVehicleDropdown && (
+                  <View style={styles.inlineDropdownList}>
+                    {assignedVehicles.map((vehicle) => (
+                      <Pressable
+                        key={vehicle.uuid}
+                        style={[
+                          styles.inlineDropdownItem,
+                          selectedVehicle?.uuid === vehicle.uuid &&
+                            styles.inlineDropdownItemActive,
+                        ]}
+                        onPress={() => {
+                          setSelectedVehicle(vehicle);
+                          setShowVehicleDropdown(false);
+                        }}
+                      >
+                        <Text style={styles.inlineDropdownItemText}>
+                          {vehicle.brand} {vehicle.model} ({vehicle.plate})
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Selector de Ruta */}
+        {/* Ruta en Operación */}
         <Text style={styles.sectionTitle}>Ruta en Operación</Text>
-        <Pressable
-          style={styles.dropdownBtn}
-          onPress={() => setShowRouteDropdown(!showRouteDropdown)}
-        >
-          <Ionicons
-            name="map-outline"
-            size={20}
-            color="#8594AB"
-            style={{ marginRight: 12 }}
-          />
-          <Text style={styles.dropdownBtnText}>{selectedRoute.name}</Text>
-          <Ionicons
-            name={showRouteDropdown ? 'chevron-up' : 'chevron-down'}
-            size={20}
-            color="#8594AB"
-          />
-        </Pressable>
+        {activeSession ? (
+          <View style={styles.dropdownBtnDisabled}>
+            <Ionicons
+              name="map-outline"
+              size={20}
+              color="#A1A1AA"
+              style={{ marginRight: 12 }}
+            />
+            <Text style={styles.dropdownBtnTextDisabled}>
+              {displayRouteName}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ position: 'relative', zIndex: 10 }}>
+            <Pressable
+              style={styles.dropdownBtn}
+              onPress={() => setShowRouteDropdown(!showRouteDropdown)}
+            >
+              <Ionicons
+                name="map-outline"
+                size={20}
+                color="#8594AB"
+                style={{ marginRight: 12 }}
+              />
+              <Text style={styles.dropdownBtnText}>
+                {selectedRoute ? selectedRoute.name : 'Seleccionar Ruta'}
+              </Text>
+              <Ionicons
+                name={showRouteDropdown ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color="#8594AB"
+              />
+            </Pressable>
 
-        {showRouteDropdown && (
-          <View style={styles.dropdownContainer}>
-            {ROUTE_OPTIONS.map((route) => (
-              <Pressable
-                key={route.id}
-                style={[
-                  styles.dropdownItem,
-                  selectedRoute.id === route.id && styles.dropdownItemActive,
-                ]}
-                onPress={() => handleSelectRoute(route)}
-              >
-                <Text
-                  style={[
-                    styles.dropdownItemText,
-                    selectedRoute.id === route.id &&
-                      styles.dropdownItemTextActive,
-                  ]}
-                >
-                  {route.name}
-                </Text>
-                <Text style={styles.dropdownItemFare}>
-                  Tarifa: {route.fare.toFixed(2)} Bs • Placa:{' '}
-                  {route.plate.toUpperCase()}
-                </Text>
-              </Pressable>
-            ))}
+            {showRouteDropdown && (
+              <View style={styles.dropdownContainer}>
+                {assignedRoutes.map((route) => (
+                  <Pressable
+                    key={route.uuid}
+                    style={[
+                      styles.dropdownItem,
+                      selectedRoute?.uuid === route.uuid &&
+                        styles.dropdownItemActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedRoute(route);
+                      setShowRouteDropdown(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        selectedRoute?.uuid === route.uuid &&
+                          styles.dropdownItemTextActive,
+                      ]}
+                    >
+                      {route.name}
+                    </Text>
+                    <Text style={styles.dropdownItemFare}>
+                      Tarifa: {Number(route.fareCost).toFixed(2)} fares
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
         )}
 
         {/* Estadísticas de Turno */}
-        <Text style={styles.sectionTitle}>Estadísticas de Hoy</Text>
+        <Text style={styles.sectionTitle}>Estadísticas de la Jornada</Text>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <View
@@ -445,7 +639,9 @@ export default function DriverDashboard() {
                 color={tokens.colors.primary}
               />
             </View>
-            <Text style={styles.statValue}>{todayTripsCount}</Text>
+            <Text style={styles.statValue}>
+              {activeSession ? activeSession.ridesCount : 0}
+            </Text>
             <Text style={styles.statLabel}>Boletos Validados</Text>
           </View>
           <View style={styles.statBox}>
@@ -455,9 +651,12 @@ export default function DriverDashboard() {
               <Ionicons name="cash-outline" size={20} color="#16A34A" />
             </View>
             <Text style={styles.statValue}>
-              {todayEarnings.toFixed(2).replace('.', ',')} Bs
+              {activeSession
+                ? Number(activeSession.totalFares).toFixed(2).replace('.', ',')
+                : '0,00'}{' '}
+              fares
             </Text>
-            <Text style={styles.statLabel}>Recaudado Hoy</Text>
+            <Text style={styles.statLabel}>Recaudado Turno</Text>
           </View>
         </View>
 
@@ -471,7 +670,7 @@ export default function DriverDashboard() {
               style={{ marginRight: 6 }}
             />
             <Text style={styles.realtimeNoteText}>
-              Monitoreando pagos de pasajeros en tiempo real (cada 4 segundos)
+              Sincronizado con base de datos en tiempo real (cada 4 segundos)
             </Text>
           </View>
         )}
@@ -510,7 +709,6 @@ const styles = StyleSheet.create({
   activePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#DCFCE7',
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -519,13 +717,11 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#16A34A',
     marginRight: 5,
   },
   activePillText: {
     fontSize: 10,
     fontFamily: tokens.typography.fontFamily.black,
-    color: '#16A34A',
     letterSpacing: 0.5,
   },
   // Banner flotante de pago
@@ -594,7 +790,7 @@ const styles = StyleSheet.create({
   },
   statusCard: {
     borderRadius: 24,
-    padding: 16,
+    padding: 20,
     marginBottom: 20,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -607,6 +803,12 @@ const styles = StyleSheet.create({
     borderLeftColor: '#16A34A',
     shadowColor: '#16A34A',
   },
+  statusCardPaused: {
+    backgroundColor: '#FFFFFF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#D97706',
+    shadowColor: '#D97706',
+  },
   statusCardInactive: {
     backgroundColor: '#FFFFFF',
     borderLeftWidth: 4,
@@ -616,6 +818,7 @@ const styles = StyleSheet.create({
   statusInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
   },
   statusIconWrapper: {
     width: 44,
@@ -626,6 +829,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   iconActive: { backgroundColor: '#16A34A' },
+  iconPaused: { backgroundColor: '#D97706' },
   iconInactive: { backgroundColor: '#64748B' },
   statusTexts: { flex: 1 },
   statusPillLabel: {
@@ -645,6 +849,60 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.regular,
     color: '#16A34A',
     marginTop: 2,
+  },
+  controlButtonsContainer: {
+    width: '100%',
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  primaryActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: tokens.colors.primary,
+    borderRadius: 14,
+    height: 48,
+    shadowColor: tokens.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  secondaryActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    height: 46,
+    marginHorizontal: 6,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  actionRowButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginHorizontal: -6,
+  },
+  btnPause: {
+    backgroundColor: '#D97706',
+    shadowColor: '#D97706',
+  },
+  btnResume: {
+    backgroundColor: '#059669',
+    shadowColor: '#059669',
+  },
+  btnStop: {
+    backgroundColor: '#DC2626',
+    shadowColor: '#DC2626',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
   },
   infoCard: {
     backgroundColor: '#FFFFFF',
@@ -680,6 +938,56 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#8594AB',
   },
+  dropdownPickerContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  inlineDropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  inlineDropdownBtnText: {
+    fontSize: 13.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#334155',
+  },
+  inlineDropdownList: {
+    position: 'absolute',
+    top: 48,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 6,
+    zIndex: 999,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  inlineDropdownItem: {
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  inlineDropdownItemActive: {
+    backgroundColor: '#EFF6FF',
+  },
+  inlineDropdownItemText: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#334155',
+  },
   sectionTitle: {
     fontSize: 15,
     fontFamily: tokens.typography.fontFamily.bold,
@@ -701,11 +1009,28 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 2,
   },
+  dropdownBtnDisabled: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    height: 54,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
   dropdownBtnText: {
     flex: 1,
     fontSize: 14.5,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#18243E',
+  },
+  dropdownBtnTextDisabled: {
+    flex: 1,
+    fontSize: 14.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#94A3B8',
   },
   dropdownContainer: {
     backgroundColor: '#FFFFFF',
@@ -744,6 +1069,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
+    marginTop: 4,
   },
   statBox: {
     flex: 1,
