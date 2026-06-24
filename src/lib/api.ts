@@ -1611,7 +1611,9 @@ export async function getAllOwnerRequests(): Promise<any[]> {
     const roles = u.roles || [];
     const isOwner = roles.some((r: any) => r.name === 'transport_owner');
     const isDriver = roles.some((r: any) => r.name === 'driver');
-    const isAdmin = roles.some((r: any) => r.name === 'platform_admin' || r.name === 'admin');
+    const isAdmin = roles.some(
+      (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+    );
     return !isOwner && !isDriver && !isAdmin;
   });
 

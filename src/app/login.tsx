@@ -126,7 +126,8 @@ export default function LoginScreen() {
 
           const roles = (backendUser as any).roles || [];
           const isAdmin = roles.some(
-            (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+            (role: any) =>
+              role.name === 'platform_admin' || role.name === 'admin',
           );
           const isOwner = roles.some(
             (role: any) => role.name === 'transport_owner',
@@ -147,8 +148,15 @@ export default function LoginScreen() {
               const fbUser = auth.currentUser;
               if (fbUser) {
                 const idTokenResult = await fbUser.getIdTokenResult(false);
-                const claimRole = (idTokenResult.claims as any)?.role as string | undefined;
-                const PRIVILEGED_ROLES = ['platform_admin', 'admin', 'transport_owner', 'driver'];
+                const claimRole = (idTokenResult.claims as any)?.role as
+                  | string
+                  | undefined;
+                const PRIVILEGED_ROLES = [
+                  'platform_admin',
+                  'admin',
+                  'transport_owner',
+                  'driver',
+                ];
                 if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
                   biometricRole = claimRole;
                 }
@@ -351,7 +359,9 @@ export default function LoginScreen() {
       }
 
       const roles = (backendUser as any).roles || [];
-      const isAdmin = roles.some((role: any) => role.name === 'platform_admin' || role.name === 'admin');
+      const isAdmin = roles.some(
+        (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+      );
       const isOwner = roles.some(
         (role: any) => role.name === 'transport_owner',
       );
@@ -370,8 +380,15 @@ export default function LoginScreen() {
           const fbUser = auth.currentUser;
           if (fbUser) {
             const idTokenResult = await fbUser.getIdTokenResult(false);
-            const claimRole = (idTokenResult.claims as any)?.role as string | undefined;
-            const PRIVILEGED_ROLES = ['platform_admin', 'admin', 'transport_owner', 'driver'];
+            const claimRole = (idTokenResult.claims as any)?.role as
+              | string
+              | undefined;
+            const PRIVILEGED_ROLES = [
+              'platform_admin',
+              'admin',
+              'transport_owner',
+              'driver',
+            ];
             if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
               console.log('[Login] Usando Custom Claim para rol:', claimRole);
               userRole = claimRole;

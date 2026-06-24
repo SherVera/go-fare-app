@@ -90,7 +90,8 @@ export default function ProfileScreen() {
         );
 
         const isAdmin = (backendUser as any).roles?.some(
-          (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+          (role: any) =>
+            role.name === 'platform_admin' || role.name === 'admin',
         );
         const isOwner = (backendUser as any).roles?.some(
           (role: any) => role.name === 'transport_owner',
@@ -346,7 +347,6 @@ export default function ProfileScreen() {
             {loggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión'}
           </Text>
         </Pressable>
-
 
         {/* Space for the absolute tab bar */}
         <View style={{ height: 120 }} />

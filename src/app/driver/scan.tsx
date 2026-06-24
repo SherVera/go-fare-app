@@ -103,11 +103,12 @@ export default function DriverScanScreen() {
 
         // 3. Consultar viajes recientes de la sesión en base de datos
         const rides = await getSessionRides(current.uuid);
-        
+
         // Detectar si hay nuevos cobros para alertas
         if (rides.length > recentPayments.length) {
           const newRides = rides.filter(
-            (r: any) => !recentPayments.some((prev: any) => prev.uuid === r.uuid)
+            (r: any) =>
+              !recentPayments.some((prev: any) => prev.uuid === r.uuid),
           );
 
           for (const newRide of newRides) {
@@ -115,11 +116,14 @@ export default function DriverScanScreen() {
               newRide.passenger?.displayName ||
               `${newRide.passenger?.firstName || ''} ${newRide.passenger?.lastName || ''}`.trim() ||
               'Pasajero';
-            
-            const timeStr = new Date(newRide.createdAt).toLocaleTimeString('es-VE', {
-              hour: '2-digit',
-              minute: '2-digit',
-            });
+
+            const timeStr = new Date(newRide.createdAt).toLocaleTimeString(
+              'es-VE',
+              {
+                hour: '2-digit',
+                minute: '2-digit',
+              },
+            );
 
             // Disparar banner
             setSuccessNotification({
@@ -166,13 +170,15 @@ export default function DriverScanScreen() {
 
     try {
       console.log('[Scan] Validating ticket:', sanitizedCode);
-      const ticket = await validateTicketByQr(sanitizedCode) as any;
+      const ticket = (await validateTicketByQr(sanitizedCode)) as any;
       const ticketName =
         ticket.user?.displayName ||
         `${ticket.user?.firstName || ''} ${ticket.user?.lastName || ''}`.trim() ||
         'Pasajero Verificado';
-      
-      const fareValue = Number(ticket.price) || (activeSession ? Number(activeSession.fareCost) : 15);
+
+      const fareValue =
+        Number(ticket.price) ||
+        (activeSession ? Number(activeSession.fareCost) : 15);
 
       const timeStr = new Date().toLocaleTimeString('es-VE', {
         hour: '2-digit',
@@ -320,7 +326,8 @@ export default function DriverScanScreen() {
           </Text>
 
           <Text style={styles.qrInstruction}>
-            Muestra este código al pasajero para cobrar de forma rápida y segura.
+            Muestra este código al pasajero para cobrar de forma rápida y
+            segura.
           </Text>
         </View>
 
@@ -340,15 +347,18 @@ export default function DriverScanScreen() {
                 `${item.passenger?.firstName || ''} ${item.passenger?.lastName || ''}`.trim() ||
                 item.passenger?.displayName ||
                 'Pasajero';
-              
-              const passengerCedula = item.passenger?.nationalId 
-                ? `C.I. ${item.passenger.nationalId}` 
+
+              const passengerCedula = item.passenger?.nationalId
+                ? `C.I. ${item.passenger.nationalId}`
                 : 'C.I. No registrada';
 
-              const timeStr = new Date(item.createdAt).toLocaleTimeString('es-VE', {
-                hour: '2-digit',
-                minute: '2-digit',
-              });
+              const timeStr = new Date(item.createdAt).toLocaleTimeString(
+                'es-VE',
+                {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                },
+              );
 
               return (
                 <View key={item.uuid}>
@@ -366,9 +376,7 @@ export default function DriverScanScreen() {
                         <Text style={styles.feedPassenger} numberOfLines={1}>
                           {passengerName}
                         </Text>
-                        <Text style={styles.feedCedula}>
-                          {passengerCedula}
-                        </Text>
+                        <Text style={styles.feedCedula}>{passengerCedula}</Text>
                         <Text style={styles.feedTime}>
                           Cobro exitoso • {timeStr}
                         </Text>
@@ -451,104 +459,119 @@ export default function DriverScanScreen() {
               </Pressable>
             </View>
 
-            {selectedPayment && (() => {
-              const passenger = selectedPayment.passenger || {};
-              const passName =
-                `${passenger.firstName || ''} ${passenger.lastName || ''}`.trim() ||
-                passenger.displayName ||
-                'Pasajero';
-              const passCedula = passenger.nationalId || 'No registrada';
-              const passEmail = passenger.email || 'No registrado';
-              const passPhone = passenger.phoneNumber || 'No registrado';
-              
-              const dateObj = new Date(selectedPayment.createdAt);
-              const dateStr = dateObj.toLocaleDateString('es-VE');
-              const timeStr = dateObj.toLocaleTimeString('es-VE', {
-                hour: '2-digit',
-                minute: '2-digit',
-              });
+            {selectedPayment &&
+              (() => {
+                const passenger = selectedPayment.passenger || {};
+                const passName =
+                  `${passenger.firstName || ''} ${passenger.lastName || ''}`.trim() ||
+                  passenger.displayName ||
+                  'Pasajero';
+                const passCedula = passenger.nationalId || 'No registrada';
+                const passEmail = passenger.email || 'No registrado';
+                const passPhone = passenger.phoneNumber || 'No registrado';
 
-              return (
-                <View style={styles.receiptContainer}>
-                  {/* Icono de ticket / exito */}
-                  <View style={styles.receiptHeader}>
-                    <View style={styles.receiptSuccessIcon}>
-                      <Ionicons name="checkmark" size={28} color="#16A34A" />
+                const dateObj = new Date(selectedPayment.createdAt);
+                const dateStr = dateObj.toLocaleDateString('es-VE');
+                const timeStr = dateObj.toLocaleTimeString('es-VE', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+
+                return (
+                  <View style={styles.receiptContainer}>
+                    {/* Icono de ticket / exito */}
+                    <View style={styles.receiptHeader}>
+                      <View style={styles.receiptSuccessIcon}>
+                        <Ionicons name="checkmark" size={28} color="#16A34A" />
+                      </View>
+                      <Text style={styles.receiptStatusText}>Pago Exitoso</Text>
+                      <Text style={styles.receiptAmount}>
+                        {Number(selectedPayment.fareCost).toFixed(2)} fares
+                      </Text>
                     </View>
-                    <Text style={styles.receiptStatusText}>Pago Exitoso</Text>
-                    <Text style={styles.receiptAmount}>
-                      {Number(selectedPayment.fareCost).toFixed(2)} fares
-                    </Text>
+
+                    {/* Cuerpo del ticket decorativo */}
+                    <View style={styles.ticketBody}>
+                      <View style={styles.ticketDividerWrapper}>
+                        <View style={styles.ticketDashedLine} />
+                      </View>
+
+                      {/* Información del Pasajero */}
+                      <Text style={styles.receiptSectionTitle}>PASAJERO</Text>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Nombre:</Text>
+                        <Text style={styles.receiptValue}>{passName}</Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Cédula:</Text>
+                        <Text style={styles.receiptValue}>{passCedula}</Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Teléfono:</Text>
+                        <Text style={styles.receiptValue}>{passPhone}</Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Email:</Text>
+                        <Text style={styles.receiptValue} numberOfLines={1}>
+                          {passEmail}
+                        </Text>
+                      </View>
+
+                      <View style={styles.ticketDividerWrapper}>
+                        <View style={styles.ticketDashedLine} />
+                      </View>
+
+                      {/* Detalles del Pago */}
+                      <Text style={styles.receiptSectionTitle}>
+                        TRANSACCIÓN
+                      </Text>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>ID de Viaje:</Text>
+                        <Text style={[styles.receiptValue, styles.receiptCode]}>
+                          GF-{selectedPayment.uuid?.slice(0, 8).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Fecha y Hora:</Text>
+                        <Text style={styles.receiptValue}>
+                          {dateStr} - {timeStr}
+                        </Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Tarifa cobrada:</Text>
+                        <Text style={styles.receiptValue}>
+                          {Number(selectedPayment.fareCost).toFixed(2)} fares
+                        </Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Tasa BCV:</Text>
+                        <Text style={styles.receiptValue}>
+                          {Number(selectedPayment.bcvRate || 36.5).toFixed(2)}{' '}
+                          Bs/$
+                        </Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Equivalente Bs:</Text>
+                        <Text
+                          style={[
+                            styles.receiptValue,
+                            { fontFamily: tokens.typography.fontFamily.bold },
+                          ]}
+                        >
+                          {Number(selectedPayment.bsAmount || 0).toFixed(2)} Bs
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      style={styles.closeModalBtn}
+                      onPress={() => setSelectedPayment(null)}
+                    >
+                      <Text style={styles.closeModalBtnText}>Entendido</Text>
+                    </Pressable>
                   </View>
-
-                  {/* Cuerpo del ticket decorativo */}
-                  <View style={styles.ticketBody}>
-                    <View style={styles.ticketDividerWrapper}>
-                      <View style={styles.ticketDashedLine} />
-                    </View>
-
-                    {/* Información del Pasajero */}
-                    <Text style={styles.receiptSectionTitle}>PASAJERO</Text>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>Nombre:</Text>
-                      <Text style={styles.receiptValue}>{passName}</Text>
-                    </View>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>Cédula:</Text>
-                      <Text style={styles.receiptValue}>{passCedula}</Text>
-                    </View>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>Teléfono:</Text>
-                      <Text style={styles.receiptValue}>{passPhone}</Text>
-                    </View>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>Email:</Text>
-                      <Text style={styles.receiptValue} numberOfLines={1}>{passEmail}</Text>
-                    </View>
-
-                    <View style={styles.ticketDividerWrapper}>
-                      <View style={styles.ticketDashedLine} />
-                    </View>
-
-                    {/* Detalles del Pago */}
-                    <Text style={styles.receiptSectionTitle}>TRANSACCIÓN</Text>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>ID de Viaje:</Text>
-                      <Text style={[styles.receiptValue, styles.receiptCode]}>
-                        GF-{selectedPayment.uuid?.slice(0, 8).toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>Fecha y Hora:</Text>
-                      <Text style={styles.receiptValue}>{dateStr} - {timeStr}</Text>
-                    </View>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>Tarifa cobrada:</Text>
-                      <Text style={styles.receiptValue}>{Number(selectedPayment.fareCost).toFixed(2)} fares</Text>
-                    </View>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>Tasa BCV:</Text>
-                      <Text style={styles.receiptValue}>
-                        {Number(selectedPayment.bcvRate || 36.50).toFixed(2)} Bs/$
-                      </Text>
-                    </View>
-                    <View style={styles.receiptRow}>
-                      <Text style={styles.receiptLabel}>Equivalente Bs:</Text>
-                      <Text style={[styles.receiptValue, { fontFamily: tokens.typography.fontFamily.bold }]}>
-                        {Number(selectedPayment.bsAmount || 0).toFixed(2)} Bs
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Pressable
-                    style={styles.closeModalBtn}
-                    onPress={() => setSelectedPayment(null)}
-                  >
-                    <Text style={styles.closeModalBtnText}>Entendido</Text>
-                  </Pressable>
-                </View>
-              );
-            })()}
+                );
+              })()}
           </View>
         </View>
       </Modal>

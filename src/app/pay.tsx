@@ -17,12 +17,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import type { QRScanResult } from '@/interfaces';
 import {
+  confirmRide,
   getBackendProfile,
   getFareAccountByUserId,
   getTicketByQr,
-  validateTicketByQr,
   previewRide,
-  confirmRide,
+  validateTicketByQr,
 } from '@/lib/api';
 import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -136,7 +136,7 @@ export default function PayTripScreen() {
         // 2. Es el QR de una unidad de transporte (encriptado).
         //    Llamar al backend para descifrar el QR y obtener los datos del viaje.
         const preview = await previewRide(scannedData);
-        
+
         setRouteLabel(`${preview.routeName} (${preview.vehiclePlate})`);
         setRouteFare(preview.fareCost);
         setBalance(preview.balanceFares);
@@ -647,7 +647,9 @@ export default function PayTripScreen() {
                         color="#6B7280"
                       />
                       <Text style={styles.barcodeText}>
-                        {rideUuid ? `GF-${rideUuid.slice(0, 8).toUpperCase()}` : 'GF-582910'}
+                        {rideUuid
+                          ? `GF-${rideUuid.slice(0, 8).toUpperCase()}`
+                          : 'GF-582910'}
                       </Text>
                     </View>
                   </View>

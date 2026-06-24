@@ -71,7 +71,9 @@ export default function OnboardingScreen() {
         if (freshProfile && active) {
           // Si el usuario es administrador, socio o conductor, no requiere onboarding de pasajero
           const roles = (freshProfile as any).roles || [];
-          const isAdmin = roles.some((r: any) => r.name === 'platform_admin' || r.name === 'admin');
+          const isAdmin = roles.some(
+            (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+          );
           const isOwner = roles.some((r: any) => r.name === 'transport_owner');
           const isDriver = roles.some((r: any) => r.name === 'driver');
 
@@ -81,7 +83,11 @@ export default function OnboardingScreen() {
               : isOwner
                 ? 'transport_owner'
                 : 'driver';
-            console.log('[Onboarding] Rol no pasajero detectado en backend:', resolvedRole, '. Omitiendo onboarding.');
+            console.log(
+              '[Onboarding] Rol no pasajero detectado en backend:',
+              resolvedRole,
+              '. Omitiendo onboarding.',
+            );
             await AsyncStorage.setItem('user_role', resolvedRole);
             await refreshAuthSessionPhase();
             return;
@@ -92,10 +98,21 @@ export default function OnboardingScreen() {
             const currentUser = auth.currentUser;
             if (currentUser) {
               const idTokenResult = await currentUser.getIdTokenResult(false);
-              const claimRole = (idTokenResult.claims as any)?.role as string | undefined;
-              const PRIVILEGED_ROLES = ['platform_admin', 'admin', 'transport_owner', 'driver'];
+              const claimRole = (idTokenResult.claims as any)?.role as
+                | string
+                | undefined;
+              const PRIVILEGED_ROLES = [
+                'platform_admin',
+                'admin',
+                'transport_owner',
+                'driver',
+              ];
               if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
-                console.log('[Onboarding] Rol de Custom Claim detectado:', claimRole, '. Omitiendo onboarding.');
+                console.log(
+                  '[Onboarding] Rol de Custom Claim detectado:',
+                  claimRole,
+                  '. Omitiendo onboarding.',
+                );
                 await AsyncStorage.setItem('user_role', claimRole);
                 await refreshAuthSessionPhase();
                 return;
@@ -329,7 +346,9 @@ export default function OnboardingScreen() {
           </View>
 
           <Text style={styles.inputLabel}>TELÉFONO</Text>
-          <View style={[styles.inputCard, hasPhone && styles.disabledInputCard]}>
+          <View
+            style={[styles.inputCard, hasPhone && styles.disabledInputCard]}
+          >
             <Ionicons
               name={hasPhone ? 'lock-closed-outline' : 'call-outline'}
               size={20}

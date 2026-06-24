@@ -61,7 +61,9 @@ export default function AdminDashboardScreen() {
         const isOwner = roles.some((r: any) => r.name === 'transport_owner');
         const isDriver = roles.some((r: any) => r.name === 'driver');
         const isCivil = roles.some((r: any) => r.name === 'civil_association');
-        const isAdmin = roles.some((r: any) => r.name === 'platform_admin' || r.name === 'admin');
+        const isAdmin = roles.some(
+          (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+        );
 
         if (isAdmin) continue;
         if (isOwner) ownerCount++;

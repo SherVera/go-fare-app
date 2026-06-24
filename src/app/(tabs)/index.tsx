@@ -152,8 +152,15 @@ export default function HomeDashboard() {
           const fbUser = firebaseAuth.currentUser;
           if (fbUser) {
             const idTokenResult = await fbUser.getIdTokenResult(false);
-            const claimRole = (idTokenResult.claims as any)?.role as string | undefined;
-            const PRIVILEGED_ROLES = ['platform_admin', 'admin', 'transport_owner', 'driver'];
+            const claimRole = (idTokenResult.claims as any)?.role as
+              | string
+              | undefined;
+            const PRIVILEGED_ROLES = [
+              'platform_admin',
+              'admin',
+              'transport_owner',
+              'driver',
+            ];
             if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
               console.log('[Home] Usando Custom Claim para rol:', claimRole);
               newRole = claimRole;

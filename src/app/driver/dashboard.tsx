@@ -16,14 +16,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  closeSession,
+  getAssignedRoutes,
+  getAssignedVehicles,
   getBackendProfile,
   getCurrentSession,
   openSession,
   pauseSession,
   resumeSession,
-  closeSession,
-  getAssignedVehicles,
-  getAssignedRoutes,
 } from '@/lib/api';
 import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -86,7 +86,8 @@ export default function DriverDashboard() {
           setActiveSession((prev: any) => {
             if (prev && Number(session.ridesCount) > Number(prev.ridesCount)) {
               const diff = Number(session.ridesCount) - Number(prev.ridesCount);
-              const amount = Number(session.totalFares) - Number(prev.totalFares);
+              const amount =
+                Number(session.totalFares) - Number(prev.totalFares);
               showPayNotification(amount / (diff || 1));
 
               try {
@@ -141,7 +142,9 @@ export default function DriverDashboard() {
         setActiveSession(session);
         // Sincronizar ruta y vehículo locales con los de la sesión activa
         if (session.vehicle) {
-          const foundVehicle = vehicles.find((v) => v.uuid === session.vehicle.uuid);
+          const foundVehicle = vehicles.find(
+            (v) => v.uuid === session.vehicle.uuid,
+          );
           if (foundVehicle) setSelectedVehicle(foundVehicle);
         }
         if (session.route) {
@@ -175,7 +178,10 @@ export default function DriverDashboard() {
     }
     try {
       setActionLoading(true);
-      const session = await openSession(selectedVehicle.uuid, selectedRoute.uuid);
+      const session = await openSession(
+        selectedVehicle.uuid,
+        selectedRoute.uuid,
+      );
       setActiveSession(session);
       Alert.alert(
         'Turno Iniciado',
@@ -185,7 +191,8 @@ export default function DriverDashboard() {
       console.error('[Dashboard] Error opening session:', err);
       Alert.alert(
         'Error de Inicio',
-        err.message || 'No se pudo iniciar el turno en el servidor. Intenta de nuevo.',
+        err.message ||
+          'No se pudo iniciar el turno en el servidor. Intenta de nuevo.',
       );
     } finally {
       setActionLoading(false);
@@ -437,7 +444,12 @@ export default function DriverDashboard() {
                 ]}
                 onPress={handleStartShift}
               >
-                <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Ionicons
+                  name="play"
+                  size={16}
+                  color="#FFFFFF"
+                  style={{ marginRight: 6 }}
+                />
                 <Text style={styles.actionButtonText}>Iniciar Turno</Text>
               </Pressable>
             ) : isEnServicio ? (
@@ -450,7 +462,12 @@ export default function DriverDashboard() {
                   ]}
                   onPress={handlePauseShift}
                 >
-                  <Ionicons name="pause" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Ionicons
+                    name="pause"
+                    size={16}
+                    color="#FFFFFF"
+                    style={{ marginRight: 6 }}
+                  />
                   <Text style={styles.actionButtonText}>Pausar</Text>
                 </Pressable>
                 <Pressable
@@ -461,7 +478,12 @@ export default function DriverDashboard() {
                   ]}
                   onPress={handleCloseShift}
                 >
-                  <Ionicons name="stop" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Ionicons
+                    name="stop"
+                    size={16}
+                    color="#FFFFFF"
+                    style={{ marginRight: 6 }}
+                  />
                   <Text style={styles.actionButtonText}>Cerrar</Text>
                 </Pressable>
               </View>
@@ -475,7 +497,12 @@ export default function DriverDashboard() {
                   ]}
                   onPress={handleResumeShift}
                 >
-                  <Ionicons name="play" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Ionicons
+                    name="play"
+                    size={16}
+                    color="#FFFFFF"
+                    style={{ marginRight: 6 }}
+                  />
                   <Text style={styles.actionButtonText}>Reanudar</Text>
                 </Pressable>
                 <Pressable
@@ -486,7 +513,12 @@ export default function DriverDashboard() {
                   ]}
                   onPress={handleCloseShift}
                 >
-                  <Ionicons name="stop" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Ionicons
+                    name="stop"
+                    size={16}
+                    color="#FFFFFF"
+                    style={{ marginRight: 6 }}
+                  />
                   <Text style={styles.actionButtonText}>Cerrar</Text>
                 </Pressable>
               </View>

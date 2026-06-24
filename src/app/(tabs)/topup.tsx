@@ -20,8 +20,8 @@ import {
   addAccountBalance,
   createFareAccount,
   getBackendProfile,
-  getFareAccountByUserId,
   getCurrentRates,
+  getFareAccountByUserId,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 

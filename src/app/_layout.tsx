@@ -326,7 +326,9 @@ export default function RootLayout() {
       let role = null;
       if (backendUser) {
         const roles = (backendUser as any).roles || [];
-        const isAdmin = roles.some((r: any) => r.name === 'platform_admin' || r.name === 'admin');
+        const isAdmin = roles.some(
+          (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+        );
         const isOwner = roles.some((r: any) => r.name === 'transport_owner');
         const isDriver = roles.some((r: any) => r.name === 'driver');
         role = isAdmin
@@ -346,10 +348,20 @@ export default function RootLayout() {
       if (!role || role === 'passenger') {
         try {
           const idTokenResult = await currentUser.getIdTokenResult(false);
-          const claimRole = (idTokenResult.claims as any)?.role as string | undefined;
-          const PRIVILEGED_ROLES = ['platform_admin', 'admin', 'transport_owner', 'driver'];
+          const claimRole = (idTokenResult.claims as any)?.role as
+            | string
+            | undefined;
+          const PRIVILEGED_ROLES = [
+            'platform_admin',
+            'admin',
+            'transport_owner',
+            'driver',
+          ];
           if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
-            console.log('[Layout] Usando rol de Firebase Custom Claims:', claimRole);
+            console.log(
+              '[Layout] Usando rol de Firebase Custom Claims:',
+              claimRole,
+            );
             role = claimRole;
           }
         } catch (claimErr) {
@@ -360,7 +372,9 @@ export default function RootLayout() {
       // Si no pudimos obtener datos del backend y no hay rol guardado en caché de una sesión previa activa,
       // evitamos asumir complete = true y redirigir al panel. Volvemos al estado desautenticado.
       if (!backendUser && !role) {
-        console.warn('[Layout] No backend user and no cached role. Sincronización fallida y sin sesión previa cacheada.');
+        console.warn(
+          '[Layout] No backend user and no cached role. Sincronización fallida y sin sesión previa cacheada.',
+        );
         await clearBackendJwt();
         try {
           await sigOutAccount();
@@ -382,7 +396,9 @@ export default function RootLayout() {
         // Cargar caché local siempre para hacer merge por si faltan campos en producción (nationalId, phoneNumber)
         let cachedData: any = null;
         try {
-          const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+          const cached = await AsyncStorage.getItem(
+            'gofare_cached_user_profile',
+          );
           if (cached) {
             cachedData = JSON.parse(cached);
           }
@@ -401,11 +417,17 @@ export default function RootLayout() {
           userToCheck = {
             ...cachedData,
             ...backendUser,
-            displayName: backendUser.displayName || cachedData.displayName || '',
+            displayName:
+              backendUser.displayName || cachedData.displayName || '',
             firstName: backendUser.firstName || cachedData.firstName || '',
             lastName: backendUser.lastName || cachedData.lastName || '',
-            nationalId: backendUser.nationalId || cachedData.nationalId || cachedData.idNumber || '',
-            phoneNumber: backendUser.phoneNumber || cachedData.phoneNumber || '',
+            nationalId:
+              backendUser.nationalId ||
+              cachedData.nationalId ||
+              cachedData.idNumber ||
+              '',
+            phoneNumber:
+              backendUser.phoneNumber || cachedData.phoneNumber || '',
           };
         }
 
@@ -469,7 +491,9 @@ export default function RootLayout() {
           const backendUser = await getBackendProfile();
           if (backendUser && active) {
             const roles = (backendUser as any).roles || [];
-            const isAdmin = roles.some((r: any) => r.name === 'platform_admin' || r.name === 'admin');
+            const isAdmin = roles.some(
+              (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+            );
             const isOwner = roles.some(
               (r: any) => r.name === 'transport_owner',
             );
@@ -487,16 +511,30 @@ export default function RootLayout() {
               try {
                 const currentUser = auth.currentUser;
                 if (currentUser) {
-                  const idTokenResult = await currentUser.getIdTokenResult(false);
-                  const claimRole = (idTokenResult.claims as any)?.role as string | undefined;
-                  const PRIVILEGED_ROLES = ['platform_admin', 'admin', 'transport_owner', 'driver'];
+                  const idTokenResult =
+                    await currentUser.getIdTokenResult(false);
+                  const claimRole = (idTokenResult.claims as any)?.role as
+                    | string
+                    | undefined;
+                  const PRIVILEGED_ROLES = [
+                    'platform_admin',
+                    'admin',
+                    'transport_owner',
+                    'driver',
+                  ];
                   if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
-                    console.log('[Layout] loadAndVerify: usando Custom Claim:', claimRole);
+                    console.log(
+                      '[Layout] loadAndVerify: usando Custom Claim:',
+                      claimRole,
+                    );
                     newRole = claimRole;
                   }
                 }
               } catch (claimErr) {
-                console.warn('[Layout] loadAndVerify: error leyendo claims:', claimErr);
+                console.warn(
+                  '[Layout] loadAndVerify: error leyendo claims:',
+                  claimErr,
+                );
               }
             }
 
@@ -543,7 +581,10 @@ export default function RootLayout() {
         const cachedRole = await AsyncStorage.getItem('user_role');
         if (active && cachedRole) {
           if (cachedRole !== userRole) {
-            console.log(`[Layout] Sincronizando userRole con AsyncStorage en navegación (${currentSegment || 'root'}):`, cachedRole);
+            console.log(
+              `[Layout] Sincronizando userRole con AsyncStorage en navegación (${currentSegment || 'root'}):`,
+              cachedRole,
+            );
             setUserRole(cachedRole);
           }
 
@@ -557,7 +598,10 @@ export default function RootLayout() {
           const canForceSignIn = phase !== 'signed_out';
 
           if (isRoleComplete && phase !== 'signed_in' && canForceSignIn) {
-            console.log('[Layout] Forzando phase a signed_in para rol completo:', cachedRole);
+            console.log(
+              '[Layout] Forzando phase a signed_in para rol completo:',
+              cachedRole,
+            );
             setPhase('signed_in');
           }
         }
