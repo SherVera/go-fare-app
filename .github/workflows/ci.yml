@@ -4,9 +4,9 @@ name: CI
 # pull_request.branches = rama *base* del PR (hacia dónde mergeas).
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [dev, qa, staging, main]
   pull_request:
-    branches: [main, staging, dev]
+    branches: [dev, qa, staging, main]
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
