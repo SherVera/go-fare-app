@@ -1,5 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -14,17 +16,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { syncWithBackend } from '@/lib/api';
-import { refreshAuthSessionPhase } from '@/lib/auth-session';
 import {
-  auth,
-  mergeUserProfile,
-  sigOutAccount,
-  updateUser,
-} from '@/lib/firebase';
+  getBackendProfile,
+  syncWithBackend,
+  updateBackendProfile,
+} from '@/lib/api';
+import { refreshAuthSessionPhase } from '@/lib/auth-session';
+import { auth, sigOutAccount, updateUser } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
-
-const STEPS = 3;
 
 function vePhoneFromE164(phone: string | null | undefined): string {
   if (!phone?.startsWith('+58') || phone.length < 12) return '';
@@ -33,7 +32,7 @@ function vePhoneFromE164(phone: string | null | undefined): string {
 
 export default function OnboardingScreen() {
   const user = auth.currentUser;
-  const [step, setStep] = useState(0);
+
   const [fullName, setFullName] = useState(
     () => user?.displayName?.trim() ?? '',
   );
@@ -41,7 +40,117 @@ export default function OnboardingScreen() {
   const [phoneNumber, setPhoneNumber] = useState(() =>
     vePhoneFromE164(user?.phoneNumber ?? undefined),
   );
+  const [hasPhone, setHasPhone] = useState(() =>
+    Boolean(user?.phoneNumber && user.phoneNumber.trim().length > 0),
+  );
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadProfileData = async () => {
+      try {
+        // Intentar obtener de la caché primero
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached && active) {
+          const parsed = JSON.parse(cached);
+          if (parsed.displayName) setFullName(parsed.displayName);
+          if (parsed.nationalId || parsed.idNumber) {
+            const rawId = parsed.nationalId || parsed.idNumber || '';
+            setIdNumber(
+              typeof rawId === 'string' ? rawId.replace('V-', '').trim() : '',
+            );
+          }
+          if (parsed.phoneNumber) {
+            setPhoneNumber(parsed.phoneNumber);
+            setHasPhone(true);
+          }
+        }
+
+        // Luego intentar del backend para frescura
+        const freshProfile = await getBackendProfile();
+        if (freshProfile && active) {
+          // Si el usuario es administrador, socio o conductor, no requiere onboarding de pasajero
+          const roles = (freshProfile as any).roles || [];
+          const isAdmin = roles.some(
+            (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+          );
+          const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+          const isDriver = roles.some((r: any) => r.name === 'driver');
+
+          if (isAdmin || isOwner || isDriver) {
+            const resolvedRole = isAdmin
+              ? 'platform_admin'
+              : isOwner
+                ? 'transport_owner'
+                : 'driver';
+            console.log(
+              '[Onboarding] Rol no pasajero detectado en backend:',
+              resolvedRole,
+              '. Omitiendo onboarding.',
+            );
+            await AsyncStorage.setItem('user_role', resolvedRole);
+            await refreshAuthSessionPhase();
+            return;
+          }
+
+          // Fallback: verificar Firebase Custom Claims si el backend dice passenger
+          try {
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+              const idTokenResult = await currentUser.getIdTokenResult(false);
+              const claimRole = (idTokenResult.claims as any)?.role as
+                | string
+                | undefined;
+              const PRIVILEGED_ROLES = [
+                'platform_admin',
+                'admin',
+                'transport_owner',
+                'driver',
+              ];
+              if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+                console.log(
+                  '[Onboarding] Rol de Custom Claim detectado:',
+                  claimRole,
+                  '. Omitiendo onboarding.',
+                );
+                await AsyncStorage.setItem('user_role', claimRole);
+                await refreshAuthSessionPhase();
+                return;
+              }
+            }
+          } catch (claimErr) {
+            console.warn('[Onboarding] Error leyendo custom claims:', claimErr);
+          }
+
+          if (freshProfile.displayName) {
+            setFullName(freshProfile.displayName);
+          } else if (freshProfile.firstName || freshProfile.lastName) {
+            setFullName(
+              `${freshProfile.firstName || ''} ${freshProfile.lastName || ''}`.trim(),
+            );
+          }
+
+          if (freshProfile.nationalId) {
+            const rawId = freshProfile.nationalId;
+            setIdNumber(
+              typeof rawId === 'string' ? rawId.replace('V-', '').trim() : '',
+            );
+          }
+          if (freshProfile.phoneNumber) {
+            setPhoneNumber(freshProfile.phoneNumber);
+            setHasPhone(true);
+          }
+        }
+      } catch (err) {
+        console.log('[onboarding] Error pre-populating profile fields:', err);
+      }
+    };
+
+    loadProfileData();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (!user) {
     return null;
@@ -50,10 +159,6 @@ export default function OnboardingScreen() {
   const email = user.email ?? '';
 
   const handleBack = () => {
-    if (step > 0) {
-      setStep((s) => s - 1);
-      return;
-    }
     Alert.alert(
       'Salir del registro',
       'Si sales ahora, cerraremos la sesión y podrás elegir otro método de acceso.',
@@ -74,25 +179,24 @@ export default function OnboardingScreen() {
     );
   };
 
-  const validateStep = (): boolean => {
-    if (step === 0) {
-      if (fullName.trim().length < 3) {
-        Alert.alert('Atención', 'El nombre debe tener al menos 3 caracteres.');
-        return false;
-      }
+  const validateForm = (): boolean => {
+    if (fullName.trim().length < 3) {
+      Alert.alert('Atención', 'El nombre debe tener al menos 3 caracteres.');
+      return false;
     }
-    if (step === 1) {
-      if (!/^\d{5,10}$/.test(idNumber.trim())) {
+    if (!/^\d{5,10}$/.test(idNumber.trim())) {
+      Alert.alert(
+        'Atención',
+        'La cédula debe contener entre 5 y 10 dígitos (solo números).',
+      );
+      return false;
+    }
+    if (!hasPhone) {
+      if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(phoneNumber.trim())) {
         Alert.alert(
           'Atención',
-          'La cédula debe contener entre 5 y 10 dígitos (solo números).',
+          'Por favor, ingresa un número de teléfono válido (ej. 04120000000).',
         );
-        return false;
-      }
-    }
-    if (step === 2) {
-      if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(phoneNumber.trim())) {
-        Alert.alert('Atención', 'Ingresa un número válido (ej. 04120000000).');
         return false;
       }
     }
@@ -100,27 +204,56 @@ export default function OnboardingScreen() {
   };
 
   const handlePrimary = async () => {
-    if (!validateStep()) return;
-    if (step < STEPS - 1) {
-      setStep((s) => s + 1);
-      return;
-    }
+    if (!validateForm()) return;
 
     try {
       setLoading(true);
+
+      console.log('[Onboarding] Actualizando perfil en Firebase Auth...');
       await updateUser(user, { displayName: fullName.trim() });
-      await mergeUserProfile(user.uid, {
+
+      console.log(
+        '[Onboarding] Autenticando y sincronizando con el backend...',
+      );
+      const response = await syncWithBackend(user);
+
+      console.log('[Onboarding] Actualizando perfil en el backend...');
+      const parts = fullName.trim().split(/\s+/);
+      const firstName = parts[0];
+      const lastName = parts.slice(1).join(' ') || undefined;
+
+      const updatePayload: any = {
+        displayName: fullName.trim(),
+        firstName,
+        lastName,
+        nationalId: idNumber.trim(),
+      };
+
+      if (!hasPhone) {
+        updatePayload.phoneNumber = phoneNumber.trim();
+      }
+
+      await updateBackendProfile(response.user.id, updatePayload);
+
+      // Guardar perfil completo en caché local
+      const cachedProfile = {
+        uid: user.uid,
         fullName: fullName.trim(),
+        displayName: fullName.trim(),
+        firstName,
+        lastName,
         idNumber: idNumber.trim(),
+        nationalId: idNumber.trim(),
         phoneNumber: phoneNumber.trim(),
         email: email || undefined,
         onboardingCompleted: true,
-      });
-      try {
-        await syncWithBackend(user);
-      } catch (e) {
-        console.warn('[onboarding] backend sync:', e);
-      }
+      };
+      await AsyncStorage.setItem(
+        'gofare_cached_user_profile',
+        JSON.stringify(cachedProfile),
+      );
+
+      console.log('[Onboarding] Completado, refrescando sesión...');
       await refreshAuthSessionPhase();
     } catch (e: any) {
       console.error('[onboarding] save:', e);
@@ -132,22 +265,6 @@ export default function OnboardingScreen() {
       setLoading(false);
     }
   };
-
-  const titles = [
-    {
-      dark: 'Cómo',
-      blue: 'te llamas',
-      sub: 'Usaremos tu nombre en recibos y viajes.',
-    },
-    {
-      dark: 'Tu',
-      blue: 'cédula',
-      sub: 'Identificación requerida para el servicio.',
-    },
-    { dark: 'Tu', blue: 'teléfono', sub: 'Número de contacto en Venezuela.' },
-  ];
-
-  const t = titles[step];
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -164,34 +281,12 @@ export default function OnboardingScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.stepRow}>
-            {Array.from({ length: STEPS }, (_, i) => (
-              <View
-                key={String(i)}
-                style={[
-                  styles.stepDot,
-                  i < STEPS - 1 && styles.stepDotSpacer,
-                  i <= step && styles.stepDotActive,
-                ]}
-              />
-            ))}
-          </View>
-          <Text style={styles.stepMeta}>
-            Paso {step + 1} de {STEPS}
-          </Text>
-
           <View style={styles.iconSection}>
             <View style={styles.fakeShadow} />
             <View style={styles.iconCard}>
               <View style={styles.topShine} />
               <MaterialCommunityIcons
-                name={
-                  step === 0
-                    ? 'account-outline'
-                    : step === 1
-                      ? 'card-account-details-outline'
-                      : 'phone-outline'
-                }
+                name="card-account-details-outline"
                 size={88}
                 color={tokens.colors.primary}
               />
@@ -199,9 +294,11 @@ export default function OnboardingScreen() {
           </View>
 
           <View style={styles.titleBlock}>
-            <Text style={styles.titleDark}>{t.dark}</Text>
-            <Text style={styles.titleBlue}>{t.blue}</Text>
-            <Text style={styles.subtitle}>{t.sub}</Text>
+            <Text style={styles.titleDark}>Completa tu</Text>
+            <Text style={styles.titleBlue}>perfil</Text>
+            <Text style={styles.subtitle}>
+              Ingresa tus datos personales para activar tu cuenta.
+            </Text>
           </View>
 
           {email ? (
@@ -216,66 +313,60 @@ export default function OnboardingScreen() {
             </View>
           ) : null}
 
-          {step === 0 && (
-            <>
-              <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>
-              <View style={styles.inputCard}>
-                <Ionicons name="person-outline" size={20} color="#3072ffe7" />
-                <View style={styles.divider} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="ej. Carlos Pérez"
-                  placeholderTextColor="#B8C4D4"
-                  value={fullName}
-                  onChangeText={setFullName}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-            </>
-          )}
+          <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>
+          <View style={styles.inputCard}>
+            <Ionicons name="person-outline" size={20} color="#3072ffe7" />
+            <View style={styles.divider} />
+            <TextInput
+              style={styles.input}
+              placeholder="ej. Carlos Pérez"
+              placeholderTextColor="#B8C4D4"
+              value={fullName}
+              onChangeText={setFullName}
+              selectionColor={tokens.colors.primary}
+              editable={!loading}
+            />
+          </View>
 
-          {step === 1 && (
-            <>
-              <Text style={styles.inputLabel}>CÉDULA (solo números)</Text>
-              <View style={styles.inputCard}>
-                <Text style={styles.prefix}>V-</Text>
-                <View style={styles.divider} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="00000000"
-                  placeholderTextColor="#B8C4D4"
-                  keyboardType="number-pad"
-                  value={idNumber}
-                  onChangeText={setIdNumber}
-                  maxLength={10}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-            </>
-          )}
+          <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
+          <View style={styles.inputCard}>
+            <Text style={styles.prefix}>V-</Text>
+            <View style={styles.divider} />
+            <TextInput
+              style={styles.input}
+              placeholder="00000000"
+              placeholderTextColor="#B8C4D4"
+              keyboardType="number-pad"
+              value={idNumber}
+              onChangeText={setIdNumber}
+              maxLength={10}
+              selectionColor={tokens.colors.primary}
+              editable={!loading}
+            />
+          </View>
 
-          {step === 2 && (
-            <>
-              <Text style={styles.inputLabel}>TELÉFONO</Text>
-              <View style={styles.inputCard}>
-                <Ionicons name="call-outline" size={20} color="#3072ffe7" />
-                <View style={styles.divider} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="04120000000"
-                  placeholderTextColor="#B8C4D4"
-                  keyboardType="phone-pad"
-                  value={phoneNumber}
-                  onChangeText={setPhoneNumber}
-                  maxLength={11}
-                  selectionColor={tokens.colors.primary}
-                  editable={!loading}
-                />
-              </View>
-            </>
-          )}
+          <Text style={styles.inputLabel}>TELÉFONO</Text>
+          <View
+            style={[styles.inputCard, hasPhone && styles.disabledInputCard]}
+          >
+            <Ionicons
+              name={hasPhone ? 'lock-closed-outline' : 'call-outline'}
+              size={20}
+              color={hasPhone ? '#8594AB' : '#3072ffe7'}
+            />
+            <View style={styles.divider} />
+            <TextInput
+              style={[styles.input, hasPhone && { color: '#8594AB' }]}
+              placeholder="04120000000"
+              placeholderTextColor="#B8C4D4"
+              keyboardType="phone-pad"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              maxLength={11}
+              selectionColor={tokens.colors.primary}
+              editable={!loading && !hasPhone}
+            />
+          </View>
 
           <View style={{ flex: 1, minHeight: 32 }} />
 
@@ -292,15 +383,9 @@ export default function OnboardingScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Text style={styles.ctaText}>
-                  {step < STEPS - 1 ? 'Continuar' : 'Finalizar'}
-                </Text>
+                <Text style={styles.ctaText}>Finalizar</Text>
                 <Ionicons
-                  name={
-                    step < STEPS - 1
-                      ? 'arrow-forward-circle-outline'
-                      : 'checkmark-circle-outline'
-                  }
+                  name="checkmark-circle-outline"
                   size={20}
                   color="#fff"
                   style={{ marginLeft: 10 }}
@@ -309,7 +394,7 @@ export default function OnboardingScreen() {
             )}
           </Pressable>
 
-          <Text style={styles.footerLegal}>GOFAIR • ONBOARDING</Text>
+          <Text style={styles.footerLegal}>GOFARE • ONBOARDING</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -333,31 +418,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26,
     paddingTop: 8,
     paddingBottom: 36,
-  },
-  stepRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  stepDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#D4DEEC',
-  },
-  stepDotSpacer: {
-    marginRight: 8,
-  },
-  stepDotActive: {
-    backgroundColor: tokens.colors.primary,
-  },
-  stepMeta: {
-    textAlign: 'center',
-    fontSize: 12,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#8594AB',
-    marginBottom: 20,
   },
   iconSection: { alignItems: 'center', marginBottom: 28 },
   fakeShadow: {
@@ -454,6 +514,10 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderWidth: 1,
     borderColor: '#E2EAF4',
+  },
+  disabledInputCard: {
+    backgroundColor: '#ECF1F9',
+    borderColor: '#D4DEEC',
   },
   divider: {
     width: 1,

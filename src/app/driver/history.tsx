@@ -109,7 +109,7 @@ export default function DriverHistoryScreen() {
 
           {/* Tarifa cobrada */}
           <View style={styles.fareContainer}>
-            <Text style={styles.fareText}>+{item.fare.toFixed(2)} Bs</Text>
+            <Text style={styles.fareText}>+{item.fare.toFixed(2)} fares</Text>
             <Text style={styles.codeTextMono} numberOfLines={1}>
               {item.code.substring(0, 10)}
             </Text>
@@ -147,7 +147,7 @@ export default function DriverHistoryScreen() {
           <View style={styles.verticalDivider} />
           <View style={styles.statCol}>
             <Text style={[styles.statValue, { color: '#16A34A' }]}>
-              {totalEarnings.toFixed(2)} Bs
+              {totalEarnings.toFixed(2)} fares
             </Text>
             <Text style={styles.statLabel}>Total Recaudado</Text>
           </View>

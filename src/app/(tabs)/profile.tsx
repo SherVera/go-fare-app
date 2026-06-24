@@ -16,13 +16,19 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import type {
   ProfileInfoCard,
   ProfileMenuItem,
   UserProfile,
 } from '@/interfaces';
-import { clearGoFareToken, getBackendProfile } from '@/lib/api';
-import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
+import {
+  BASE_URL,
+  clearGoFareToken,
+  getBackendProfile,
+  getFareAccountByUserId,
+} from '@/lib/api';
+import { auth, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ProfileScreen() {
@@ -46,31 +52,32 @@ export default function ProfileScreen() {
       // 2. Consultar servidor en segundo plano
       try {
         const backendUser = await getBackendProfile();
-        const legacyData = await getDocument(`users/${user.uid}`).catch(
-          () => null,
-        );
+        let fareAccountBalance = 0;
+        try {
+          const account = await getFareAccountByUserId(backendUser.id);
+          fareAccountBalance = account.balance;
+        } catch (accountErr) {
+          console.warn('[Profile] Error loading fare account:', accountErr);
+        }
 
         const updatedProfile: UserProfile = {
           uid: user.uid,
+          backendUuid: backendUser.id,
           fullName:
             backendUser.displayName ||
             `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-            legacyData?.fullName ||
             'Usuario',
           displayName:
             backendUser.displayName ||
             `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-            legacyData?.fullName ||
             'Usuario',
-          idNumber: legacyData?.idNumber || 'V-00000000',
+          idNumber: backendUser.nationalId || 'V-00000000',
           email: backendUser.email,
-          phoneNumber: backendUser.phoneNumber || legacyData?.phoneNumber || '',
-          balance: legacyData?.balance ?? 0,
+          phoneNumber: backendUser.phoneNumber || '',
+          balance: fareAccountBalance,
           photoURL:
-            backendUser.profilePhoto ||
-            legacyData?.photoURL ||
-            'https://i.pravatar.cc/150?img=11',
-          city: legacyData?.city || 'Caracas, Venezuela',
+            backendUser.profilePhoto || 'https://i.pravatar.cc/150?img=11',
+          city: 'Caracas, Venezuela',
           createdAt: backendUser.createdAt,
         };
 
@@ -82,20 +89,29 @@ export default function ProfileScreen() {
           JSON.stringify(updatedProfile),
         );
 
+        const isAdmin = (backendUser as any).roles?.some(
+          (role: any) =>
+            role.name === 'platform_admin' || role.name === 'admin',
+        );
         const isOwner = (backendUser as any).roles?.some(
           (role: any) => role.name === 'transport_owner',
         );
         const isDriver = (backendUser as any).roles?.some(
           (role: any) => role.name === 'driver',
         );
-        const newRole = isOwner
-          ? 'transport_owner'
-          : isDriver
-            ? 'driver'
-            : 'passenger';
+        const newRole = isAdmin
+          ? 'platform_admin'
+          : isOwner
+            ? 'transport_owner'
+            : isDriver
+              ? 'driver'
+              : 'passenger';
         await AsyncStorage.setItem('user_role', newRole);
 
-        if (isOwner) {
+        if (isAdmin) {
+          console.log('[Profile] User is platform admin, redirecting...');
+          router.replace('/admin/dashboard' as any);
+        } else if (isOwner) {
           console.log('[Profile] User is transport owner, redirecting...');
           router.replace('/vehicle-owner/dashboard' as any);
         } else if (isDriver) {
@@ -110,26 +126,24 @@ export default function ProfileScreen() {
         if (error?.message === 'Unauthorized') {
           return;
         }
-        // Fallback a Firestore local en caso de error
+        // Fallback a caché local en caso de error
         try {
-          const legacyData = await getDocument(`users/${user.uid}`);
-          if (legacyData) {
-            const fbProfile = legacyData as UserProfile;
+          const cached = await AsyncStorage.getItem(
+            'gofare_cached_user_profile',
+          );
+          if (cached) {
+            const fbProfile = JSON.parse(cached);
             setUserProfile(fbProfile);
-            await AsyncStorage.setItem(
-              'gofare_cached_user_profile',
-              JSON.stringify(fbProfile),
-            );
           }
-        } catch (fbError: any) {
+        } catch (cacheErr: any) {
           console.log(
-            '[Profile] Error en fallback de Firestore:',
-            fbError.message || fbError,
+            '[Profile] Error en fallback de caché local:',
+            cacheErr.message || cacheErr,
           );
         }
       }
     }
-  }, []);
+  }, [router.replace]);
 
   useFocusEffect(
     useCallback(() => {
@@ -171,20 +185,6 @@ export default function ProfileScreen() {
       subtitle: '2FA y cambio de clave',
       iconName: 'lock-closed',
       onPress: () => router.push('/security'),
-    },
-    {
-      id: 'vehicle-owner',
-      title: 'Dueño de Vehículo',
-      subtitle: 'Panel de control de tu flota',
-      iconName: 'car',
-      onPress: () => router.push('/vehicle-owner/dashboard' as any),
-    },
-    {
-      id: 'driver',
-      title: 'Trabajar como Conductor',
-      subtitle: 'Envía tu solicitud para conducir',
-      iconName: 'id-card-outline',
-      onPress: () => router.push('/register-driver' as any),
     },
     {
       id: 'notifications',
@@ -249,7 +249,7 @@ export default function ProfileScreen() {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>GoFair</Text>
+        <Text style={styles.headerTitle}>GoFare</Text>
         <Image
           source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
           style={styles.headerAvatar}
@@ -517,5 +517,60 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#DC2626',
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  verifyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  verifyBadgeText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#EF4444',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+  },
+  verifiedBadgeText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#10B981',
+  },
+  debugCard: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#475569',
+    marginBottom: 8,
+  },
+  debugText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginBottom: 4,
   },
 });

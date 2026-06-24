@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Keyboard,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -16,69 +18,144 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getTicketByQr, validateTicketByQr } from '@/lib/api';
+import {
+  getCurrentSession,
+  getSessionQr,
+  getSessionRides,
+  validateTicketByQr,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
-
-interface RouteOption {
-  id: string;
-  name: string;
-  fare: number;
-}
-
-const ROUTE_OPTIONS: RouteOption[] = [
-  { id: 'r1', name: 'Ruta 201: Chacaíto - El Hatillo', fare: 15.0 },
-  { id: 'r2', name: 'Ruta L1: Propatria - Palo Verde', fare: 20.0 },
-  { id: 'r3', name: 'Ruta 102: Plaza Venezuela - Baruta', fare: 12.0 },
-];
 
 export default function DriverScanScreen() {
   const router = useRouter();
-  const [isEnServicio, setIsEnServicio] = useState(false);
-  const [activeRoute, setActiveRoute] = useState<RouteOption>(ROUTE_OPTIONS[0]);
   const [loading, setLoading] = useState(true);
+  const [activeSession, setActiveSession] = useState<any | null>(null);
 
-  // Input code
-  const [qrCodeInput, setQrCodeInput] = useState('');
-  const [processing, setProcessing] = useState(false);
+  // QR dinámico de la sesión
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
 
-  // Success / Error States
-  const [scanResult, setScanResult] = useState<'success' | 'error' | null>(
-    null,
-  );
-  const [resultMessage, setResultMessage] = useState('');
-  const [resultDetails, setResultDetails] = useState<{
-    passengerName?: string;
-    route?: string;
-    fare?: number;
-    code?: string;
-    time?: string;
+  // Lista de cobros validados recientes
+  const [recentPayments, setRecentPayments] = useState<any[]>([]);
+
+  // Notificación flotante de cobro recibido
+  const [successNotification, setSuccessNotification] = useState<{
+    passengerName: string;
+    fare: number;
+    time: string;
   } | null>(null);
 
-  // Cargar estado de servicio y ruta activa
-  const checkServiceStatus = async () => {
+  // Input de validación manual
+  const [qrCodeInput, setQrCodeInput] = useState('');
+  const [manualProcessing, setManualProcessing] = useState(false);
+
+  // Detalle de pago seleccionado para mostrar en el modal
+  const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
+
+  // Cargar estado inicial del turno
+  const checkServiceStatus = useCallback(async () => {
     try {
       setLoading(true);
-      const status = await AsyncStorage.getItem('driver_service_status');
-      setIsEnServicio(status === 'active');
+      const session = await getCurrentSession();
+      if (session && session.status === 'open') {
+        setActiveSession(session);
+        // Cargar QR y viajes
+        const qrRes = await getSessionQr(session.uuid);
+        setQrCodeData(qrRes.qr);
 
-      const routeId = await AsyncStorage.getItem('driver_active_route_id');
-      if (routeId) {
-        const found = ROUTE_OPTIONS.find((r) => r.id === routeId);
-        if (found) setActiveRoute(found);
+        const rides = await getSessionRides(session.uuid);
+        setRecentPayments(rides.slice(0, 5));
+      } else {
+        setActiveSession(null);
+        setQrCodeData(null);
+        setRecentPayments([]);
       }
     } catch (err) {
       console.warn('[Scan] Error loading service status:', err);
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    checkServiceStatus();
   }, []);
 
-  const handleValidateTicket = async (code: string) => {
-    if (processing) return;
+  useFocusEffect(
+    useCallback(() => {
+      checkServiceStatus();
+    }, [checkServiceStatus]),
+  );
+
+  // Polling de pagos y renovación del QR cifrado cada 4 segundos
+  useEffect(() => {
+    if (!activeSession || activeSession.status !== 'open') return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        // 1. Verificar si la sesión sigue activa/abierta
+        const current = await getCurrentSession();
+        if (!current || current.status !== 'open') {
+          setActiveSession(null);
+          setQrCodeData(null);
+          setRecentPayments([]);
+          return;
+        }
+
+        // 2. Renovar el QR dinámico (Omitido para mantener el QR estático)
+        // const qrRes = await getSessionQr(current.uuid);
+        // setQrCodeData(qrRes.qr);
+
+        // 3. Consultar viajes recientes de la sesión en base de datos
+        const rides = await getSessionRides(current.uuid);
+
+        // Detectar si hay nuevos cobros para alertas
+        if (rides.length > recentPayments.length) {
+          const newRides = rides.filter(
+            (r: any) =>
+              !recentPayments.some((prev: any) => prev.uuid === r.uuid),
+          );
+
+          for (const newRide of newRides) {
+            const passengerName =
+              newRide.passenger?.displayName ||
+              `${newRide.passenger?.firstName || ''} ${newRide.passenger?.lastName || ''}`.trim() ||
+              'Pasajero';
+
+            const timeStr = new Date(newRide.createdAt).toLocaleTimeString(
+              'es-VE',
+              {
+                hour: '2-digit',
+                minute: '2-digit',
+              },
+            );
+
+            // Disparar banner
+            setSuccessNotification({
+              passengerName,
+              fare: Number(newRide.fareCost),
+              time: timeStr,
+            });
+
+            // Vibración
+            try {
+              await Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success,
+              );
+            } catch (_) {}
+
+            setTimeout(() => setSuccessNotification(null), 4000);
+          }
+        }
+
+        setActiveSession(current);
+        setRecentPayments(rides.slice(0, 5));
+      } catch (err) {
+        console.warn('[Scan] Error during polling in scan:', err);
+      }
+    }, 4000);
+
+    return () => clearInterval(pollInterval);
+  }, [activeSession, recentPayments]);
+
+  // Validación manual de código de boleto (pasaje QR)
+  const handleManualValidateTicket = async (code: string) => {
+    if (manualProcessing) return;
     const sanitizedCode = code.trim();
     if (!sanitizedCode) {
       Alert.alert(
@@ -89,142 +166,56 @@ export default function DriverScanScreen() {
     }
 
     Keyboard.dismiss();
-    setProcessing(true);
+    setManualProcessing(true);
 
     try {
-      // 1. Intentar validar el boleto real en el backend
-      console.log('[Scan] Validating real ticket:', sanitizedCode);
-      const ticket = await validateTicketByQr(sanitizedCode);
+      console.log('[Scan] Validating ticket:', sanitizedCode);
+      const ticket = (await validateTicketByQr(sanitizedCode)) as any;
+      const ticketName =
+        ticket.user?.displayName ||
+        `${ticket.user?.firstName || ''} ${ticket.user?.lastName || ''}`.trim() ||
+        'Pasajero Verificado';
 
-      // Registrar cobro exitoso
-      const validationRecord = {
-        id: `val-${Date.now()}`,
-        code: sanitizedCode,
-        fare: ticket.price || activeRoute.fare,
-        route: ticket.route || activeRoute.name,
-        time: new Date().toLocaleTimeString('es-VE', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        date: new Date().toLocaleDateString('es-VE'),
-        passengerName: 'Pasajero Verificado',
-      };
+      const fareValue =
+        Number(ticket.price) ||
+        (activeSession ? Number(activeSession.fareCost) : 15);
 
-      // Guardar localmente
-      const localListStr = await AsyncStorage.getItem('mock_validated_tickets');
-      const localList = localListStr ? JSON.parse(localListStr) : [];
-      localList.unshift(validationRecord);
-      await AsyncStorage.setItem(
-        'mock_validated_tickets',
-        JSON.stringify(localList),
-      );
-
-      setResultDetails({
-        passengerName: 'Pasajero Registrado',
-        route: ticket.route || activeRoute.name,
-        fare: ticket.price || activeRoute.fare,
-        code: sanitizedCode,
-        time: validationRecord.time,
+      const timeStr = new Date().toLocaleTimeString('es-VE', {
+        hour: '2-digit',
+        minute: '2-digit',
       });
-      setResultMessage('¡Boleto Validado con Éxito!');
-      setScanResult('success');
-      setQrCodeInput('');
-    } catch (err: any) {
-      console.warn(
-        '[Scan] Real validation failed (using fallback/simulator):',
-        err.message || err,
-      );
 
-      // 2. Fallback de Simulación en caso de error de red o para códigos especiales de simulación
-      const codeUpper = sanitizedCode.toUpperCase();
-
-      if (
-        codeUpper.startsWith('MOCK-VALID') ||
-        codeUpper === 'OK' ||
-        codeUpper.startsWith('TICKET-MOCK')
-      ) {
-        const fareValue = codeUpper.includes('20') ? 20.0 : 15.0;
-        const validationRecord = {
-          id: `val-${Date.now()}`,
-          code: sanitizedCode,
-          fare: fareValue,
-          route: activeRoute.name,
-          time: new Date().toLocaleTimeString('es-VE', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          date: new Date().toLocaleDateString('es-VE'),
-          passengerName: codeUpper.includes('CARLOS')
-            ? 'Carlos Pérez'
-            : 'Rafael Castellano',
-        };
-
-        const localListStr = await AsyncStorage.getItem(
-          'mock_validated_tickets',
-        );
-        const localList = localListStr ? JSON.parse(localListStr) : [];
-        localList.unshift(validationRecord);
-        await AsyncStorage.setItem(
-          'mock_validated_tickets',
-          JSON.stringify(localList),
-        );
-
-        setResultDetails({
-          passengerName: validationRecord.passengerName,
-          route: activeRoute.name,
-          fare: fareValue,
-          code: sanitizedCode,
-          time: validationRecord.time,
-        });
-        setResultMessage('¡Boleto Validado con Éxito!');
-        setScanResult('success');
-        setQrCodeInput('');
-      } else {
-        // Mostrar error real o simulado
-        let errorMsg = err.message || 'Código de boleto inválido o inactivo.';
-        if (codeUpper.startsWith('USED') || codeUpper === 'USADO') {
-          errorMsg =
-            'El boleto ya ha sido validado anteriormente (Código: USED-TICKET).';
-        } else if (
-          codeUpper.startsWith('EXPIRED') ||
-          codeUpper === 'EXPIRADO'
-        ) {
-          errorMsg = 'El boleto ha expirado o su validez temporal finalizó.';
-        } else if (codeUpper.startsWith('SALDO') || codeUpper === 'NO-MONEY') {
-          errorMsg = 'El pasajero no cuenta con saldo suficiente en su cuenta.';
-        }
-
-        setResultMessage(errorMsg);
-        setResultDetails({
-          code: sanitizedCode,
-          time: new Date().toLocaleTimeString('es-VE', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-        });
-        setScanResult('error');
+      // Recargar cobros recientes para reflejar el cambio en la sesión
+      if (activeSession) {
+        const rides = await getSessionRides(activeSession.uuid);
+        setRecentPayments(rides.slice(0, 5));
       }
+
+      setQrCodeInput('');
+
+      // Mostrar banner flotante de éxito
+      setSuccessNotification({
+        passengerName: ticketName,
+        fare: fareValue,
+        time: timeStr,
+      });
+
+      setTimeout(() => {
+        setSuccessNotification(null);
+      }, 3500);
+
+      Alert.alert(
+        'Boleto Validado',
+        `El boleto fue verificado y cobrado con éxito. Pasajero: ${ticketName}`,
+      );
+    } catch (err: any) {
+      Alert.alert(
+        'Error de Validación',
+        err.message || 'El boleto no es válido.',
+      );
     } finally {
-      setProcessing(false);
+      setManualProcessing(false);
     }
-  };
-
-  const handleSimulateQuickScan = (
-    type: 'valid_15' | 'valid_20' | 'used' | 'expired' | 'no_money',
-  ) => {
-    let code = 'MOCK-VALID-15';
-    if (type === 'valid_20') code = 'MOCK-VALID-20-CARLOS';
-    if (type === 'used') code = 'USED-BOLETO';
-    if (type === 'expired') code = 'EXPIRED-BOLETO';
-    if (type === 'no_money') code = 'SALDO-INSUFICIENTE';
-
-    handleValidateTicket(code);
-  };
-
-  const resetResult = () => {
-    setScanResult(null);
-    setResultMessage('');
-    setResultDetails(null);
   };
 
   if (loading) {
@@ -234,6 +225,8 @@ export default function DriverScanScreen() {
       </View>
     );
   }
+
+  const isEnServicio = activeSession?.status === 'open';
 
   // Vista fuera de servicio
   if (!isEnServicio) {
@@ -250,7 +243,7 @@ export default function DriverScanScreen() {
           <Text style={styles.offlineTitle}>Turno Fuera de Servicio</Text>
           <Text style={styles.offlineSubtitle}>
             Debes iniciar tu turno de trabajo ("En Servicio") en la pestaña de
-            Inicio para poder cobrar a los pasajeros.
+            Inicio para poder generar el código QR de cobro.
           </Text>
           <Pressable
             style={({ pressed }) => [
@@ -275,238 +268,313 @@ export default function DriverScanScreen() {
         <Text style={styles.headerTitle}>Cobrar Pasaje</Text>
       </View>
 
-      {scanResult === null ? (
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Info Banner */}
-          <View style={styles.infoBanner}>
-            <Ionicons
-              name="information-circle-outline"
-              size={24}
-              color="#0369A1"
-            />
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={styles.infoTitle}>TARIFA DE LA RUTA</Text>
-              <Text style={styles.infoText}>
-                {activeRoute.name} •{' '}
-                <Text style={{ fontWeight: 'bold' }}>
-                  {activeRoute.fare.toFixed(2)} Bs
-                </Text>
+      {/* Notificación flotante de cobro recibido */}
+      {successNotification && (
+        <View style={styles.notificationBanner}>
+          <View style={styles.notificationBadge}>
+            <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.notificationTitle}>COBRO RECIBIDO</Text>
+            <Text style={styles.notificationText}>
+              {successNotification.passengerName} pagó{' '}
+              <Text style={{ fontWeight: 'bold' }}>
+                {successNotification.fare.toFixed(2)} Fare
               </Text>
-            </View>
-          </View>
-
-          {/* Cámara de Escaneo Simulada */}
-          <View style={styles.scannerWrapper}>
-            <View style={styles.scannerOverlay}>
-              <View style={styles.scanTargetBox}>
-                {/* Cuatro esquinas del marco */}
-                <View style={[styles.corner, styles.topLeft]} />
-                <View style={[styles.corner, styles.topRight]} />
-                <View style={[styles.corner, styles.bottomLeft]} />
-                <View style={[styles.corner, styles.bottomRight]} />
-
-                {/* Línea roja/verde de escaneo */}
-                <View style={styles.scanningLine} />
-              </View>
-              <Text style={styles.scannerPrompt}>
-                Escanea el código QR del pasajero
-              </Text>
-            </View>
-          </View>
-
-          {/* Validador Manual */}
-          <Text style={styles.inputLabel}>INGRESO MANUAL DE CÓDIGO</Text>
-          <View style={styles.inputCard}>
-            <Ionicons
-              name="qr-code-outline"
-              size={20}
-              color="#8594AB"
-              style={{ marginRight: 12 }}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Ingresa código o ID del boleto..."
-              placeholderTextColor="#A1A1AA"
-              value={qrCodeInput}
-              onChangeText={setQrCodeInput}
-              autoCapitalize="characters"
-              editable={!processing}
-            />
-            {processing ? (
-              <ActivityIndicator size="small" color={tokens.colors.primary} />
-            ) : (
-              <Pressable
-                style={styles.validateBtn}
-                onPress={() => handleValidateTicket(qrCodeInput)}
-              >
-                <Text style={styles.validateBtnText}>Validar</Text>
-              </Pressable>
-            )}
-          </View>
-
-          {/* Quick Simulation Options */}
-          <Text style={styles.sectionTitle}>Simular Casos de Prueba</Text>
-          <View style={styles.simulationGrid}>
-            <Pressable
-              style={styles.simBtnSuccess}
-              onPress={() => handleSimulateQuickScan('valid_15')}
-            >
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={16}
-                color="#FFFFFF"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.simBtnText}>Válido (Bs 15)</Text>
-            </Pressable>
-            <Pressable
-              style={styles.simBtnSuccess}
-              onPress={() => handleSimulateQuickScan('valid_20')}
-            >
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={16}
-                color="#FFFFFF"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.simBtnText}>Válido (Bs 20)</Text>
-            </Pressable>
-            <Pressable
-              style={styles.simBtnError}
-              onPress={() => handleSimulateQuickScan('used')}
-            >
-              <Ionicons
-                name="alert-circle-outline"
-                size={16}
-                color="#FFFFFF"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.simBtnText}>Ya Usado</Text>
-            </Pressable>
-            <Pressable
-              style={styles.simBtnError}
-              onPress={() => handleSimulateQuickScan('expired')}
-            >
-              <Ionicons
-                name="close-circle-outline"
-                size={16}
-                color="#FFFFFF"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.simBtnText}>Expirado</Text>
-            </Pressable>
-          </View>
-
-          {/* Espacio final */}
-          <View style={{ height: 100 }} />
-        </ScrollView>
-      ) : (
-        /* PANTALLA RESULTADO DEL ESCANEO (ÉXITO / ERROR) */
-        <View
-          style={[
-            styles.resultContainer,
-            scanResult === 'success' ? styles.bgSuccess : styles.bgError,
-          ]}
-        >
-          <View style={styles.resultCard}>
-            <View
-              style={[
-                styles.resultIconWrapper,
-                scanResult === 'success'
-                  ? styles.iconSuccessBg
-                  : styles.iconErrorBg,
-              ]}
-            >
-              <Ionicons
-                name={
-                  scanResult === 'success' ? 'checkmark-circle' : 'alert-circle'
-                }
-                size={72}
-                color={scanResult === 'success' ? '#16A34A' : '#DC2626'}
-              />
-            </View>
-
-            <Text
-              style={[
-                styles.resultTitle,
-                scanResult === 'success'
-                  ? { color: '#16A34A' }
-                  : { color: '#DC2626' },
-              ]}
-            >
-              {scanResult === 'success'
-                ? 'Validación Exitosa'
-                : 'Validación Fallida'}
             </Text>
-
-            <Text style={styles.resultMessageText}>{resultMessage}</Text>
-
-            <View style={styles.resultDetailsCard}>
-              {scanResult === 'success' && resultDetails ? (
-                <>
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>PASAJERO</Text>
-                    <Text style={styles.detailValue}>
-                      {resultDetails.passengerName}
-                    </Text>
-                  </View>
-                  <View style={styles.detailDivider} />
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>RUTA</Text>
-                    <Text style={styles.detailValue}>
-                      {resultDetails.route}
-                    </Text>
-                  </View>
-                  <View style={styles.detailDivider} />
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>TARIFA COBRADA</Text>
-                    <Text
-                      style={[
-                        styles.detailValue,
-                        { color: '#16A34A', fontWeight: 'bold' },
-                      ]}
-                    >
-                      {resultDetails.fare?.toFixed(2)} Bs
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>MOTIVO</Text>
-                  <Text style={[styles.detailValue, { color: '#DC2626' }]}>
-                    Código de Boleto Inadecuado o Rechazado por Servidor
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.detailDivider} />
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>CÓDIGO DE ESCANEO</Text>
-                <Text style={styles.detailValueMono}>
-                  {resultDetails?.code || qrCodeInput}
-                </Text>
-              </View>
-            </View>
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.dismissBtn,
-                scanResult === 'success'
-                  ? { backgroundColor: '#16A34A' }
-                  : { backgroundColor: '#DC2626' },
-                pressed && { opacity: 0.9 },
-              ]}
-              onPress={resetResult}
-            >
-              <Text style={styles.dismissBtnText}>Continuar Escaneo</Text>
-            </Pressable>
           </View>
+          <Text style={styles.notificationTime}>
+            {successNotification.time}
+          </Text>
         </View>
       )}
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Código QR de Cobro Dinámico */}
+        <View style={styles.qrCard}>
+          <View style={styles.routeHeader}>
+            <Text style={styles.routeHeaderLabel}>TARIFA Y RUTA ACTIVA</Text>
+            <Text style={styles.routeHeaderValue}>
+              {activeSession.route?.name}
+            </Text>
+          </View>
+
+          <View style={styles.qrContainer}>
+            {qrCodeData ? (
+              <Image
+                source={{
+                  uri: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&color=0f172a&data=${encodeURIComponent(
+                    qrCodeData,
+                  )}`,
+                }}
+                style={styles.qrImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <ActivityIndicator size="large" color={tokens.colors.primary} />
+            )}
+            {/* Indicador de Escaneo Pulsante */}
+            <View style={styles.scanPulse} />
+          </View>
+
+          <Text style={styles.qrFareValue}>
+            {Number(activeSession.fareCost).toFixed(2)} Fare
+          </Text>
+
+          <Text style={styles.qrInstruction}>
+            Muestra este código al pasajero para cobrar de forma rápida y
+            segura.
+          </Text>
+        </View>
+
+        {/* Historial de Actividad Reciente */}
+        <Text style={styles.sectionTitle}>Cobros Recibidos (Últimos 5)</Text>
+        <View style={styles.feedCard}>
+          {recentPayments.length === 0 ? (
+            <View style={styles.feedEmpty}>
+              <Ionicons name="hourglass-outline" size={28} color="#94A3B8" />
+              <Text style={styles.feedEmptyText}>
+                Esperando cobros de pasajeros...
+              </Text>
+            </View>
+          ) : (
+            recentPayments.map((item, index) => {
+              const passengerName =
+                `${item.passenger?.firstName || ''} ${item.passenger?.lastName || ''}`.trim() ||
+                item.passenger?.displayName ||
+                'Pasajero';
+
+              const passengerCedula = item.passenger?.nationalId
+                ? `C.I. ${item.passenger.nationalId}`
+                : 'C.I. No registrada';
+
+              const timeStr = new Date(item.createdAt).toLocaleTimeString(
+                'es-VE',
+                {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                },
+              );
+
+              return (
+                <View key={item.uuid}>
+                  {index > 0 && <View style={styles.feedDivider} />}
+                  <View style={styles.feedItem}>
+                    <View style={styles.feedLeft}>
+                      <View style={styles.feedIconWrapper}>
+                        <Ionicons
+                          name="person"
+                          size={16}
+                          color={tokens.colors.primary}
+                        />
+                      </View>
+                      <View style={{ marginLeft: 12, flex: 1 }}>
+                        <Text style={styles.feedPassenger} numberOfLines={1}>
+                          {passengerName}
+                        </Text>
+                        <Text style={styles.feedCedula}>{passengerCedula}</Text>
+                        <Text style={styles.feedTime}>
+                          Cobro exitoso • {timeStr}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.feedRightContainer}>
+                      <View style={styles.feedRight}>
+                        <Text style={styles.feedAmount}>
+                          +{Number(item.fareCost).toFixed(2)} Fare
+                        </Text>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={16}
+                          color="#16A34A"
+                          style={{ marginLeft: 6 }}
+                        />
+                      </View>
+                      <Pressable
+                        style={styles.detailsBtn}
+                        onPress={() => setSelectedPayment(item)}
+                      >
+                        <Text style={styles.detailsBtnText}>Detalles</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </View>
+
+        {/* Validación Manual de Boleto */}
+        <Text style={styles.sectionTitle}>Validación Manual de Boleto</Text>
+        <View style={styles.inputCard}>
+          <Ionicons
+            name="keypad-outline"
+            size={20}
+            color="#8594AB"
+            style={{ marginRight: 12 }}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Ingresa código o ID de boleto..."
+            placeholderTextColor="#A1A1AA"
+            value={qrCodeInput}
+            onChangeText={setQrCodeInput}
+            autoCapitalize="characters"
+            editable={!manualProcessing}
+          />
+          {manualProcessing ? (
+            <ActivityIndicator size="small" color={tokens.colors.primary} />
+          ) : (
+            <Pressable
+              style={styles.validateBtn}
+              onPress={() => handleManualValidateTicket(qrCodeInput)}
+            >
+              <Text style={styles.validateBtnText}>Validar</Text>
+            </Pressable>
+          )}
+        </View>
+
+        {/* Espacio final */}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* Modal de Detalle de Pago del Usuario */}
+      <Modal
+        visible={!!selectedPayment}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setSelectedPayment(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Header del Modal */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detalle del Pago</Text>
+              <Pressable onPress={() => setSelectedPayment(null)} hitSlop={12}>
+                <Ionicons name="close" size={24} color="#64748B" />
+              </Pressable>
+            </View>
+
+            {selectedPayment &&
+              (() => {
+                const passenger = selectedPayment.passenger || {};
+                const passName =
+                  `${passenger.firstName || ''} ${passenger.lastName || ''}`.trim() ||
+                  passenger.displayName ||
+                  'Pasajero';
+                const passCedula = passenger.nationalId || 'No registrada';
+                const passEmail = passenger.email || 'No registrado';
+                const passPhone = passenger.phoneNumber || 'No registrado';
+
+                const dateObj = new Date(selectedPayment.createdAt);
+                const dateStr = dateObj.toLocaleDateString('es-VE');
+                const timeStr = dateObj.toLocaleTimeString('es-VE', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+
+                return (
+                  <View style={styles.receiptContainer}>
+                    {/* Icono de ticket / exito */}
+                    <View style={styles.receiptHeader}>
+                      <View style={styles.receiptSuccessIcon}>
+                        <Ionicons name="checkmark" size={28} color="#16A34A" />
+                      </View>
+                      <Text style={styles.receiptStatusText}>Pago Exitoso</Text>
+                      <Text style={styles.receiptAmount}>
+                        {Number(selectedPayment.fareCost).toFixed(2)} fares
+                      </Text>
+                    </View>
+
+                    {/* Cuerpo del ticket decorativo */}
+                    <View style={styles.ticketBody}>
+                      <View style={styles.ticketDividerWrapper}>
+                        <View style={styles.ticketDashedLine} />
+                      </View>
+
+                      {/* Información del Pasajero */}
+                      <Text style={styles.receiptSectionTitle}>PASAJERO</Text>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Nombre:</Text>
+                        <Text style={styles.receiptValue}>{passName}</Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Cédula:</Text>
+                        <Text style={styles.receiptValue}>{passCedula}</Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Teléfono:</Text>
+                        <Text style={styles.receiptValue}>{passPhone}</Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Email:</Text>
+                        <Text style={styles.receiptValue} numberOfLines={1}>
+                          {passEmail}
+                        </Text>
+                      </View>
+
+                      <View style={styles.ticketDividerWrapper}>
+                        <View style={styles.ticketDashedLine} />
+                      </View>
+
+                      {/* Detalles del Pago */}
+                      <Text style={styles.receiptSectionTitle}>
+                        TRANSACCIÓN
+                      </Text>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>ID de Viaje:</Text>
+                        <Text style={[styles.receiptValue, styles.receiptCode]}>
+                          GF-{selectedPayment.uuid?.slice(0, 8).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Fecha y Hora:</Text>
+                        <Text style={styles.receiptValue}>
+                          {dateStr} - {timeStr}
+                        </Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Tarifa cobrada:</Text>
+                        <Text style={styles.receiptValue}>
+                          {Number(selectedPayment.fareCost).toFixed(2)} fares
+                        </Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Tasa BCV:</Text>
+                        <Text style={styles.receiptValue}>
+                          {Number(selectedPayment.bcvRate || 36.5).toFixed(2)}{' '}
+                          Bs/$
+                        </Text>
+                      </View>
+                      <View style={styles.receiptRow}>
+                        <Text style={styles.receiptLabel}>Equivalente Bs:</Text>
+                        <Text
+                          style={[
+                            styles.receiptValue,
+                            { fontFamily: tokens.typography.fontFamily.bold },
+                          ]}
+                        >
+                          {Number(selectedPayment.bsAmount || 0).toFixed(2)} Bs
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Pressable
+                      style={styles.closeModalBtn}
+                      onPress={() => setSelectedPayment(null)}
+                    >
+                      <Text style={styles.closeModalBtnText}>Entendido</Text>
+                    </Pressable>
+                  </View>
+                );
+              })()}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -540,113 +608,160 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 16,
   },
-  infoBanner: {
-    flexDirection: 'row',
-    backgroundColor: '#E0F2FE',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#0284C7',
+  qrCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 24,
     alignItems: 'center',
+    marginBottom: 24,
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 4,
   },
-  infoTitle: {
+  routeHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: '#F0F9FF',
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    width: '100%',
+  },
+  routeHeaderLabel: {
     fontSize: 9,
     fontFamily: tokens.typography.fontFamily.black,
-    color: '#0369A1',
-    letterSpacing: 0.5,
+    color: '#0284C7',
+    letterSpacing: 0.8,
     marginBottom: 2,
   },
-  infoText: {
+  routeHeaderValue: {
+    fontSize: 13.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#0369A1',
+    textAlign: 'center',
+  },
+  qrContainer: {
+    width: 200,
+    height: 200,
+    borderRadius: 20,
+    padding: 10,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  qrImage: {
+    width: 170,
+    height: 170,
+  },
+  scanPulse: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: '#0EA5E9',
+    opacity: 0.4,
+  },
+  qrFareValue: {
+    fontSize: 28,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#1E293B',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  qrInstruction: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 8,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#18243E',
+    marginBottom: 12,
+    marginLeft: 4,
+    marginTop: 8,
+  },
+  feedCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 24,
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  feedEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+  },
+  feedEmptyText: {
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.medium,
-    color: '#0284C7',
-  },
-  scannerWrapper: {
-    backgroundColor: '#0F172A',
-    borderRadius: 28,
-    height: 250,
-    overflow: 'hidden',
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 3,
-  },
-  scannerOverlay: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  scanTargetBox: {
-    width: 140,
-    height: 140,
-    position: 'relative',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  corner: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderColor: '#10B981', // Emerald 500
-  },
-  topLeft: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-    borderTopLeftRadius: 12,
-  },
-  topRight: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-    borderTopRightRadius: 12,
-  },
-  bottomLeft: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-    borderBottomLeftRadius: 12,
-  },
-  bottomRight: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-    borderBottomRightRadius: 12,
-  },
-  scanningLine: {
-    width: '100%',
-    height: 2.5,
-    backgroundColor: '#10B981',
-    position: 'absolute',
-    top: '50%',
-    opacity: 0.7,
-  },
-  scannerPrompt: {
     color: '#94A3B8',
-    fontSize: 12.5,
-    fontFamily: tokens.typography.fontFamily.bold,
-    marginTop: 16,
+    marginTop: 8,
   },
-  inputLabel: {
+  feedItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+  },
+  feedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  feedIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedPassenger: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+  },
+  feedTime: {
     fontSize: 11,
-    fontFamily: tokens.typography.fontFamily.black,
-    color: '#8594AB',
-    letterSpacing: 1.1,
-    marginBottom: 8,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  feedRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  feedAmount: {
+    fontSize: 14.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#16A34A',
+  },
+  feedDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
   },
   inputCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 16,
     height: 56,
     marginBottom: 24,
@@ -672,43 +787,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: tokens.typography.fontFamily.bold,
     fontSize: 13,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#18243E',
-    marginBottom: 10,
-    marginLeft: 4,
-  },
-  simulationGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  simBtnSuccess: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#16A34A',
-    borderRadius: 12,
-    height: 42,
-    width: '48%',
-    marginBottom: 10,
-  },
-  simBtnError: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#DC2626',
-    borderRadius: 12,
-    height: 42,
-    width: '48%',
-    marginBottom: 10,
-  },
-  simBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontFamily: tokens.typography.fontFamily.bold,
   },
   offlineIconWrapper: {
     width: 96,
@@ -744,105 +822,201 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.bold,
     fontSize: 14.5,
   },
-  resultContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  bgSuccess: {
-    backgroundColor: '#DCFCE7', // Light green
-  },
-  bgError: {
-    backgroundColor: '#FEE2E2', // Light red
-  },
-  resultCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 32,
-    padding: 24,
-    width: '100%',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 6,
-  },
-  resultIconWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  iconSuccessBg: {
-    backgroundColor: '#DCFCE7',
-  },
-  iconErrorBg: {
-    backgroundColor: '#FEE2E2',
-  },
-  resultTitle: {
-    fontSize: 22,
-    fontFamily: tokens.typography.fontFamily.black,
-    marginBottom: 8,
-  },
-  resultMessageText: {
-    fontSize: 14.5,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#475569',
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  resultDetailsCard: {
-    width: '100%',
-    backgroundColor: '#F8FAFC',
+  notificationBanner: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: '#16A34A', // Green 600
     borderRadius: 20,
     padding: 16,
-    marginBottom: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#16A34A',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
+    zIndex: 999,
   },
-  detailRow: {
-    marginVertical: 4,
+  notificationBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  detailLabel: {
+  notificationTitle: {
     fontSize: 9,
     fontFamily: tokens.typography.fontFamily.black,
-    color: '#8594AB',
-    letterSpacing: 0.5,
-    marginBottom: 2,
+    color: '#FFFFFF',
+    letterSpacing: 1.1,
+    marginBottom: 1,
+    opacity: 0.9,
   },
-  detailValue: {
-    fontSize: 14,
+  notificationText: {
+    fontSize: 13.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#FFFFFF',
+  },
+  notificationTime: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#FFFFFF',
+    opacity: 0.8,
+  },
+  // Nuevos estilos para detalles de pasajero y modal de recibo
+  feedCedula: {
+    fontSize: 11.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  feedRightContainer: {
+    alignItems: 'flex-end',
+  },
+  detailsBtn: {
+    marginTop: 4,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  detailsBtnText: {
+    fontSize: 10.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    width: '100%',
+    maxWidth: 380,
+    padding: 24,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16.5,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#1E293B',
   },
-  detailValueMono: {
-    fontSize: 12,
-    fontFamily: Platform.OS === 'ios' ? 'Courier New' : 'monospace',
-    fontWeight: 'bold',
-    color: '#64748B',
+  receiptContainer: {
+    alignItems: 'center',
   },
-  detailDivider: {
-    height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 10,
+  receiptHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  dismissBtn: {
-    borderRadius: 16,
-    height: 52,
-    width: '100%',
+  receiptSuccessIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#DCFCE7',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    marginBottom: 8,
+  },
+  receiptStatusText: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#16A34A',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+  },
+  receiptAmount: {
+    fontSize: 24,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#1E293B',
+  },
+  ticketBody: {
+    width: '100%',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  ticketDividerWrapper: {
+    marginVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ticketDashedLine: {
+    width: '100%',
+    height: 1,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
+  },
+  receiptSectionTitle: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#64748B',
+    letterSpacing: 1.1,
+    marginBottom: 8,
+  },
+  receiptRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  receiptLabel: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+  },
+  receiptValue: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+    textAlign: 'right',
+  },
+  receiptCode: {
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 12,
+    color: '#475569',
+  },
+  closeModalBtn: {
+    backgroundColor: tokens.colors.primary,
+    borderRadius: 14,
+    width: '100%',
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    shadowColor: tokens.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 10,
+    shadowRadius: 8,
     elevation: 3,
   },
-  dismissBtnText: {
+  closeModalBtnText: {
     color: '#FFFFFF',
+    fontSize: 14.5,
     fontFamily: tokens.typography.fontFamily.bold,
-    fontSize: 15,
   },
 });

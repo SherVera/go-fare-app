@@ -20,6 +20,7 @@ export interface ButtonProps {
 export interface ScreenHeaderProps {
   title: string;
   onBack?: () => void;
+  onMenu?: () => void;
 }
 
 /** Props para tarjetas de características FeatureCard */

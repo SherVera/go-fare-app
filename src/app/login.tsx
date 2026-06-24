@@ -26,6 +26,7 @@ import {
   syncWithBackend,
 } from '@/lib/api';
 import {
+  auth,
   sendVerificationEmail,
   signIn,
   signInWithGoogle,
@@ -124,19 +125,53 @@ export default function LoginScreen() {
           }
 
           const roles = (backendUser as any).roles || [];
+          const isAdmin = roles.some(
+            (role: any) =>
+              role.name === 'platform_admin' || role.name === 'admin',
+          );
           const isOwner = roles.some(
             (role: any) => role.name === 'transport_owner',
           );
           const isDriver = roles.some((role: any) => role.name === 'driver');
 
-          if (isOwner) {
-            await AsyncStorage.setItem('user_role', 'transport_owner');
+          let biometricRole = isAdmin
+            ? 'platform_admin'
+            : isOwner
+              ? 'transport_owner'
+              : isDriver
+                ? 'driver'
+                : 'passenger';
+
+          // Fallback a Firebase Custom Claims si el backend devuelve 'passenger'
+          if (biometricRole === 'passenger') {
+            try {
+              const fbUser = auth.currentUser;
+              if (fbUser) {
+                const idTokenResult = await fbUser.getIdTokenResult(false);
+                const claimRole = (idTokenResult.claims as any)?.role as
+                  | string
+                  | undefined;
+                const PRIVILEGED_ROLES = [
+                  'platform_admin',
+                  'admin',
+                  'transport_owner',
+                  'driver',
+                ];
+                if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+                  biometricRole = claimRole;
+                }
+              }
+            } catch {}
+          }
+
+          await AsyncStorage.setItem('user_role', biometricRole);
+          if (biometricRole === 'platform_admin' || biometricRole === 'admin') {
+            router.replace('/admin/dashboard' as any);
+          } else if (biometricRole === 'transport_owner') {
             router.replace('/vehicle-owner/dashboard' as any);
-          } else if (isDriver) {
-            await AsyncStorage.setItem('user_role', 'driver');
+          } else if (biometricRole === 'driver') {
             router.replace('/driver/dashboard' as any);
           } else {
-            await AsyncStorage.setItem('user_role', 'passenger');
             router.replace('/(tabs)' as any);
           }
         }
@@ -169,6 +204,15 @@ export default function LoginScreen() {
           await syncWithBackend(credential.user);
         } catch (backendErr) {
           console.warn('[google] backend sync failed:', backendErr);
+          try {
+            await sigOutAccount();
+          } catch {}
+          Alert.alert(
+            'Error de Conexión',
+            'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.',
+          );
+          setLoading(false);
+          return;
         }
       }
     } catch (error: any) {
@@ -215,8 +259,17 @@ export default function LoginScreen() {
         password: trimmedPassword,
       });
 
+      // Recargar el usuario para asegurarnos de tener el estado de verificación más reciente
+      try {
+        await userCredential.user.reload();
+      } catch (reloadErr) {
+        console.warn('[Login] Error al recargar el usuario:', reloadErr);
+      }
+
+      const currentUser = auth.currentUser || userCredential.user;
+
       // Bloquear acceso si el correo no ha sido verificado
-      if (!userCredential.user.emailVerified) {
+      if (!currentUser.emailVerified) {
         // Cerrar sesión para no dejar al usuario en un estado intermedio
         try {
           await sigOutAccount();
@@ -261,13 +314,20 @@ export default function LoginScreen() {
       // Correo verificado — sincronizar con backend y permitir acceso
       let backendUser;
       try {
-        const response = await syncWithBackend(userCredential.user);
+        const response = await syncWithBackend(currentUser);
         backendUser = response.user;
       } catch (backendError) {
-        console.warn(
-          '[backend] sync failed, proceeding with Firebase auth only:',
-          backendError,
+        console.warn('[backend] sync failed:', backendError);
+        // Cerrar sesión localmente en Firebase para mantener consistencia
+        try {
+          await sigOutAccount();
+        } catch {}
+        Alert.alert(
+          'Error de Conexión',
+          'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.',
         );
+        setLoading(false);
+        return; // Detener flujo de inicio de sesión!
       }
 
       // Guardar credenciales encriptadas para inicio rápido
@@ -284,42 +344,70 @@ export default function LoginScreen() {
         );
       }
 
-      if (backendUser) {
-        // Sincronizar o crear la cuenta de tarifa (Fare Account) del usuario
+      // Sincronizar o crear la cuenta de tarifa (Fare Account) del usuario
+      try {
+        await getFareAccountByUserId(backendUser.id);
+      } catch {
         try {
-          await getFareAccountByUserId(backendUser.id);
-        } catch {
-          try {
-            await createFareAccount(backendUser.id);
-          } catch (createError) {
-            console.warn(
-              '[Login] Error al crear la cuenta de tarifa:',
-              createError,
-            );
-          }
+          await createFareAccount(backendUser.id);
+        } catch (createError) {
+          console.warn(
+            '[Login] Error al crear la cuenta de tarifa:',
+            createError,
+          );
         }
+      }
 
-        const roles = (backendUser as any).roles || [];
-        const isOwner = roles.some(
-          (role: any) => role.name === 'transport_owner',
-        );
-        const isDriver = roles.some((role: any) => role.name === 'driver');
-        const userRole = isOwner
+      const roles = (backendUser as any).roles || [];
+      const isAdmin = roles.some(
+        (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+      );
+      const isOwner = roles.some(
+        (role: any) => role.name === 'transport_owner',
+      );
+      const isDriver = roles.some((role: any) => role.name === 'driver');
+      let userRole = isAdmin
+        ? 'platform_admin'
+        : isOwner
           ? 'transport_owner'
           : isDriver
             ? 'driver'
             : 'passenger';
-        await AsyncStorage.setItem('user_role', userRole);
 
-        if (isOwner) {
-          router.replace('/vehicle-owner/dashboard' as any);
-        } else if (isDriver) {
-          router.replace('/driver/dashboard' as any);
-        } else {
-          router.replace('/(tabs)' as any);
+      // Fallback a Firebase Custom Claims si el backend devuelve 'passenger'
+      if (userRole === 'passenger') {
+        try {
+          const fbUser = auth.currentUser;
+          if (fbUser) {
+            const idTokenResult = await fbUser.getIdTokenResult(false);
+            const claimRole = (idTokenResult.claims as any)?.role as
+              | string
+              | undefined;
+            const PRIVILEGED_ROLES = [
+              'platform_admin',
+              'admin',
+              'transport_owner',
+              'driver',
+            ];
+            if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+              console.log('[Login] Usando Custom Claim para rol:', claimRole);
+              userRole = claimRole;
+            }
+          }
+        } catch (claimErr) {
+          console.warn('[Login] Error leyendo custom claims:', claimErr);
         }
+      }
+
+      await AsyncStorage.setItem('user_role', userRole);
+
+      if (userRole === 'platform_admin' || userRole === 'admin') {
+        router.replace('/admin/dashboard' as any);
+      } else if (userRole === 'transport_owner') {
+        router.replace('/vehicle-owner/dashboard' as any);
+      } else if (userRole === 'driver') {
+        router.replace('/driver/dashboard' as any);
       } else {
-        await AsyncStorage.setItem('user_role', 'passenger');
         router.replace('/(tabs)' as any);
       }
     } catch (error: any) {

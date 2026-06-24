@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -34,12 +34,9 @@ import { tokens } from '@/theme/tokens';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { role } = useLocalSearchParams<{ role?: string }>();
   // Estado del formulario — tipado por RegisterFormState
   const [fullName, setFullName] = useState<RegisterFormState['fullName']>('');
-  const [registrationRole, setRegistrationRole] = useState<
-    'passenger' | 'driver'
-  >(role === 'driver' || role === 'passenger' ? role : 'passenger');
+  const registrationRole = 'passenger';
   const [idNumber, setIdNumber] = useState<RegisterFormState['idNumber']>('');
   const [email, setEmail] = useState<RegisterFormState['email']>('');
   const [password, setPassword] = useState<RegisterFormState['password']>('');
@@ -118,6 +115,7 @@ export default function RegisterScreen() {
         registrationRole,
         displayName: trimmedFullName,
         phoneNumber: trimmedPhoneNumber,
+        nationalId: trimmedIdNumber,
       });
 
       // 2. Firmar sesión local temporalmente para poder escribir a Firestore
@@ -380,65 +378,10 @@ export default function RegisterScreen() {
           {/* ── TÍTULOS ── */}
           <View style={styles.titleBlock}>
             <Text style={styles.titleDark}>Únete a</Text>
-            <Text style={styles.titleBlue}>GoFair</Text>
+            <Text style={styles.titleBlue}>GoFare</Text>
             <Text style={styles.subtitle}>
               {`Crea tu cuenta para moverte\nlibremente por la ciudad.`}
             </Text>
-          </View>
-
-          {/* ── INPUTS ── */}
-          <Text style={styles.inputLabel}>TIPO DE CUENTA</Text>
-          <View style={styles.roleContainer}>
-            <Pressable
-              style={[
-                styles.roleButton,
-                registrationRole === 'passenger' && styles.roleButtonActive,
-              ]}
-              onPress={() => setRegistrationRole('passenger')}
-              disabled={loading}
-            >
-              <Ionicons
-                name="person"
-                size={16}
-                color={registrationRole === 'passenger' ? '#FFFFFF' : '#8594AB'}
-              />
-              <Text
-                style={[
-                  styles.roleButtonText,
-                  registrationRole === 'passenger' &&
-                    styles.roleButtonTextActive,
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
-                Pasajero
-              </Text>
-            </Pressable>
-
-            <Pressable
-              style={[
-                styles.roleButton,
-                registrationRole === 'driver' && styles.roleButtonActive,
-              ]}
-              onPress={() => setRegistrationRole('driver')}
-              disabled={loading}
-            >
-              <Ionicons
-                name="card"
-                size={16}
-                color={registrationRole === 'driver' ? '#FFFFFF' : '#8594AB'}
-              />
-              <Text
-                style={[
-                  styles.roleButtonText,
-                  registrationRole === 'driver' && styles.roleButtonTextActive,
-                ]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-              >
-                Conductor
-              </Text>
-            </Pressable>
           </View>
 
           <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>

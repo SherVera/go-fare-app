@@ -17,13 +17,15 @@ import { ActionCard } from '@/components/Home/ActionCard';
 import { BalanceCard } from '@/components/Home/BalanceCard';
 import { MapCard } from '@/components/Home/MapCard';
 import { RouteItem } from '@/components/Home/RouteItem';
+import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import type { Route, UserProfile } from '@/interfaces';
 import {
   createFareAccount,
   getBackendProfile,
   getFareAccountByUserId,
+  getUserTickets,
 } from '@/lib/api';
-import { auth, getDocument } from '@/lib/firebase';
+import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function HomeDashboard() {
@@ -31,6 +33,7 @@ export default function HomeDashboard() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showPhoneLink, setShowPhoneLink] = useState(false);
 
   const fetchUserData = useCallback(async () => {
     // 1. Cargar desde la caché local de forma instantánea
@@ -59,67 +62,124 @@ export default function HomeDashboard() {
         // Si no existe la cuenta de tarifa, la creamos
         try {
           fareAccount = await createFareAccount(backendUser.id);
-        } catch (createError) {
+        } catch (createError: any) {
           console.error(
             '[Home] Error al crear la cuenta de tarifa:',
             createError,
           );
+          const errMsg = createError?.message || '';
+          if (
+            errMsg.includes('phone/link') ||
+            errMsg.includes('phone number') ||
+            errMsg.includes('auth/phone/link')
+          ) {
+            // Se omite la vinculación telefónica por ahora
+            // setShowPhoneLink(true);
+          }
         }
       }
 
-      // Obtener datos legacy de Firestore para compatibilidad (carnetId, idNumber)
-      const legacyData = await getDocument(`users/${user.uid}`).catch(
-        () => null,
-      );
-      const carnetId =
-        legacyData?.carnetId ||
-        `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`;
+      // Obtener carnetId de caché local o generar uno nuevo
+      let carnetId = 'GO-0000-0000';
+      try {
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached) {
+          const cachedProfile = JSON.parse(cached);
+          if (cachedProfile.carnetId) {
+            carnetId = cachedProfile.carnetId;
+          }
+        }
+      } catch (e) {
+        console.warn('[Home] Error al cargar carnetId de la caché:', e);
+      }
+
+      if (carnetId === 'GO-0000-0000') {
+        carnetId = `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
 
       const updatedProfile = {
         uid: user.uid,
         fullName:
           backendUser.displayName ||
           `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-          legacyData?.fullName ||
           'Usuario',
         displayName:
           backendUser.displayName ||
           `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-          legacyData?.fullName ||
           'Usuario',
-        idNumber: legacyData?.idNumber || 'V-00000000',
+        idNumber: backendUser.nationalId || 'V-00000000',
         email: backendUser.email,
-        phoneNumber: backendUser.phoneNumber || legacyData?.phoneNumber || '',
+        phoneNumber: backendUser.phoneNumber || '',
         balance: fareAccount?.balance ?? 0,
         carnetId,
         createdAt: backendUser.createdAt,
       };
 
-      setUserProfile(updatedProfile);
+      const ticketProfile = {
+        ...updatedProfile,
+        balance: Number(fareAccount?.balance ?? 0),
+      };
+
+      setUserProfile(ticketProfile);
       // Guardar en la caché local
       await AsyncStorage.setItem(
         'gofare_cached_user_profile',
-        JSON.stringify(updatedProfile),
+        JSON.stringify(ticketProfile),
       );
 
       // Sincronizar el rol del usuario para evitar desvíos o incoherencias
+      const isAdmin = (backendUser as any).roles?.some(
+        (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+      );
       const isOwner = (backendUser as any).roles?.some(
         (role: any) => role.name === 'transport_owner',
       );
       const isDriver = (backendUser as any).roles?.some(
         (role: any) => role.name === 'driver',
       );
-      const newRole = isOwner
-        ? 'transport_owner'
-        : isDriver
-          ? 'driver'
-          : 'passenger';
+      let newRole = isAdmin
+        ? 'platform_admin'
+        : isOwner
+          ? 'transport_owner'
+          : isDriver
+            ? 'driver'
+            : 'passenger';
+
+      // Fallback a Firebase Custom Claims si el backend devuelve 'passenger'
+      if (newRole === 'passenger') {
+        try {
+          const { auth: firebaseAuth } = await import('@/lib/firebase');
+          const fbUser = firebaseAuth.currentUser;
+          if (fbUser) {
+            const idTokenResult = await fbUser.getIdTokenResult(false);
+            const claimRole = (idTokenResult.claims as any)?.role as
+              | string
+              | undefined;
+            const PRIVILEGED_ROLES = [
+              'platform_admin',
+              'admin',
+              'transport_owner',
+              'driver',
+            ];
+            if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+              console.log('[Home] Usando Custom Claim para rol:', claimRole);
+              newRole = claimRole;
+            }
+          }
+        } catch (claimErr) {
+          console.warn('[Home] Error leyendo custom claims:', claimErr);
+        }
+      }
+
       await AsyncStorage.setItem('user_role', newRole);
 
-      if (isOwner) {
+      if (newRole === 'platform_admin' || newRole === 'admin') {
+        console.log('[Home] User is platform admin, redirecting...');
+        router.replace('/admin/dashboard' as any);
+      } else if (newRole === 'transport_owner') {
         console.log('[Home] User is transport owner, redirecting...');
         router.replace('/vehicle-owner/dashboard' as any);
-      } else if (isDriver) {
+      } else if (newRole === 'driver') {
         console.log('[Home] User is driver, redirecting...');
         router.replace('/driver/dashboard' as any);
       }
@@ -128,26 +188,26 @@ export default function HomeDashboard() {
         '[Home] Error al obtener datos del backend:',
         error.message || error,
       );
-      // Si el error es de autorización (Unauthorized), no hacemos fallback a Firestore
+      // Si el error es de autorización (Unauthorized), no hacemos fallback
       if (error?.message === 'Unauthorized') {
         return;
       }
-      // Fallback a Firestore local en caso de error de conexión
+      // Fallback a caché local en caso de error de conexión
       try {
-        const legacyData = await getDocument(`users/${user.uid}`);
-        if (legacyData) {
-          setUserProfile(legacyData as UserProfile);
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached) {
+          setUserProfile(JSON.parse(cached));
         }
-      } catch (fbError: any) {
+      } catch (cacheErr: any) {
         console.log(
-          '[Home] Error en fallback de Firestore:',
-          fbError.message || fbError,
+          '[Home] Error en fallback de caché local:',
+          cacheErr.message || cacheErr,
         );
       }
     }
     setLoading(false);
     setRefreshing(false);
-  }, []);
+  }, [router.replace]);
 
   useFocusEffect(
     useCallback(() => {
@@ -197,7 +257,7 @@ export default function HomeDashboard() {
       {/* ── CUSTOM HEADER ── */}
       <View style={styles.header}>
         <View style={styles.headerIcon} />
-        <Text style={styles.headerTitle}>GoFair</Text>
+        <Text style={styles.headerTitle}>GoFare</Text>
         <Pressable style={styles.headerIcon}>
           <Ionicons
             name="notifications-outline"
@@ -238,13 +298,13 @@ export default function HomeDashboard() {
         {/* ── QUICK ACTIONS ── */}
         <View style={styles.actionsRow}>
           <ActionCard
-            title="Recargar saldo"
-            subtitle="Instantáneo vía Pago Móvil o tarjeta"
-            icon="wallet-plus"
+            title="Comprar Fares"
+            subtitle="Adquiere fares vía Pago Móvil o tarjeta"
+            icon="ticket"
             onPress={() => router.push('/topup')}
           />
           <ActionCard
-            title="Pagar viajes"
+            title="Pagar viaje"
             subtitle="Escanea el código en la unidad"
             icon="qrcode-scan"
             color={tokens.colors.iconGreen}
@@ -280,6 +340,15 @@ export default function HomeDashboard() {
         {/* Padding for tab bar */}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <PhoneLinkModal
+        visible={showPhoneLink}
+        onClose={() => setShowPhoneLink(false)}
+        onSuccess={() => {
+          fetchUserData();
+        }}
+        initialPhoneNumber={userProfile?.phoneNumber}
+      />
     </SafeAreaView>
   );
 }

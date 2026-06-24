@@ -190,7 +190,7 @@ export default function VehicleOwnerDashboard() {
   const pendingUnits = vehicles.filter((v) => v.status === 'pending').length;
   const rejectedUnits = vehicles.filter((v) => v.status === 'rejected').length;
 
-  const handleShowNotes = (vehicle: MockVehicle) => {
+  const _handleShowNotes = (vehicle: MockVehicle) => {
     setSelectedVehicle(vehicle);
     setIsModalVisible(true);
   };

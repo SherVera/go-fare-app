@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { clearGoFareToken, getBackendProfile } from '@/lib/api';
-import { auth, getDocument, sigOutAccount } from '@/lib/firebase';
+import { auth, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 interface MockVehicle {
@@ -59,15 +59,23 @@ export default function VehicleOwnerProfile() {
           );
           setEmail(backendUser.email);
           setPhone(backendUser.phoneNumber || 'No registrado');
-        } catch {
-          // Fallback a Firestore
-          const legacyData = await getDocument(`users/${user.uid}`).catch(
-            () => null,
+        } catch (apiErr) {
+          console.warn(
+            '[Profile] API error, falling back to local cache:',
+            apiErr,
           );
-          if (legacyData) {
-            setName(legacyData.fullName || 'Socio');
-            setEmail(legacyData.email || user.email || 'socio@example.com');
-            setPhone(legacyData.phoneNumber || 'No registrado');
+          try {
+            const cached = await AsyncStorage.getItem(
+              'gofare_cached_user_profile',
+            );
+            if (cached) {
+              const cachedData = JSON.parse(cached);
+              setName(cachedData.fullName || cachedData.displayName || 'Socio');
+              setEmail(cachedData.email || user.email || 'socio@example.com');
+              setPhone(cachedData.phoneNumber || 'No registrado');
+            }
+          } catch (cacheErr) {
+            console.warn('[Profile] Error loading cached data:', cacheErr);
           }
         }
       }
