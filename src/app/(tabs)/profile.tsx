@@ -1,11 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,12 +16,190 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { sigOutAccount } from '@/lib/firebase';
+import { PhoneLinkModal } from '@/components/PhoneLinkModal';
+import type {
+  ProfileInfoCard,
+  ProfileMenuItem,
+  UserProfile,
+} from '@/interfaces';
+import {
+  BASE_URL,
+  clearGoFareToken,
+  getBackendProfile,
+  getFareAccountByUserId,
+} from '@/lib/api';
+import { auth, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const router = useRouter();
+
+  const fetchUserData = useCallback(async () => {
+    const user = auth.currentUser;
+    if (user) {
+      // 1. Cargar desde la caché local de forma instantánea
+      try {
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached) {
+          setUserProfile(JSON.parse(cached));
+        }
+      } catch (cacheErr) {
+        console.warn('[Profile] Error al cargar caché del perfil:', cacheErr);
+      }
+
+      // 2. Consultar servidor en segundo plano
+      try {
+        const backendUser = await getBackendProfile();
+        let fareAccountBalance = 0;
+        try {
+          const account = await getFareAccountByUserId(backendUser.id);
+          fareAccountBalance = account.balance;
+        } catch (accountErr) {
+          console.warn('[Profile] Error loading fare account:', accountErr);
+        }
+
+        const updatedProfile: UserProfile = {
+          uid: user.uid,
+          backendUuid: backendUser.id,
+          fullName:
+            backendUser.displayName ||
+            `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+            'Usuario',
+          displayName:
+            backendUser.displayName ||
+            `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+            'Usuario',
+          idNumber: backendUser.nationalId || 'V-00000000',
+          email: backendUser.email,
+          phoneNumber: backendUser.phoneNumber || '',
+          balance: fareAccountBalance,
+          photoURL:
+            backendUser.profilePhoto || 'https://i.pravatar.cc/150?img=11',
+          city: 'Caracas, Venezuela',
+          createdAt: backendUser.createdAt,
+        };
+
+        setUserProfile(updatedProfile);
+
+        // Guardar en la caché local y sincronizar rol
+        await AsyncStorage.setItem(
+          'gofare_cached_user_profile',
+          JSON.stringify(updatedProfile),
+        );
+
+        const isAdmin = (backendUser as any).roles?.some(
+          (role: any) => role.name === 'platform_admin',
+        );
+        const isOwner = (backendUser as any).roles?.some(
+          (role: any) => role.name === 'transport_owner',
+        );
+        const isDriver = (backendUser as any).roles?.some(
+          (role: any) => role.name === 'driver',
+        );
+        const newRole = isAdmin
+          ? 'platform_admin'
+          : isOwner
+            ? 'transport_owner'
+            : isDriver
+              ? 'driver'
+              : 'passenger';
+        await AsyncStorage.setItem('user_role', newRole);
+
+        if (isAdmin) {
+          console.log('[Profile] User is platform admin, redirecting...');
+          router.replace('/admin/dashboard' as any);
+        } else if (isOwner) {
+          console.log('[Profile] User is transport owner, redirecting...');
+          router.replace('/vehicle-owner/dashboard' as any);
+        } else if (isDriver) {
+          console.log('[Profile] User is driver, redirecting...');
+          router.replace('/driver/dashboard' as any);
+        }
+      } catch (error: any) {
+        console.log(
+          '[Profile] Error al obtener datos del backend:',
+          error.message || error,
+        );
+        if (error?.message === 'Unauthorized') {
+          return;
+        }
+        // Fallback a caché local en caso de error
+        try {
+          const cached = await AsyncStorage.getItem(
+            'gofare_cached_user_profile',
+          );
+          if (cached) {
+            const fbProfile = JSON.parse(cached);
+            setUserProfile(fbProfile);
+          }
+        } catch (cacheErr: any) {
+          console.log(
+            '[Profile] Error en fallback de caché local:',
+            cacheErr.message || cacheErr,
+          );
+        }
+      }
+    }
+  }, [router.replace]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserData();
+    }, [fetchUserData]),
+  );
+
+  // Tarjetas de información — tipadas con ProfileInfoCard[]
+  const infoCards: ProfileInfoCard[] = [
+    {
+      label: 'CORREO ELECTRÓNICO',
+      value: userProfile?.email || '...',
+      type: 'email',
+    },
+    {
+      label: 'TELÉFONO',
+      value: userProfile?.phoneNumber || '...',
+      type: 'phone',
+    },
+    {
+      label: 'CIUDAD',
+      value: userProfile?.city || 'Caracas, Venezuela',
+      type: 'location',
+    },
+  ];
+
+  // Ítems del menú — tipados con ProfileMenuItem[]
+  const menuItems: ProfileMenuItem[] = [
+    {
+      id: 'payments',
+      title: 'Métodos de Pago',
+      subtitle: 'Visa, Master y Pago Móvil',
+      iconName: 'card',
+      onPress: () => {},
+    },
+    {
+      id: 'security',
+      title: 'Seguridad y Contraseña',
+      subtitle: '2FA y cambio de clave',
+      iconName: 'lock-closed',
+      onPress: () => router.push('/security'),
+    },
+    {
+      id: 'notifications',
+      title: 'Notificaciones',
+      subtitle: 'Alertas de viaje y recargas',
+      iconName: 'notifications',
+      onPress: () => {},
+    },
+    {
+      id: 'support',
+      title: 'Ayuda y Soporte',
+      subtitle: 'Centro de asistencia 24/7',
+      iconName: 'information-circle',
+      onPress: () => {},
+    },
+  ];
 
   const handleLogout = () => {
     Alert.alert('Cerrar Sesión', '¿Estás seguro de que deseas cerrar sesión?', [
@@ -29,8 +210,27 @@ export default function ProfileScreen() {
         onPress: async () => {
           try {
             setLoggingOut(true);
-            await sigOutAccount();
-            router.replace('/login');
+            try {
+              await sigOutAccount();
+            } catch (authError) {
+              console.warn(
+                '[Profile] Error al cerrar sesión de Firebase (offline):',
+                authError,
+              );
+            }
+            await clearGoFareToken();
+            try {
+              await SecureStore.deleteItemAsync('savedEmail');
+              await SecureStore.deleteItemAsync('savedPassword');
+              await AsyncStorage.removeItem('gofare_cached_user_profile');
+              await AsyncStorage.removeItem('temp_auth');
+              await AsyncStorage.removeItem('user_role');
+            } catch (err) {
+              console.warn(
+                '[Profile] Error deleting saved credentials/cache:',
+                err,
+              );
+            }
           } catch (error) {
             console.error('Error al cerrar sesión:', error);
             Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
@@ -48,10 +248,7 @@ export default function ProfileScreen() {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        <Pressable hitSlop={10} style={styles.menuBtn}>
-          <Ionicons name="menu" size={28} color={tokens.colors.primary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>GoFair</Text>
+        <Text style={styles.headerTitle}>GoFare</Text>
         <Image
           source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
           style={styles.headerAvatar}
@@ -66,98 +263,64 @@ export default function ProfileScreen() {
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <Image
-              source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
+              source={{
+                uri:
+                  userProfile?.photoURL || 'https://i.pravatar.cc/150?img=11',
+              }}
               style={styles.profileAvatar}
             />
           </View>
-          <Text style={styles.profileName}>Carlos Pérez</Text>
+          <Text style={styles.profileName}>
+            {userProfile?.fullName || 'Usuario'}
+          </Text>
           <View style={styles.idBadge}>
-            <Text style={styles.idText}>ID: 4892-3012-8821</Text>
+            <Text style={styles.idText}>Cedula: {userProfile?.idNumber}</Text>
           </View>
         </View>
 
         {/* ── INFO CARDS ── */}
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>CORREO ELECTRÓNICO</Text>
-          <Text style={styles.infoValueBlue}>carlos.perez@email.com</Text>
-        </View>
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>TELÉFONO</Text>
-          <Text style={styles.infoValueBlue}>+58 412 555 1234</Text>
-        </View>
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>CIUDAD</Text>
-          <View style={styles.locationRow}>
-            <Ionicons
-              name="location-outline"
-              size={20}
-              color="#0F766E"
-              style={styles.locationIcon}
-            />
-            <Text style={styles.infoValueDark}>Caracas, Venezuela</Text>
+        {infoCards.map((card, idx) => (
+          <View key={idx} style={styles.infoCard}>
+            <Text style={styles.infoLabel}>{card.label}</Text>
+            {card.type === 'location' ? (
+              <View style={styles.locationRow}>
+                <Ionicons
+                  name="location-outline"
+                  size={20}
+                  color="#0F766E"
+                  style={styles.locationIcon}
+                />
+                <Text style={styles.infoValueDark}>{card.value}</Text>
+              </View>
+            ) : (
+              <Text style={styles.infoValueBlue}>{card.value}</Text>
+            )}
           </View>
-        </View>
+        ))}
 
         {/* ── CONFIGURATION SECTION ── */}
         <Text style={styles.sectionTitle}>Configuración de la Cuenta</Text>
 
-        <Pressable style={styles.menuItem}>
-          <View style={styles.menuIconWrapper}>
-            <Ionicons name="card" size={22} color={tokens.colors.primary} />
-          </View>
-          <View style={styles.menuInfo}>
-            <Text style={styles.menuTitle}>Métodos de Pago</Text>
-            <Text style={styles.menuSubtitle}>Visa, Master y Pago Móvil</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </Pressable>
-
-        <Pressable style={styles.menuItem}>
-          <View style={styles.menuIconWrapper}>
-            <Ionicons
-              name="lock-closed"
-              size={22}
-              color={tokens.colors.primary}
-            />
-          </View>
-          <View style={styles.menuInfo}>
-            <Text style={styles.menuTitle}>Seguridad y Contraseña</Text>
-            <Text style={styles.menuSubtitle}>2FA y cambio de clave</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </Pressable>
-
-        <Pressable style={styles.menuItem}>
-          <View style={styles.menuIconWrapper}>
-            <Ionicons
-              name="notifications"
-              size={22}
-              color={tokens.colors.primary}
-            />
-          </View>
-          <View style={styles.menuInfo}>
-            <Text style={styles.menuTitle}>Notificaciones</Text>
-            <Text style={styles.menuSubtitle}>Alertas de viaje y recargas</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </Pressable>
-
-        <Pressable style={styles.menuItem}>
-          <View style={styles.menuIconWrapper}>
-            <Ionicons
-              name="information-circle"
-              size={24}
-              color={tokens.colors.primary}
-            />
-          </View>
-          <View style={styles.menuInfo}>
-            <Text style={styles.menuTitle}>Ayuda y Soporte</Text>
-            <Text style={styles.menuSubtitle}>Centro de asistencia 24/7</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-        </Pressable>
+        {menuItems.map((item) => (
+          <Pressable
+            key={item.id}
+            style={styles.menuItem}
+            onPress={item.onPress}
+          >
+            <View style={styles.menuIconWrapper}>
+              <Ionicons
+                name={item.iconName}
+                size={22}
+                color={tokens.colors.primary}
+              />
+            </View>
+            <View style={styles.menuInfo}>
+              <Text style={styles.menuTitle}>{item.title}</Text>
+              <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+          </Pressable>
+        ))}
 
         {/* ── LOGOUT BUTTON ── */}
         <Pressable
@@ -183,6 +346,18 @@ export default function ProfileScreen() {
             {loggingOut ? 'Cerrando sesión...' : 'Cerrar Sesión'}
           </Text>
         </Pressable>
+
+        {/* Debug Info */}
+        <View style={styles.debugCard}>
+          <Text style={styles.debugTitle}>Información de Diagnóstico</Text>
+          <Text style={styles.debugText}>API URL: {BASE_URL}</Text>
+          <Text style={styles.debugText}>
+            Firebase UID: {userProfile?.uid || 'N/A'}
+          </Text>
+          <Text style={styles.debugText}>
+            Backend UUID: {userProfile?.backendUuid || 'Cargando o Fallido...'}
+          </Text>
+        </View>
 
         {/* Space for the absolute tab bar */}
         <View style={{ height: 120 }} />
@@ -353,5 +528,60 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#DC2626',
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  verifyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  verifyBadgeText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#EF4444',
+  },
+  verifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#6EE7B7',
+  },
+  verifiedBadgeText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#10B981',
+  },
+  debugCard: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  debugTitle: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#475569',
+    marginBottom: 8,
+  },
+  debugText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginBottom: 4,
   },
 });

@@ -12,7 +12,7 @@ export const HeaderLogo = () => {
       style={[styles.header, { paddingTop: insets.top + tokens.spacing.xs }]}
     >
       <MaterialIcons name="near-me" size={32} color={tokens.colors.primary} />
-      <Text style={styles.logoText}>GoFair</Text>
+      <Text style={styles.logoText}>GoFare</Text>
     </View>
   );
 };

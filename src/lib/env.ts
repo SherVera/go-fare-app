@@ -1,8 +1,8 @@
 import Constants from 'expo-constants';
 
-type AppExtra = {
+interface AppExtra {
   eas?: { projectId?: string };
-};
+}
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Partial<AppExtra>;
 

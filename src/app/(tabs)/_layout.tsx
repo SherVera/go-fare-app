@@ -68,10 +68,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="topup"
         options={{
-          title: 'RECARGA',
-          tabBarIcon: ({ color, size, focused }) => (
+          title: 'FARES',
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'wallet' : 'wallet-outline'}
+              name={focused ? 'ticket' : 'ticket-outline'}
               size={24}
               color={color}
             />

@@ -1,11 +1,7 @@
-import * as Location from 'expo-location';
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-
-interface NativeMapProps {
-  location: Location.LocationObject;
-}
+import type { NativeMapProps } from '@/interfaces';
 
 export const NativeMap = ({ location }: NativeMapProps) => {
   return (
