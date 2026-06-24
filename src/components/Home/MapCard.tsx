@@ -61,7 +61,7 @@ export const MapCard = () => {
         } else {
           setAddress('Ubicación actual: Coordenadas');
         }
-      } catch (_error) {
+      } catch {
         try {
           // Fallback to last known position
           let location = await Location.getLastKnownPositionAsync({});
@@ -70,7 +70,7 @@ export const MapCard = () => {
             setAddress('Ubicación aproximada');
             return;
           }
-        } catch (_e) {
+        } catch {
           // Ignore
         }
         setErrorMsg('Error al obtener ubicación');

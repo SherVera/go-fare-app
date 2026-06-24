@@ -1,0 +1,91 @@
+name: EAS Build
+
+# Build de la app gobernado por GitHub Actions, alineado con el deploy.yml del frontend:
+# solo dispara cuando un PR se MERGEA a una rama de entorno (no en pushes directos
+# ni al cerrar un PR sin merge). El job `build` solo corre si `verify` pasa, así un
+# merge que rompe lint/types nunca lanza un build EAS (que consume cuota).
+#
+#   staging -> perfil `preview`    (APK interno para QA)
+#   main    -> perfil `production`
+#
+# Por defecto compila Android. iOS requiere credenciales de Apple Developer
+# (ver docs/tecnico/03-deployment.md, Anexo A): añade `ios` cuando estén listas.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [staging, main]
+
+concurrency:
+  group: eas-build-${{ github.event.pull_request.base.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  verify:
+    name: Lint & Typecheck
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (Biome)
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  build:
+    name: EAS Build
+    needs: verify
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # staging -> preview ; main -> production
+      - name: Resolve build profile
+        id: profile
+        run: |
+          if [ "${{ github.event.pull_request.base.ref }}" = "main" ]; then
+            echo "name=production" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=preview" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --no-wait encola el build y devuelve enseguida (no bloquea el runner).
+      # Sigue el progreso en https://expo.dev → Builds.
+      - name: EAS Build (Android)
+        run: eas build --profile ${{ steps.profile.outputs.name }} --platform android --non-interactive --no-wait

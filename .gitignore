@@ -35,6 +35,10 @@ yarn-error.*
 .env.local
 .env.*.local
 
+# Firebase client configs (from Firebase Console; never commit)
+GoogleService-Info.plist
+google-services.json
+
 # typescript
 *.tsbuildinfo
 
@@ -43,3 +47,20 @@ app-example
 # generated native folders
 /ios
 /android
+
+# Agents & AI assistants
+.agents/
+.claude/
+
+# Tokens and private data
+token.txt
+
+# Database sessions / logs
+*.sql
+
+# Firebase local configurations
+.firebase/
+.firebaserc
+firebase.json
+dataconnect/
+

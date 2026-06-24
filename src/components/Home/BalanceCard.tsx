@@ -1,33 +1,53 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { BalanceCardProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
-export const BalanceCard = () => {
+export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
+  const router = useRouter();
+  const currentBalance =
+    typeof balance === 'number' ? balance : parseFloat(balance as any) || 0;
+
   return (
     <LinearGradient
-      colors={['#1E40AF', '#3B82F6', '#EAB308']}
+      colors={['#1E40AF', '#3B82F6', '#0EA5E9']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.card}
     >
       <View style={styles.topRow}>
         <View>
-          <Text style={styles.label}>SALDO DISPONIBLE</Text>
-          <Text style={styles.balance}>
-            482,50 <Text style={styles.currency}>Bs</Text>
-          </Text>
+          <Text style={styles.label}>FARES DISPONIBLES</Text>
+          <View style={styles.balanceRow}>
+            <Text style={styles.balance}>{currentBalance.toFixed(2)}</Text>
+            <Text style={styles.currency}>
+              {' '}
+              {currentBalance === 1 ? 'fare' : 'fares'}
+            </Text>
+          </View>
+          <Text style={styles.subLabel}>Toca para comprar más →</Text>
         </View>
-        <Pressable style={styles.nfcButton}>
-          <MaterialCommunityIcons name="nfc" size={24} color="#FFFFFF" />
+        <Pressable
+          style={styles.buyButton}
+          onPress={() => router.push('/(tabs)/topup')}
+        >
+          <MaterialCommunityIcons
+            name="ticket-confirmation"
+            size={22}
+            color="#FFFFFF"
+          />
         </Pressable>
       </View>
 
       <View style={styles.bottomRow}>
         <View>
           <Text style={styles.labelSmall}>CARACAS MOVE ID</Text>
-          <Text style={styles.idNumber}>4892 • 3012 • 8821</Text>
+          <Text style={styles.idNumber}>
+            {carnetId || '0000 • 0000 • 0000'}
+          </Text>
         </View>
         <View style={styles.iconRow}>
           <View style={[styles.miniIcon, { backgroundColor: '#065F46' }]}>
@@ -71,16 +91,29 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 4,
   },
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   balance: {
     color: '#FFFFFF',
-    fontSize: 42,
+    fontSize: 52,
     fontFamily: tokens.typography.fontFamily.black,
+    lineHeight: 60,
   },
   currency: {
-    fontSize: 22,
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 18,
     fontFamily: tokens.typography.fontFamily.bold,
+    marginLeft: 4,
   },
-  nfcButton: {
+  subLabel: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.medium,
+    marginTop: 4,
+  },
+  buyButton: {
     width: 50,
     height: 50,
     borderRadius: 15,

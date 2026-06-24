@@ -15,15 +15,20 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import type { ForgotPasswordFormState } from '@/interfaces';
 import { sentResetEmail } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
-  const [sentEmail, setSentEmail] = useState('');
+  // Estado del formulario — tipado por ForgotPasswordFormState
+  const [email, setEmail] = useState<ForgotPasswordFormState['email']>('');
+  const [loading, setLoading] =
+    useState<ForgotPasswordFormState['loading']>(false);
+  const [emailSent, setEmailSent] =
+    useState<ForgotPasswordFormState['emailSent']>(false);
+  const [sentEmail, setSentEmail] =
+    useState<ForgotPasswordFormState['sentEmail']>('');
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -50,7 +55,7 @@ export default function ForgotPasswordScreen() {
       setSentEmail(trimmedEmail);
       setEmailSent(true);
     } catch (error: any) {
-      console.error('Reset password error:', error);
+      console.warn('Reset password error:', error);
       if (error.code === 'auth/user-not-found') {
         Alert.alert(
           'Error',
@@ -86,7 +91,7 @@ export default function ForgotPasswordScreen() {
         <View style={styles.blob} />
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <ScreenHeader title="Revisa tu Correo" onBack={handleBack} />
           <ScrollView
@@ -151,7 +156,7 @@ export default function ForgotPasswordScreen() {
                 <Text style={styles.spamBold}>Promociones</Text> (Gmail).{'\n'}
                 3. Agrega{' '}
                 <Text style={styles.spamBold}>
-                  noreply@gofare.firebaseapp.com
+                  noreply@go-fare-dev-e7501.firebaseapp.com
                 </Text>{' '}
                 a tus contactos.{'\n'}
                 4. Si sigue sin llegar, espera 1 minuto y presiona reenviar.
@@ -201,7 +206,7 @@ export default function ForgotPasswordScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScreenHeader title="Recuperar Contraseña" onBack={handleBack} />
 
