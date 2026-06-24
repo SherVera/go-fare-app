@@ -40,6 +40,9 @@ export default function OnboardingScreen() {
   const [phoneNumber, setPhoneNumber] = useState(() =>
     vePhoneFromE164(user?.phoneNumber ?? undefined),
   );
+  const [hasPhone, setHasPhone] = useState(() =>
+    Boolean(user?.phoneNumber && user.phoneNumber.trim().length > 0),
+  );
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -57,12 +60,68 @@ export default function OnboardingScreen() {
               typeof rawId === 'string' ? rawId.replace('V-', '').trim() : '',
             );
           }
-          if (parsed.phoneNumber) setPhoneNumber(parsed.phoneNumber);
+          if (parsed.phoneNumber) {
+            setPhoneNumber(parsed.phoneNumber);
+            setHasPhone(true);
+          }
         }
 
         // Luego intentar del backend para frescura
         const freshProfile = await getBackendProfile();
         if (freshProfile && active) {
+          // Si el usuario es administrador, socio o conductor, no requiere onboarding de pasajero
+          const roles = (freshProfile as any).roles || [];
+          const isAdmin = roles.some(
+            (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+          );
+          const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+          const isDriver = roles.some((r: any) => r.name === 'driver');
+
+          if (isAdmin || isOwner || isDriver) {
+            const resolvedRole = isAdmin
+              ? 'platform_admin'
+              : isOwner
+                ? 'transport_owner'
+                : 'driver';
+            console.log(
+              '[Onboarding] Rol no pasajero detectado en backend:',
+              resolvedRole,
+              '. Omitiendo onboarding.',
+            );
+            await AsyncStorage.setItem('user_role', resolvedRole);
+            await refreshAuthSessionPhase();
+            return;
+          }
+
+          // Fallback: verificar Firebase Custom Claims si el backend dice passenger
+          try {
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+              const idTokenResult = await currentUser.getIdTokenResult(false);
+              const claimRole = (idTokenResult.claims as any)?.role as
+                | string
+                | undefined;
+              const PRIVILEGED_ROLES = [
+                'platform_admin',
+                'admin',
+                'transport_owner',
+                'driver',
+              ];
+              if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+                console.log(
+                  '[Onboarding] Rol de Custom Claim detectado:',
+                  claimRole,
+                  '. Omitiendo onboarding.',
+                );
+                await AsyncStorage.setItem('user_role', claimRole);
+                await refreshAuthSessionPhase();
+                return;
+              }
+            }
+          } catch (claimErr) {
+            console.warn('[Onboarding] Error leyendo custom claims:', claimErr);
+          }
+
           if (freshProfile.displayName) {
             setFullName(freshProfile.displayName);
           } else if (freshProfile.firstName || freshProfile.lastName) {
@@ -79,6 +138,7 @@ export default function OnboardingScreen() {
           }
           if (freshProfile.phoneNumber) {
             setPhoneNumber(freshProfile.phoneNumber);
+            setHasPhone(true);
           }
         }
       } catch (err) {
@@ -131,12 +191,14 @@ export default function OnboardingScreen() {
       );
       return false;
     }
-    if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(phoneNumber.trim())) {
-      Alert.alert(
-        'Atención',
-        'Por favor, ingresa un número de teléfono válido (ej. 04120000000).',
-      );
-      return false;
+    if (!hasPhone) {
+      if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(phoneNumber.trim())) {
+        Alert.alert(
+          'Atención',
+          'Por favor, ingresa un número de teléfono válido (ej. 04120000000).',
+        );
+        return false;
+      }
     }
     return true;
   };
@@ -160,13 +222,18 @@ export default function OnboardingScreen() {
       const firstName = parts[0];
       const lastName = parts.slice(1).join(' ') || undefined;
 
-      await updateBackendProfile(response.user.id, {
+      const updatePayload: any = {
         displayName: fullName.trim(),
         firstName,
         lastName,
-        phoneNumber: phoneNumber.trim(),
         nationalId: idNumber.trim(),
-      });
+      };
+
+      if (!hasPhone) {
+        updatePayload.phoneNumber = phoneNumber.trim();
+      }
+
+      await updateBackendProfile(response.user.id, updatePayload);
 
       // Guardar perfil completo en caché local
       const cachedProfile = {
@@ -279,11 +346,17 @@ export default function OnboardingScreen() {
           </View>
 
           <Text style={styles.inputLabel}>TELÉFONO</Text>
-          <View style={styles.inputCard}>
-            <Ionicons name="call-outline" size={20} color="#3072ffe7" />
+          <View
+            style={[styles.inputCard, hasPhone && styles.disabledInputCard]}
+          >
+            <Ionicons
+              name={hasPhone ? 'lock-closed-outline' : 'call-outline'}
+              size={20}
+              color={hasPhone ? '#8594AB' : '#3072ffe7'}
+            />
             <View style={styles.divider} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, hasPhone && { color: '#8594AB' }]}
               placeholder="04120000000"
               placeholderTextColor="#B8C4D4"
               keyboardType="phone-pad"
@@ -291,7 +364,7 @@ export default function OnboardingScreen() {
               onChangeText={setPhoneNumber}
               maxLength={11}
               selectionColor={tokens.colors.primary}
-              editable={!loading}
+              editable={!loading && !hasPhone}
             />
           </View>
 
@@ -441,6 +514,10 @@ const styles = StyleSheet.create({
     elevation: 3,
     borderWidth: 1,
     borderColor: '#E2EAF4',
+  },
+  disabledInputCard: {
+    backgroundColor: '#ECF1F9',
+    borderColor: '#D4DEEC',
   },
   divider: {
     width: 1,

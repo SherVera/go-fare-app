@@ -20,33 +20,16 @@ import {
   addAccountBalance,
   createFareAccount,
   getBackendProfile,
+  getCurrentRates,
   getFareAccountByUserId,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
-const RECHARGE_PACKAGES = [
-  { tickets: 1, amount: 15, label: '1 Fare', desc: 'Bs. 15,00', tag: null },
-  {
-    tickets: 2,
-    amount: 28,
-    label: '2 Fares',
-    desc: 'Bs. 28,00',
-    tag: 'AHORRA Bs. 2',
-  },
-  {
-    tickets: 5,
-    amount: 65,
-    label: '5 Fares',
-    desc: 'Bs. 65,00',
-    tag: 'AHORRA Bs. 10',
-  },
-  {
-    tickets: 10,
-    amount: 120,
-    label: '10 Fares',
-    desc: 'Bs. 120,00',
-    tag: 'POPULAR',
-  },
+const RECHARGE_PACKAGES_BLUEPRINT = [
+  { tickets: 1, discount: 0, tag: null, label: '1 Fare' },
+  { tickets: 2, discount: 0, tag: null, label: '2 Fares' },
+  { tickets: 5, discount: 0, tag: null, label: '5 Fares' },
+  { tickets: 10, discount: 0, tag: 'POPULAR', label: '10 Fares' },
 ];
 
 const PAYMENT_METHODS: PaymentMethod[] = [
@@ -79,8 +62,41 @@ const PAYMENT_METHODS: PaymentMethod[] = [
 export default function TopUpBalanceScreen() {
   const router = useRouter();
 
-  // Paquete seleccionado
-  const [selectedPkg, setSelectedPkg] = useState(RECHARGE_PACKAGES[0]);
+  // Estado de tasas de cambio dinámicas (valores por defecto iniciales)
+  const [fareUsd, setFareUsd] = useState(0.25);
+  const [bcvRate, setBcvRate] = useState(40.0);
+
+  // Tickets seleccionados
+  const [selectedTickets, setSelectedTickets] = useState(1);
+
+  // Generar paquetes dinámicos basados en la tasa actual de la DB y valor USD del Fare
+  const packages = React.useMemo(() => {
+    const baseFareBs = fareUsd * bcvRate;
+    return RECHARGE_PACKAGES_BLUEPRINT.map((pkg) => {
+      const grossAmount = pkg.tickets * baseFareBs;
+      const netAmount = grossAmount * (1 - pkg.discount);
+      const savings = grossAmount - netAmount;
+
+      let tagText = pkg.tag;
+      if (pkg.tag && pkg.tag.startsWith('AHORRA')) {
+        tagText = `${pkg.tag}${savings.toFixed(2).replace('.', ',')}`;
+      }
+
+      return {
+        tickets: pkg.tickets,
+        amount: netAmount,
+        label: pkg.label,
+        desc: `Bs. ${netAmount.toFixed(2).replace('.', ',')}`,
+        tag: tagText,
+      };
+    });
+  }, [fareUsd, bcvRate]);
+
+  // Derivar el paquete seleccionado
+  const selectedPkg = React.useMemo(() => {
+    return packages.find((p) => p.tickets === selectedTickets) || packages[0];
+  }, [packages, selectedTickets]);
+
   const [selectedMethod, setSelectedMethod] = useState<string>('pago_movil');
 
   // Estado del saldo del usuario
@@ -117,6 +133,17 @@ export default function TopUpBalanceScreen() {
 
   const loadUserData = useCallback(async () => {
     try {
+      // Consultar tasas actuales en la base de datos
+      try {
+        const rates = await getCurrentRates();
+        if (rates) {
+          setFareUsd(rates.fareUsdValue);
+          setBcvRate(rates.bcvRate);
+        }
+      } catch (rateErr) {
+        console.warn('[TopUp] Error fetching rates:', rateErr);
+      }
+
       const backendUser = await getBackendProfile();
       if (backendUser) {
         setUserId(backendUser.id);
@@ -320,13 +347,13 @@ export default function TopUpBalanceScreen() {
         {/* Selector de paquetes */}
         <Text style={styles.sectionTitle}>SELECCIONA TU PAQUETE</Text>
         <View style={styles.packagesGrid}>
-          {RECHARGE_PACKAGES.map((pkg) => {
-            const isSelected = selectedPkg.amount === pkg.amount;
+          {packages.map((pkg) => {
+            const isSelected = selectedTickets === pkg.tickets;
             return (
               <Pressable
-                key={pkg.amount}
+                key={pkg.tickets}
                 style={[styles.pkgCard, isSelected && styles.pkgCardSelected]}
-                onPress={() => setSelectedPkg(pkg)}
+                onPress={() => setSelectedTickets(pkg.tickets)}
               >
                 {pkg.tag && (
                   <View
@@ -636,7 +663,7 @@ export default function TopUpBalanceScreen() {
                     <Text style={styles.infoBox}>
                       Envía exactamente{' '}
                       <Text style={{ fontWeight: 'bold' }}>
-                        {(selectedPkg.amount / 36.5).toFixed(4)} USDT
+                        {(selectedPkg.amount / bcvRate).toFixed(4)} USDT
                       </Text>{' '}
                       a la dirección de Binance Pay y pega el hash de la
                       transacción.

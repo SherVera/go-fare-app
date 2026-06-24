@@ -126,24 +126,52 @@ export default function LoginScreen() {
 
           const roles = (backendUser as any).roles || [];
           const isAdmin = roles.some(
-            (role: any) => role.name === 'platform_admin',
+            (role: any) =>
+              role.name === 'platform_admin' || role.name === 'admin',
           );
           const isOwner = roles.some(
             (role: any) => role.name === 'transport_owner',
           );
           const isDriver = roles.some((role: any) => role.name === 'driver');
 
-          if (isAdmin) {
-            await AsyncStorage.setItem('user_role', 'platform_admin');
+          let biometricRole = isAdmin
+            ? 'platform_admin'
+            : isOwner
+              ? 'transport_owner'
+              : isDriver
+                ? 'driver'
+                : 'passenger';
+
+          // Fallback a Firebase Custom Claims si el backend devuelve 'passenger'
+          if (biometricRole === 'passenger') {
+            try {
+              const fbUser = auth.currentUser;
+              if (fbUser) {
+                const idTokenResult = await fbUser.getIdTokenResult(false);
+                const claimRole = (idTokenResult.claims as any)?.role as
+                  | string
+                  | undefined;
+                const PRIVILEGED_ROLES = [
+                  'platform_admin',
+                  'admin',
+                  'transport_owner',
+                  'driver',
+                ];
+                if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+                  biometricRole = claimRole;
+                }
+              }
+            } catch {}
+          }
+
+          await AsyncStorage.setItem('user_role', biometricRole);
+          if (biometricRole === 'platform_admin' || biometricRole === 'admin') {
             router.replace('/admin/dashboard' as any);
-          } else if (isOwner) {
-            await AsyncStorage.setItem('user_role', 'transport_owner');
+          } else if (biometricRole === 'transport_owner') {
             router.replace('/vehicle-owner/dashboard' as any);
-          } else if (isDriver) {
-            await AsyncStorage.setItem('user_role', 'driver');
+          } else if (biometricRole === 'driver') {
             router.replace('/driver/dashboard' as any);
           } else {
-            await AsyncStorage.setItem('user_role', 'passenger');
             router.replace('/(tabs)' as any);
           }
         }
@@ -331,25 +359,53 @@ export default function LoginScreen() {
       }
 
       const roles = (backendUser as any).roles || [];
-      const isAdmin = roles.some((role: any) => role.name === 'platform_admin');
+      const isAdmin = roles.some(
+        (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+      );
       const isOwner = roles.some(
         (role: any) => role.name === 'transport_owner',
       );
       const isDriver = roles.some((role: any) => role.name === 'driver');
-      const userRole = isAdmin
+      let userRole = isAdmin
         ? 'platform_admin'
         : isOwner
           ? 'transport_owner'
           : isDriver
             ? 'driver'
             : 'passenger';
+
+      // Fallback a Firebase Custom Claims si el backend devuelve 'passenger'
+      if (userRole === 'passenger') {
+        try {
+          const fbUser = auth.currentUser;
+          if (fbUser) {
+            const idTokenResult = await fbUser.getIdTokenResult(false);
+            const claimRole = (idTokenResult.claims as any)?.role as
+              | string
+              | undefined;
+            const PRIVILEGED_ROLES = [
+              'platform_admin',
+              'admin',
+              'transport_owner',
+              'driver',
+            ];
+            if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+              console.log('[Login] Usando Custom Claim para rol:', claimRole);
+              userRole = claimRole;
+            }
+          }
+        } catch (claimErr) {
+          console.warn('[Login] Error leyendo custom claims:', claimErr);
+        }
+      }
+
       await AsyncStorage.setItem('user_role', userRole);
 
-      if (isAdmin) {
+      if (userRole === 'platform_admin' || userRole === 'admin') {
         router.replace('/admin/dashboard' as any);
-      } else if (isOwner) {
+      } else if (userRole === 'transport_owner') {
         router.replace('/vehicle-owner/dashboard' as any);
-      } else if (isDriver) {
+      } else if (userRole === 'driver') {
         router.replace('/driver/dashboard' as any);
       } else {
         router.replace('/(tabs)' as any);

@@ -141,7 +141,9 @@ export default function AdminCivilAssociationsScreen() {
       // Filtrar usuarios que NO sean administradores y que NO tengan el rol civil_association
       const candidates = allUsers.filter((u: any) => {
         const roles = u.roles || [];
-        const isAdmin = roles.some((r: any) => r.name === 'platform_admin');
+        const isAdmin = roles.some(
+          (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+        );
         const isCivil = roles.some((r: any) => r.name === 'civil_association');
         return !isAdmin && !isCivil;
       });

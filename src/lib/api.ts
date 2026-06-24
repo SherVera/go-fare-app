@@ -9,56 +9,9 @@ import {
   FirebaseIssuedCredentialsDto,
 } from '@/interfaces';
 
-// Determinar la URL base de forma inteligente para desarrollo local y producción
 const getBaseUrl = () => {
-  const envUrl = process.env.EXPO_PUBLIC_API_URL;
-  console.log(
-    '[API] getBaseUrl: EXPO_PUBLIC_API_URL =',
-    envUrl,
-    '__DEV__ =',
-    __DEV__,
-  );
-
-  // Si no estamos en modo desarrollo (es una APK de release compilada), forzar URL de producción
-  if (!__DEV__) {
-    if (
-      envUrl &&
-      !envUrl.includes('localhost') &&
-      !envUrl.includes('127.0.0.1') &&
-      !envUrl.includes('10.0.2.2')
-    ) {
-      return envUrl;
-    }
-    return 'https://go-fare-backend-1.onrender.com/api/v1';
-  }
-
-  // De aquí en adelante, estamos en modo desarrollo (__DEV__ === true)
-
-  // En el emulador de Android, forzar el uso de 10.0.2.2 si está configurado en el env
-  if (Platform.OS === 'android' && envUrl?.includes('10.0.2.2')) {
-    return envUrl;
-  }
-
-  // Si la URL del env existe y es una URL de producción (no local)
-  if (
-    envUrl &&
-    !envUrl.includes('localhost') &&
-    !envUrl.includes('127.0.0.1') &&
-    !envUrl.includes('10.0.2.2')
-  ) {
-    return envUrl;
-  }
-
-  // En desarrollo local, intentamos detectar la IP de la computadora host de forma dinámica.
-  // Esto permite conectar dispositivos físicos (por Wi-Fi) y emuladores sin configurar nada.
-  const hostUri = Constants.expoConfig?.hostUri; // ej. "192.168.1.50:8081"
-  if (hostUri) {
-    const ip = hostUri.split(':')[0];
-    return `http://${ip}:3000/api/v1`;
-  }
-
-  // Fallback si no se detecta la IP
-  return envUrl || 'https://go-fare-backend-1.onrender.com/api/v1';
+  // Forzar el uso del servidor de Render en desarrollo y producción para evitar desajuste de llaves criptográficas
+  return 'https://go-fare-backend.onrender.com/api/v1';
 };
 
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
@@ -378,8 +331,6 @@ export async function updateBackendProfile(
     nationalId?: string;
   },
 ): Promise<BackendUser> {
-  // Filtrar los campos para enviar solo los soportados por UpdateUserDto en el backend
-  // y evitar errores de validación de tipo 400 (forbidNonWhitelisted).
   const whitelistedData: Partial<{
     displayName: string;
     firstName: string;
@@ -1660,7 +1611,9 @@ export async function getAllOwnerRequests(): Promise<any[]> {
     const roles = u.roles || [];
     const isOwner = roles.some((r: any) => r.name === 'transport_owner');
     const isDriver = roles.some((r: any) => r.name === 'driver');
-    const isAdmin = roles.some((r: any) => r.name === 'platform_admin');
+    const isAdmin = roles.some(
+      (r: any) => r.name === 'platform_admin' || r.name === 'admin',
+    );
     return !isOwner && !isDriver && !isAdmin;
   });
 
@@ -1884,4 +1837,144 @@ export async function getExternalBcvRate(): Promise<{
     console.warn('[API] getExternalBcvRate falló:', error);
     return null;
   }
+}
+
+/**
+ * Obtiene el resumen/preview de un cobro de viaje antes de confirmar decodificando el QR.
+ */
+export async function previewRide(qr: string): Promise<{
+  sessionUuid: string;
+  vehiclePlate: string;
+  routeName: string;
+  fareCost: number;
+  fareUsdValue: number;
+  bcvRate: number;
+  bsAmount: number;
+  balanceFares: number;
+  sufficient: boolean;
+}> {
+  return await fetchWithAuth('/rides/preview', {
+    method: 'POST',
+    body: JSON.stringify({ qr }),
+  });
+}
+
+/**
+ * Confirma y procesa el cobro del viaje (debitando los Fares correspondientes).
+ */
+export async function confirmRide(qr: string): Promise<{
+  rideUuid: string;
+  fareCost: number;
+  bsAmount: number;
+  balanceFares: number;
+}> {
+  return await fetchWithAuth('/rides/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ qr }),
+  });
+}
+
+// ─── SESIONES DE CAJA (TURNOS DEL CONDUCTOR) ──────────────────────────────────
+
+/**
+ * Obtiene la sesión de caja (turno) activa del conductor autenticado.
+ */
+export async function getCurrentSession(): Promise<any> {
+  const session = await fetchWithAuth('/cash-sessions/me/current');
+  if (!session || !session.uuid) {
+    return null;
+  }
+  return session;
+}
+
+/**
+ * Abre una nueva sesión de caja (turno) para el conductor.
+ */
+export async function openSession(
+  vehicleUuid: string,
+  routeUuid: string,
+): Promise<any> {
+  return await fetchWithAuth('/cash-sessions/open', {
+    method: 'POST',
+    body: JSON.stringify({ vehicleUuid, routeUuid }),
+  });
+}
+
+/**
+ * Pausa la sesión de caja activa.
+ */
+export async function pauseSession(sessionUuid: string): Promise<any> {
+  return await fetchWithAuth(`/cash-sessions/${sessionUuid}/pause`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Reanuda la sesión de caja pausada.
+ */
+export async function resumeSession(sessionUuid: string): Promise<any> {
+  return await fetchWithAuth(`/cash-sessions/${sessionUuid}/resume`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Cierra la sesión de caja activa y liquida el total al owner.
+ */
+export async function closeSession(sessionUuid: string): Promise<any> {
+  return await fetchWithAuth(`/cash-sessions/${sessionUuid}/close`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Obtiene las unidades de transporte (vehículos) asignadas del conductor (del owner asociado).
+ * Simulado localmente con UUIDs reales de la base de datos de pruebas para no alterar el backend.
+ */
+export async function getAssignedVehicles(): Promise<any[]> {
+  return [
+    {
+      uuid: 'e8e3f885-e18f-4d81-8d8a-1646c85957f9',
+      plate: 'XY987ZT',
+      brand: 'Encava',
+      model: 'ENT-610',
+      year: 2015,
+      capacity: 32,
+      color: 'Blanco',
+      status: 'active',
+      routeNumber: 'Ruta L1',
+    },
+  ];
+}
+
+/**
+ * Obtiene las rutas de transporte asignadas del conductor (del owner asociado).
+ * Simulado localmente con UUIDs reales de la base de datos de pruebas para no alterar el backend.
+ */
+export async function getAssignedRoutes(): Promise<any[]> {
+  return [
+    {
+      uuid: '8ba1fbcc-54ff-4125-b731-dd5880aec48a',
+      name: 'Ruta L1: Propatria - Palo Verde',
+      code: 'L1',
+      fareCost: 1,
+      isActive: true,
+    },
+  ];
+}
+
+/**
+ * Obtiene el código QR de cobro de la sesión actual.
+ */
+export async function getSessionQr(
+  sessionUuid: string,
+): Promise<{ qr: string; expiresAt: string; ttlSeconds: number }> {
+  return await fetchWithAuth(`/cash-sessions/${sessionUuid}/qr`);
+}
+
+/**
+ * Obtiene los cobros de pasajes (viajes/rides) asociados a una sesión de caja específica.
+ */
+export async function getSessionRides(sessionUuid: string): Promise<any[]> {
+  return await fetchWithAuth(`/rides/session/${sessionUuid}`);
 }
