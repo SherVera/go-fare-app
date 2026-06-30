@@ -34,6 +34,24 @@ function withPodfileIosRnfbMapsCompat(config) {
         );
       }
 
+      // Force react-native-maps pods to compile as static libraries (no module
+      // umbrella) so Clang's module verifier doesn't fail in Release under
+      // useFrameworks: static ("RCTViewManager must be imported from module ...").
+      if (!contents.includes("pod.name.eql?('react-native-maps')")) {
+        contents = contents.replace(
+          /(\$RNFirebaseAsStaticFramework = true\n)/,
+          `$1\npre_install do |installer|
+  installer.pod_targets.each do |pod|
+    if pod.name.eql?('react-native-maps') || pod.name.eql?('react-native-google-maps')
+      def pod.build_type
+        Pod::BuildType.static_library
+      end
+    end
+  end
+end\n`,
+        );
+      }
+
       if (
         !contents.includes(
           'CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES',
