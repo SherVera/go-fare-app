@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -96,10 +96,10 @@ export default function AdminRatesScreen() {
       formatted += cleaned.slice(0, 2);
     }
     if (cleaned.length > 2) {
-      formatted += '/' + cleaned.slice(2, 4);
+      formatted += `/${cleaned.slice(2, 4)}`;
     }
     if (cleaned.length > 4) {
-      formatted += '/' + cleaned.slice(4, 8);
+      formatted += `/${cleaned.slice(4, 8)}`;
     }
     setBcvRateDate(formatted);
   };
@@ -155,7 +155,7 @@ export default function AdminRatesScreen() {
 
   const handleUpdateFare = async () => {
     const parsed = parseFloat(newFareValue);
-    if (isNaN(parsed) || parsed <= 0) {
+    if (Number.isNaN(parsed) || parsed <= 0) {
       Alert.alert(
         'Valor inválido',
         'El precio del fare debe ser un número positivo mayor que cero.',
@@ -184,7 +184,7 @@ export default function AdminRatesScreen() {
 
   const handleUpdateBcv = async () => {
     const parsed = parseFloat(newBcvRate);
-    if (isNaN(parsed) || parsed <= 0) {
+    if (Number.isNaN(parsed) || parsed <= 0) {
       Alert.alert(
         'Valor inválido',
         'La tasa BCV debe ser un número positivo mayor que cero.',

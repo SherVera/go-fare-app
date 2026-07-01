@@ -2,26 +2,29 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   FlatList,
+  Linking,
   Modal,
-  Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  Linking,
-  RefreshControl,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  createBackendInviteCode,
+  getBackendInviteCodes,
+  getBackendProfile,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
-import { getBackendProfile, createBackendInviteCode, getBackendInviteCodes } from '@/lib/api';
 
 interface MockDriver {
   id: string;
@@ -142,30 +145,33 @@ export default function VehicleOwnerDrivers() {
   const slideAnim = useRef(new Animated.Value(0)).current;
   const scrollTimeoutRef = useRef<any>(null);
 
-  const handleScroll = useCallback((event: any) => {
-    // Deslizar el FAB a la derecha (ocultar)
-    Animated.spring(slideAnim, {
-      toValue: 100, // 100px a la derecha lo saca de la pantalla
-      useNativeDriver: true,
-      tension: 50,
-      friction: 10,
-    }).start();
-
-    // Limpiar el timeout anterior
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current);
-    }
-
-    // Volver a mostrar el FAB (translateX = 0) tras 450ms de inactividad
-    scrollTimeoutRef.current = setTimeout(() => {
+  const handleScroll = useCallback(
+    (_event: any) => {
+      // Deslizar el FAB a la derecha (ocultar)
       Animated.spring(slideAnim, {
-        toValue: 0,
+        toValue: 100, // 100px a la derecha lo saca de la pantalla
         useNativeDriver: true,
-        tension: 40,
-        friction: 8,
+        tension: 50,
+        friction: 10,
       }).start();
-    }, 450);
-  }, [slideAnim]);
+
+      // Limpiar el timeout anterior
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      // Volver a mostrar el FAB (translateX = 0) tras 450ms de inactividad
+      scrollTimeoutRef.current = setTimeout(() => {
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 40,
+          friction: 8,
+        }).start();
+      }, 450);
+    },
+    [slideAnim],
+  );
 
   useEffect(() => {
     return () => {
@@ -177,32 +183,47 @@ export default function VehicleOwnerDrivers() {
 
   // Form State - Invitación por WhatsApp
   const [invitePhone, setInvitePhone] = useState('');
-  const [invitePhoneError, setInvitePhoneError] = useState<string | undefined>(undefined);
+  const [invitePhoneError, setInvitePhoneError] = useState<string | undefined>(
+    undefined,
+  );
   const [sendingInvite, setSendingInvite] = useState(false);
 
   const loadDriversData = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // 1. Cargar vehículos de AsyncStorage
-      const localVehiclesStr = await AsyncStorage.getItem('mock_vehicle_requests');
-      const localVehicles: MockVehicle[] = localVehiclesStr ? JSON.parse(localVehiclesStr) : [];
 
-      const deletedPlatesStr = await AsyncStorage.getItem('mock_deleted_vehicle_plates');
-      const deletedPlates: string[] = deletedPlatesStr ? JSON.parse(deletedPlatesStr) : [];
+      // 1. Cargar vehículos de AsyncStorage
+      const localVehiclesStr = await AsyncStorage.getItem(
+        'mock_vehicle_requests',
+      );
+      const localVehicles: MockVehicle[] = localVehiclesStr
+        ? JSON.parse(localVehiclesStr)
+        : [];
+
+      const deletedPlatesStr = await AsyncStorage.getItem(
+        'mock_deleted_vehicle_plates',
+      );
+      const deletedPlates: string[] = deletedPlatesStr
+        ? JSON.parse(deletedPlatesStr)
+        : [];
 
       const mergedVehicles = [
         ...localVehicles,
         ...MOCK_VEHICLES_BASE.filter(
-          (mv) => !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
+          (mv) =>
+            !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
         ),
       ].filter((v) => !deletedPlates.includes(v.licensePlate));
 
       setVehicles(mergedVehicles);
 
       // 2. Cargar conductores locales de AsyncStorage
-      const localDriversStr = await AsyncStorage.getItem('mock_cooperative_drivers');
-      const localDrivers: MockDriver[] = localDriversStr ? JSON.parse(localDriversStr) : [];
+      const localDriversStr = await AsyncStorage.getItem(
+        'mock_cooperative_drivers',
+      );
+      const localDrivers: MockDriver[] = localDriversStr
+        ? JSON.parse(localDriversStr)
+        : [];
 
       const mergedDrivers = [
         ...localDrivers,
@@ -215,7 +236,10 @@ export default function VehicleOwnerDrivers() {
 
       // 3. Cargar invitaciones de la API real del backend
       const backendInvites = await getBackendInviteCodes().catch((err) => {
-        console.warn('[Drivers] Error al obtener invitaciones del backend:', err);
+        console.warn(
+          '[Drivers] Error al obtener invitaciones del backend:',
+          err,
+        );
         return [];
       });
 
@@ -225,11 +249,13 @@ export default function VehicleOwnerDrivers() {
 
       const enrichedInvites = backendInvites.map((inv: any) => ({
         ...inv,
-        invitedPhone: inv.driver?.phoneNumber || phoneMap[inv.code] || 'Invitado sin número'
+        invitedPhone:
+          inv.driver?.phoneNumber ||
+          phoneMap[inv.code] ||
+          'Invitado sin número',
       }));
 
       setInvitations(enrichedInvites);
-
     } catch (err) {
       console.warn('[Drivers] Error loading drivers:', err);
     } finally {
@@ -243,7 +269,6 @@ export default function VehicleOwnerDrivers() {
     setRefreshing(false);
   }, [loadDriversData]);
 
-
   useFocusEffect(
     useCallback(() => {
       loadDriversData();
@@ -251,7 +276,9 @@ export default function VehicleOwnerDrivers() {
   );
 
   const getDriverAssignment = (driverId: string) => {
-    const assignedVehicle = vehicles.find((v) => v.assignedDriver?.id === driverId);
+    const assignedVehicle = vehicles.find(
+      (v) => v.assignedDriver?.id === driverId,
+    );
     if (assignedVehicle) {
       return `${assignedVehicle.vehicleMake} ${assignedVehicle.vehicleModel} (${assignedVehicle.licensePlate})`;
     }
@@ -284,13 +311,16 @@ export default function VehicleOwnerDrivers() {
       const mapStr = await AsyncStorage.getItem('gofare_invited_phones_map');
       const phoneMap = mapStr ? JSON.parse(mapStr) : {};
       phoneMap[code] = invitePhone.trim();
-      await AsyncStorage.setItem('gofare_invited_phones_map', JSON.stringify(phoneMap));
+      await AsyncStorage.setItem(
+        'gofare_invited_phones_map',
+        JSON.stringify(phoneMap),
+      );
 
       // 2. Limpiar el número de teléfono para WhatsApp
       let cleanPhone = invitePhone.trim().replace(/[^0-9]/g, '');
       if (cleanPhone.startsWith('0')) {
         // Asumimos código de país Venezuela (+58) por defecto si inicia con 0
-        cleanPhone = '58' + cleanPhone.substring(1);
+        cleanPhone = `58${cleanPhone.substring(1)}`;
       }
 
       // 3. Construir mensaje de WhatsApp
@@ -312,20 +342,25 @@ Tu código de invitación único es: *${code}*`;
         await Linking.openURL(whatsappUrl);
       } else {
         // Fallback a enlace web general de WhatsApp
-        await Linking.openURL(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`);
+        await Linking.openURL(
+          `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`,
+        );
       }
 
       Alert.alert(
         'Invitación Procesada',
         `Se ha generado el código ${code} y se abrirá WhatsApp para enviar la invitación al número ${invitePhone.trim()}.`,
       );
-      
+
       setInvitePhone('');
       setIsModalVisible(false);
       loadDriversData();
     } catch (err: any) {
       console.error('[Drivers] Error sending invitation via WhatsApp:', err);
-      Alert.alert('Error', err.message || 'Ocurrió un error al procesar la invitación.');
+      Alert.alert(
+        'Error',
+        err.message || 'Ocurrió un error al procesar la invitación.',
+      );
     } finally {
       setSendingInvite(false);
     }
@@ -334,13 +369,19 @@ Tu código de invitación único es: *${code}*`;
   const filteredDrivers = drivers.filter((d) => {
     const term = searchText.trim().toLowerCase();
     if (!term) return true;
-    return d.name.toLowerCase().includes(term) || d.nationalId.toLowerCase().includes(term);
+    return (
+      d.name.toLowerCase().includes(term) ||
+      d.nationalId.toLowerCase().includes(term)
+    );
   });
 
   const filteredInvitations = invitations.filter((inv) => {
     const term = searchText.trim().toLowerCase();
     if (!term) return true;
-    return inv.invitedPhone.toLowerCase().includes(term) || inv.code.toLowerCase().includes(term);
+    return (
+      inv.invitedPhone.toLowerCase().includes(term) ||
+      inv.code.toLowerCase().includes(term)
+    );
   });
 
   if (loading) {
@@ -365,7 +406,10 @@ Tu código de invitación único es: *${code}*`;
       {/* Tabs Principales */}
       <View style={styles.tabContainer}>
         <Pressable
-          style={[styles.tabButton, activeTab === 'active' && styles.tabButtonActive]}
+          style={[
+            styles.tabButton,
+            activeTab === 'active' && styles.tabButtonActive,
+          ]}
           onPress={() => {
             setActiveTab('active');
             setSearchText('');
@@ -377,13 +421,21 @@ Tu código de invitación único es: *${code}*`;
             color={activeTab === 'active' ? tokens.colors.primary : '#64748B'}
             style={{ marginRight: 6 }}
           />
-          <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'active' && styles.tabTextActive,
+            ]}
+          >
             Conductores ({drivers.length})
           </Text>
         </Pressable>
 
         <Pressable
-          style={[styles.tabButton, activeTab === 'invited' && styles.tabButtonActive]}
+          style={[
+            styles.tabButton,
+            activeTab === 'invited' && styles.tabButtonActive,
+          ]}
           onPress={() => {
             setActiveTab('invited');
             setSearchText('');
@@ -395,7 +447,12 @@ Tu código de invitación único es: *${code}*`;
             color={activeTab === 'invited' ? tokens.colors.primary : '#64748B'}
             style={{ marginRight: 6 }}
           />
-          <Text style={[styles.tabText, activeTab === 'invited' && styles.tabTextActive]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === 'invited' && styles.tabTextActive,
+            ]}
+          >
             Invitados WA ({invitations.length})
           </Text>
         </Pressable>
@@ -475,8 +532,12 @@ Tu código de invitación único es: *${code}*`;
                   </View>
                   <View style={styles.driverDetails}>
                     <Text style={styles.driverName}>{item.name}</Text>
-                    <Text style={styles.driverMeta}>Cédula: {item.nationalId}</Text>
-                    <Text style={styles.driverMeta}>Teléfono: {item.phone}</Text>
+                    <Text style={styles.driverMeta}>
+                      Cédula: {item.nationalId}
+                    </Text>
+                    <Text style={styles.driverMeta}>
+                      Teléfono: {item.phone}
+                    </Text>
                   </View>
                   <View style={styles.statusPill}>
                     <View style={styles.activeDot} />
@@ -539,35 +600,68 @@ Tu código de invitación único es: *${code}*`;
             </View>
           }
           renderItem={({ item }) => {
-            const dateStr = new Date(item.createdAt).toLocaleDateString('es-ES', {
-              day: 'numeric',
-              month: 'short',
-              year: 'numeric',
-            });
+            const dateStr = new Date(item.createdAt).toLocaleDateString(
+              'es-ES',
+              {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+              },
+            );
 
             return (
               <View style={styles.driverCard}>
                 <View style={styles.driverMainRow}>
-                  <View style={[styles.driverAvatar, { backgroundColor: '#F0FDF4' }]}>
+                  <View
+                    style={[
+                      styles.driverAvatar,
+                      { backgroundColor: '#F0FDF4' },
+                    ]}
+                  >
                     <Ionicons name="logo-whatsapp" size={20} color="#10B981" />
                   </View>
                   <View style={styles.driverDetails}>
                     <Text style={styles.driverName}>{item.invitedPhone}</Text>
                     <Text style={styles.driverMeta}>
-                      Código: <Text style={styles.codeHighlight}>{item.code}</Text>
+                      Código:{' '}
+                      <Text style={styles.codeHighlight}>{item.code}</Text>
                     </Text>
                     <Text style={styles.driverMeta}>Enviado: {dateStr}</Text>
                   </View>
-                  
+
                   {item.used ? (
-                    <View style={[styles.statusPill, { backgroundColor: '#ECFDF5' }]}>
-                      <View style={[styles.activeDot, { backgroundColor: '#10B981' }]} />
-                      <Text style={[styles.activeText, { color: '#065F46' }]}>Canjeado</Text>
+                    <View
+                      style={[
+                        styles.statusPill,
+                        { backgroundColor: '#ECFDF5' },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.activeDot,
+                          { backgroundColor: '#10B981' },
+                        ]}
+                      />
+                      <Text style={[styles.activeText, { color: '#065F46' }]}>
+                        Canjeado
+                      </Text>
                     </View>
                   ) : (
-                    <View style={[styles.statusPill, { backgroundColor: '#FEF3C7' }]}>
-                      <View style={[styles.activeDot, { backgroundColor: '#F59E0B' }]} />
-                      <Text style={[styles.activeText, { color: '#92400E' }]}>Pendiente</Text>
+                    <View
+                      style={[
+                        styles.statusPill,
+                        { backgroundColor: '#FEF3C7' },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.activeDot,
+                          { backgroundColor: '#F59E0B' },
+                        ]}
+                      />
+                      <Text style={[styles.activeText, { color: '#92400E' }]}>
+                        Pendiente
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -620,9 +714,21 @@ Tu código de invitación único es: *${code}*`;
             >
               {/* Formulario Invitación por WhatsApp */}
               <View>
-                <Text style={styles.inputLabel}>NÚMERO DE TELÉFONO DEL CONDUCTOR</Text>
-                <View style={[styles.inputCard, invitePhoneError && styles.inputCardError]}>
-                  <Ionicons name="call-outline" size={20} color="#8594AB" style={{ marginRight: 10 }} />
+                <Text style={styles.inputLabel}>
+                  NÚMERO DE TELÉFONO DEL CONDUCTOR
+                </Text>
+                <View
+                  style={[
+                    styles.inputCard,
+                    invitePhoneError && styles.inputCardError,
+                  ]}
+                >
+                  <Ionicons
+                    name="call-outline"
+                    size={20}
+                    color="#8594AB"
+                    style={{ marginRight: 10 }}
+                  />
                   <TextInput
                     style={styles.input}
                     placeholder="Ej. 04125556677"
@@ -636,7 +742,9 @@ Tu código de invitación único es: *${code}*`;
                     editable={!sendingInvite}
                   />
                 </View>
-                {invitePhoneError && <Text style={styles.errorText}>{invitePhoneError}</Text>}
+                {invitePhoneError && (
+                  <Text style={styles.errorText}>{invitePhoneError}</Text>
+                )}
 
                 <Pressable
                   style={({ pressed }) => [
@@ -650,9 +758,18 @@ Tu código de invitación único es: *${code}*`;
                   {sendingInvite ? (
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                      <Text style={styles.submitBtnText}>Enviar por WhatsApp</Text>
+                    <View
+                      style={{ flexDirection: 'row', alignItems: 'center' }}
+                    >
+                      <Ionicons
+                        name="logo-whatsapp"
+                        size={20}
+                        color="#FFFFFF"
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={styles.submitBtnText}>
+                        Enviar por WhatsApp
+                      </Text>
                     </View>
                   )}
                 </Pressable>

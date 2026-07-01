@@ -1,19 +1,9 @@
-import { ScreenHeader } from '@/components/ScreenHeader';
-import type { LoginFormState } from '@/interfaces';
-import {
-  createFareAccount,
-  getFareAccountByUserId,
-  loginWithFirebaseToken,
-  syncWithBackend,
-} from '@/lib/api';
-import { auth, signIn, signInWithGoogle, sigOutAccount } from '@/lib/firebase';
-import { tokens } from '@/theme/tokens';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -27,6 +17,16 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import type { LoginFormState } from '@/interfaces';
+import {
+  createFareAccount,
+  getFareAccountByUserId,
+  loginWithFirebaseToken,
+  syncWithBackend,
+} from '@/lib/api';
+import { auth, signIn, signInWithGoogle, sigOutAccount } from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -273,7 +273,7 @@ export default function LoginScreen() {
       }
 
       // Correo verificado — sincronizar con backend y permitir acceso
-      let backendUser;
+      let backendUser = null;
       try {
         const response = await syncWithBackend(currentUser);
         backendUser = response.user;

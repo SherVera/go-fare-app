@@ -1,5 +1,4 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ActionCardProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
@@ -24,7 +23,7 @@ export const ActionCard = ({
       onPress={onPress}
     >
       <View
-        style={[styles.iconContainer, { backgroundColor: primaryColor + '15' }]}
+        style={[styles.iconContainer, { backgroundColor: `${primaryColor}15` }]}
       >
         <MaterialCommunityIcons name={icon} size={28} color={primaryColor} />
       </View>

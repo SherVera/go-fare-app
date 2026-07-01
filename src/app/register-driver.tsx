@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +16,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { submitDriverRequest, getBackendProfile, redeemBackendInviteCode } from '@/lib/api';
+import {
+  getBackendProfile,
+  redeemBackendInviteCode,
+  submitDriverRequest,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 interface FormFields {
@@ -52,8 +56,14 @@ export default function RegisterDriverScreen() {
   // Cargar código de invitación si viene del Deep Link (URL query param)
   useEffect(() => {
     if (params.code) {
-      console.log('[RegisterDriver] Código de invitación recibido por Deep Link:', params.code);
-      setForm((prev) => ({ ...prev, inviteCode: params.code?.toUpperCase() || '' }));
+      console.log(
+        '[RegisterDriver] Código de invitación recibido por Deep Link:',
+        params.code,
+      );
+      setForm((prev) => ({
+        ...prev,
+        inviteCode: params.code?.toUpperCase() || '',
+      }));
     }
   }, [params.code]);
 
@@ -69,7 +79,7 @@ export default function RegisterDriverScreen() {
     const expNum = parseInt(form.experienceYears, 10);
     if (!form.experienceYears.trim()) {
       newErrors.experienceYears = 'Los años de experiencia son requeridos';
-    } else if (isNaN(expNum) || expNum < 0 || expNum > 70) {
+    } else if (Number.isNaN(expNum) || expNum < 0 || expNum > 70) {
       newErrors.experienceYears = 'Ingresa un número de años válido';
     }
 
@@ -78,7 +88,8 @@ export default function RegisterDriverScreen() {
     }
 
     if (!form.inviteCode.trim()) {
-      newErrors.inviteCode = 'El código de invitación del socio es requerido para asociarte a una flota';
+      newErrors.inviteCode =
+        'El código de invitación del socio es requerido para asociarte a una flota';
     } else if (form.inviteCode.trim().length !== 6) {
       newErrors.inviteCode = 'El código debe tener exactamente 6 caracteres';
     }
@@ -104,19 +115,23 @@ export default function RegisterDriverScreen() {
         return;
       }
 
-      const driverUuid = profile.id;
-      const driverName = profile.displayName || 'Conductor Registrado';
-      const driverPhone = profile.phoneNumber || form.emergencyPhone;
-      const driverNationalId = profile.nationalId || 'V-00000000';
+      const _driverUuid = profile.id;
+      const _driverName = profile.displayName || 'Conductor Registrado';
+      const _driverPhone = profile.phoneNumber || form.emergencyPhone;
+      const _driverNationalId = profile.nationalId || 'V-00000000';
 
       // 2. Canjear el código de invitación en el backend real
-      console.log('[RegisterDriver] Canjeando código de invitación en backend:', form.inviteCode);
+      console.log(
+        '[RegisterDriver] Canjeando código de invitación en backend:',
+        form.inviteCode,
+      );
       try {
         await redeemBackendInviteCode(form.inviteCode.trim());
       } catch (err: any) {
         Alert.alert(
           'Invitación Inválida',
-          err.message || 'El código ingresado es incorrecto, ya ha sido canjeado o está vencido.'
+          err.message ||
+            'El código ingresado es incorrecto, ya ha sido canjeado o está vencido.',
         );
         setLoading(false);
         return;
@@ -144,7 +159,8 @@ export default function RegisterDriverScreen() {
       console.error('[RegisterDriver] Error submitting request:', error);
       Alert.alert(
         'Error',
-        error.message || 'Ocurrió un error al enviar tu solicitud. Intenta de nuevo más tarde.',
+        error.message ||
+          'Ocurrió un error al enviar tu solicitud. Intenta de nuevo más tarde.',
       );
     } finally {
       setLoading(false);
@@ -178,7 +194,9 @@ export default function RegisterDriverScreen() {
               color="#0F766E"
             />
             <Text style={styles.infoText}>
-              Ingresa los datos de tu licencia de conducir, el código de invitación que recibiste por correo del socio y el teléfono de contacto de emergencia para completar tu registro.
+              Ingresa los datos de tu licencia de conducir, el código de
+              invitación que recibiste por correo del socio y el teléfono de
+              contacto de emergencia para completar tu registro.
             </Text>
           </View>
 
@@ -204,7 +222,9 @@ export default function RegisterDriverScreen() {
               autoCapitalize="characters"
               maxLength={6}
               value={form.inviteCode}
-              onChangeText={(text) => updateField('inviteCode', text.toUpperCase())}
+              onChangeText={(text) =>
+                updateField('inviteCode', text.toUpperCase())
+              }
               editable={!loading && !params.code}
             />
             {params.code && (

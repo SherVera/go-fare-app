@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -358,7 +358,9 @@ export default function AdminOwnerRequestsScreen() {
                         size={18}
                         color="#FFFFFF"
                       />
-                      <Text style={styles.approveBtnText}>Aprobar Propietario</Text>
+                      <Text style={styles.approveBtnText}>
+                        Aprobar Propietario
+                      </Text>
                     </Pressable>
                   </View>
                 )}

@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,15 +19,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
+  getAllTransactions,
+  getAllUsers,
   getCurrentSession,
+  getFareAccountByUserId,
   getSessionQr,
   getSessionRides,
   validateTicketByQr,
-  getAllUsers,
-  getAllTransactions,
-  getFareAccountByUserId,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
@@ -91,7 +91,7 @@ export default function DriverScanScreen() {
             t.description.includes(ride.uuid),
         );
 
-        if (tx && tx.fareAccount && tx.fareAccount.uuid) {
+        if (tx?.fareAccount?.uuid) {
           const accountUuid = tx.fareAccount.uuid;
           let userUuid = accountToUserUuidCache[accountUuid];
 
@@ -108,7 +108,7 @@ export default function DriverScanScreen() {
 
               try {
                 const acc = await getFareAccountByUserId(u.uuid);
-                if (acc && acc.id) {
+                if (acc?.id) {
                   accountToUserUuidCache[acc.id] = u.uuid;
                   if (acc.id === accountUuid) {
                     userUuid = u.uuid;
@@ -172,7 +172,6 @@ export default function DriverScanScreen() {
     }
   }, [resolveRidesPassengers]);
 
-
   useFocusEffect(
     useCallback(() => {
       checkServiceStatus();
@@ -201,11 +200,12 @@ export default function DriverScanScreen() {
         // 3. Consultar viajes recientes de la sesión en base de datos
         const rides = await getSessionRides(current.uuid);
         const resolvedRides = await resolveRidesPassengers(rides);
-        
+
         // Detectar si hay nuevos cobros para alertas
         if (resolvedRides.length > recentPayments.length) {
           const newRides = resolvedRides.filter(
-            (r: any) => !recentPayments.some((prev: any) => prev.uuid === r.uuid)
+            (r: any) =>
+              !recentPayments.some((prev: any) => prev.uuid === r.uuid),
           );
 
           for (const newRide of newRides) {

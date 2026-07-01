@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,8 +13,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getCurrentSession, getSessionRides, getAllUsers, getAllTransactions, getFareAccountByUserId } from '@/lib/api';
+import {
+  getAllTransactions,
+  getAllUsers,
+  getCurrentSession,
+  getFareAccountByUserId,
+  getSessionRides,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function DriverHistoryScreen() {
@@ -26,7 +32,7 @@ export default function DriverHistoryScreen() {
   const loadValidations = useCallback(async () => {
     try {
       const session = await getCurrentSession();
-      if (session && session.uuid) {
+      if (session?.uuid) {
         setTotalEarnings(Number(session.totalFares) || 0);
         setTotalCount(Number(session.ridesCount) || 0);
 
@@ -36,7 +42,7 @@ export default function DriverHistoryScreen() {
           // Obtener usuarios y transacciones
           const [users, transactions] = await Promise.all([
             getAllUsers(),
-            getAllTransactions()
+            getAllTransactions(),
           ]);
 
           // Cargar cachés de mapeo desde AsyncStorage
@@ -54,7 +60,10 @@ export default function DriverHistoryScreen() {
 
           for (const ride of rides) {
             // Si el backend ya retorna el pasajero (por ejemplo, en local o futuras actualizaciones), lo respetamos
-            if (ride.passenger && (ride.passenger.displayName || ride.passenger.nationalId)) {
+            if (
+              ride.passenger &&
+              (ride.passenger.displayName || ride.passenger.nationalId)
+            ) {
               continue;
             }
 
@@ -65,15 +74,17 @@ export default function DriverHistoryScreen() {
                 t.transactionType === 'ride_payment' &&
                 t.description &&
                 ride.uuid &&
-                t.description.includes(ride.uuid)
+                t.description.includes(ride.uuid),
             );
 
-            if (tx && tx.fareAccount && tx.fareAccount.uuid) {
+            if (tx?.fareAccount?.uuid) {
               const accountUuid = tx.fareAccount.uuid;
               let userUuid = accountToUserUuidCache[accountUuid];
 
               if (!userUuid) {
-                const unresolvedUsers = users.filter((u) => u.uuid && !resolvedUserUuidsSet.has(u.uuid));
+                const unresolvedUsers = users.filter(
+                  (u) => u.uuid && !resolvedUserUuidsSet.has(u.uuid),
+                );
 
                 for (const u of unresolvedUsers) {
                   if (!u.uuid) continue;
@@ -83,7 +94,7 @@ export default function DriverHistoryScreen() {
 
                   try {
                     const acc = await getFareAccountByUserId(u.uuid);
-                    if (acc && acc.id) {
+                    if (acc?.id) {
                       accountToUserUuidCache[acc.id] = u.uuid;
                       if (acc.id === accountUuid) {
                         userUuid = u.uuid;
@@ -108,16 +119,26 @@ export default function DriverHistoryScreen() {
 
           // Guardar cachés actualizados
           if (cacheUpdated) {
-            await AsyncStorage.setItem(cacheKey, JSON.stringify(accountToUserUuidCache));
-            await AsyncStorage.setItem(resolvedKey, JSON.stringify(resolvedUserUuids));
+            await AsyncStorage.setItem(
+              cacheKey,
+              JSON.stringify(accountToUserUuidCache),
+            );
+            await AsyncStorage.setItem(
+              resolvedKey,
+              JSON.stringify(resolvedUserUuids),
+            );
           }
         } catch (apiErr) {
-          console.warn('[DriverHistory] Error resolving passenger details via API fallback:', apiErr);
+          console.warn(
+            '[DriverHistory] Error resolving passenger details via API fallback:',
+            apiErr,
+          );
         }
 
         // Ordenar por fecha de creación descendente para mostrar cobros recientes arriba
         const sortedRides = [...rides].sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         );
         setValidations(sortedRides);
       } else {
@@ -132,7 +153,6 @@ export default function DriverHistoryScreen() {
       setRefreshing(false);
     }
   }, []);
-
 
   useFocusEffect(
     useCallback(() => {
@@ -151,8 +171,8 @@ export default function DriverHistoryScreen() {
       `${item.passenger?.firstName || ''} ${item.passenger?.lastName || ''}`.trim() ||
       'Pasajero';
 
-    const passengerCedula = item.passenger?.nationalId 
-      ? `C.I. ${item.passenger.nationalId}` 
+    const passengerCedula = item.passenger?.nationalId
+      ? `C.I. ${item.passenger.nationalId}`
       : 'C.I. No registrada';
 
     // Determinar iniciales del pasajero
@@ -203,7 +223,9 @@ export default function DriverHistoryScreen() {
 
           {/* Tarifa cobrada */}
           <View style={styles.fareContainer}>
-            <Text style={styles.fareText}>+{Number(item.fareCost).toFixed(2)} fares</Text>
+            <Text style={styles.fareText}>
+              +{Number(item.fareCost).toFixed(2)} fares
+            </Text>
             <Text style={styles.codeTextMono} numberOfLines={1}>
               GF-{item.uuid?.substring(0, 8).toUpperCase()}
             </Text>

@@ -62,7 +62,8 @@ const config: ExpoConfig = {
     },
     infoPlist: {
       UIBackgroundModes: ['remote-notification', 'fetch'],
-      NSFaceIDUsageDescription: 'Habilita FaceID para ingresar rápidamente a tu cuenta.',
+      NSFaceIDUsageDescription:
+        'Habilita FaceID para ingresar rápidamente a tu cuenta.',
     },
   },
   android: {
@@ -114,7 +115,8 @@ const config: ExpoConfig = {
     [
       'expo-local-authentication',
       {
-        faceIDPermission: 'Habilita FaceID para ingresar rápidamente a tu cuenta.',
+        faceIDPermission:
+          'Habilita FaceID para ingresar rápidamente a tu cuenta.',
       },
     ],
   ],

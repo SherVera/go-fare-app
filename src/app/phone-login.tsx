@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -53,10 +53,7 @@ export default function PhoneLoginScreen() {
     const trimmed = phoneNumber.trim();
     // Formatos venezolanos: 04XX-XXXXXXX → +58 4XX XXXXXXX o internacionales
     if (!/^((04|02)\d{9}|\+\d{10,15})$/.test(trimmed)) {
-      Alert.alert(
-        'Número inválido',
-        'Ingresa un número de teléfono válido.',
-      );
+      Alert.alert('Número inválido', 'Ingresa un número de teléfono válido.');
       return;
     }
 

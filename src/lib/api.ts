@@ -1,12 +1,12 @@
-import {
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
+import type {
   BackendFareAccount,
   BackendTicket,
   BackendUser,
   FirebaseEmailRegisterDto,
   FirebaseIssuedCredentialsDto,
 } from '@/interfaces';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
 
 const getBaseUrl = () => {
   // Forzar el uso del servidor de Render en desarrollo y producción para evitar desajuste de llaves criptográficas
@@ -86,7 +86,7 @@ function sanitizeNumericFields(data: any): any {
   if (typeof data === 'object') {
     const copy = { ...data };
     for (const key in copy) {
-      if (Object.prototype.hasOwnProperty.call(copy, key)) {
+      if (Object.hasOwn(copy, key)) {
         if (copy[key] && typeof copy[key] === 'object') {
           copy[key] = sanitizeNumericFields(copy[key]);
         }
@@ -155,7 +155,7 @@ async function fetchWithAuth(
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
@@ -1597,7 +1597,9 @@ export async function getAllOwnerRequests(): Promise<any[]> {
     const mappedPending = pending.map((o: any) => ({
       uuid: o.uuid,
       userUuid: o.user?.uuid || o.user?.id,
-      displayName: o.user?.displayName || `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+      displayName:
+        o.user?.displayName ||
+        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
       email: o.user?.email,
       nationalId: o.user?.nationalId,
       phoneNumber: o.user?.phoneNumber,
@@ -1611,7 +1613,9 @@ export async function getAllOwnerRequests(): Promise<any[]> {
     const mappedApproved = approved.map((o: any) => ({
       uuid: o.uuid,
       userUuid: o.user?.uuid || o.user?.id,
-      displayName: o.user?.displayName || `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+      displayName:
+        o.user?.displayName ||
+        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
       email: o.user?.email,
       nationalId: o.user?.nationalId,
       phoneNumber: o.user?.phoneNumber,
@@ -1624,7 +1628,9 @@ export async function getAllOwnerRequests(): Promise<any[]> {
     const mappedRejected = rejected.map((o: any) => ({
       uuid: o.uuid,
       userUuid: o.user?.uuid || o.user?.id,
-      displayName: o.user?.displayName || `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+      displayName:
+        o.user?.displayName ||
+        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
       email: o.user?.email,
       nationalId: o.user?.nationalId,
       phoneNumber: o.user?.phoneNumber,
@@ -1681,7 +1687,12 @@ export async function getAllOwnerRequests(): Promise<any[]> {
     // Si no hay solicitudes en caché y hay dueños en la DB, inicializamos algunas solicitudes
     if (cachedRequests.length === 0 && owners.length > 0) {
       cachedRequests = owners.map((p, index) => {
-        const rifs = ['J-409823124', 'J-312984716', 'J-481920384', 'J-501238472'];
+        const rifs = [
+          'J-409823124',
+          'J-312984716',
+          'J-481920384',
+          'J-501238472',
+        ];
         const coops = [
           'Cooperativa Caracas Move R.L.',
           'Línea de Transporte Chacao',
@@ -1901,7 +1912,7 @@ export async function getExternalBcvRate(): Promise<{
     if (apiRes.ok) {
       const list = await apiRes.json();
       const oficial = list.find((item: any) => item.fuente === 'oficial');
-      if (oficial && oficial.promedio) {
+      if (oficial?.promedio) {
         const suggestedRateVal = oficial.promedio;
         const suggestedDateVal = oficial.fechaActualizacion
           ? oficial.fechaActualizacion.slice(0, 10)
@@ -1961,7 +1972,7 @@ export async function confirmRide(qr: string): Promise<{
  */
 export async function getCurrentSession(): Promise<any> {
   const session = await fetchWithAuth('/cash-sessions/me/current');
-  if (!session || !session.uuid) {
+  if (!session?.uuid) {
     return null;
   }
   return session;

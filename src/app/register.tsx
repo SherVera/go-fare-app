@@ -1,20 +1,7 @@
-import { ScreenHeader } from '@/components/ScreenHeader';
-import type { RegisterFormState } from '@/interfaces';
-import {
-  createBackendUser,
-  createFareAccount,
-  loginWithFirebaseToken,
-  registerWithEmail,
-  resolveRoleUuid,
-  sendFirebaseVerificationEmail,
-  updateBackendProfile,
-} from '@/lib/api';
-import { auth, signIn } from '@/lib/firebase';
-import { tokens } from '@/theme/tokens';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,6 +15,19 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import type { RegisterFormState } from '@/interfaces';
+import {
+  createBackendUser,
+  createFareAccount,
+  loginWithFirebaseToken,
+  registerWithEmail,
+  resolveRoleUuid,
+  sendFirebaseVerificationEmail,
+  updateBackendProfile,
+} from '@/lib/api';
+import { auth, signIn } from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function RegisterScreen() {
   const router = useRouter();

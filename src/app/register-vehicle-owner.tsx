@@ -1,17 +1,3 @@
-import { ScreenHeader } from '@/components/ScreenHeader';
-import {
-  clearGoFareToken,
-  createBackendUser,
-  createFareAccount,
-  getCooperatives,
-  loginWithFirebaseToken,
-  registerWithEmail,
-  resolveRoleUuid,
-  submitVehicleOwnerRequest,
-  updateBackendProfile,
-} from '@/lib/api';
-import { sigOutAccount } from '@/lib/firebase';
-import { tokens } from '@/theme/tokens';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -28,6 +14,20 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import {
+  clearGoFareToken,
+  createBackendUser,
+  createFareAccount,
+  getCooperatives,
+  loginWithFirebaseToken,
+  registerWithEmail,
+  resolveRoleUuid,
+  submitVehicleOwnerRequest,
+  updateBackendProfile,
+} from '@/lib/api';
+import { sigOutAccount } from '@/lib/firebase';
+import { tokens } from '@/theme/tokens';
 
 export default function RegisterVehicleOwnerScreen() {
   const router = useRouter();
@@ -151,7 +151,7 @@ export default function RegisterVehicleOwnerScreen() {
       });
 
       // 2. Intercambiar el ID Token por el JWT de GoFare
-      let backendUser;
+      let backendUser = null;
       try {
         // Intentar crear el usuario local primero en PostgreSQL para asegurar el número de teléfono
         try {
