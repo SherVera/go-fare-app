@@ -26,8 +26,11 @@ import { auth, sigOutAccount, updateUser } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 function vePhoneFromE164(phone: string | null | undefined): string {
-  if (!phone?.startsWith('+58') || phone.length < 12) return '';
-  return `0${phone.slice(3)}`;
+  if (!phone) return '';
+  if (phone.startsWith('+58') && phone.length >= 12) {
+    return `0${phone.slice(3)}`;
+  }
+  return phone;
 }
 
 export default function OnboardingScreen() {
@@ -192,7 +195,7 @@ export default function OnboardingScreen() {
       return false;
     }
     if (!hasPhone) {
-      if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(phoneNumber.trim())) {
+      if (!/^((04|02)\d{9}|\+\d{10,15})$/.test(phoneNumber.trim())) {
         Alert.alert(
           'Atención',
           'Por favor, ingresa un número de teléfono válido (ej. 04120000000).',
@@ -222,18 +225,23 @@ export default function OnboardingScreen() {
       const firstName = parts[0];
       const lastName = parts.slice(1).join(' ') || undefined;
 
+      const formattedPhoneNumber = phoneNumber.trim().startsWith('+')
+        ? phoneNumber.trim()
+        : phoneNumber.trim().startsWith('0')
+          ? `+58${phoneNumber.trim().slice(1)}`
+          : `+58${phoneNumber.trim()}`;
+
       const updatePayload: any = {
         displayName: fullName.trim(),
         firstName,
         lastName,
         nationalId: idNumber.trim(),
+        phoneNumber: formattedPhoneNumber,
       };
 
-      if (!hasPhone) {
-        updatePayload.phoneNumber = phoneNumber.trim();
-      }
-
       await updateBackendProfile(response.user.id, updatePayload);
+
+
 
       // Guardar perfil completo en caché local
       const cachedProfile = {
@@ -244,7 +252,7 @@ export default function OnboardingScreen() {
         lastName,
         idNumber: idNumber.trim(),
         nationalId: idNumber.trim(),
-        phoneNumber: phoneNumber.trim(),
+        phoneNumber: formattedPhoneNumber,
         email: email || undefined,
         onboardingCompleted: true,
       };

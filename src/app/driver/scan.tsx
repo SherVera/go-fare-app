@@ -18,11 +18,15 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   getCurrentSession,
   getSessionQr,
   getSessionRides,
   validateTicketByQr,
+  getAllUsers,
+  getAllTransactions,
+  getFareAccountByUserId,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
@@ -51,6 +55,97 @@ export default function DriverScanScreen() {
   // Detalle de pago seleccionado para mostrar en el modal
   const [selectedPayment, setSelectedPayment] = useState<any | null>(null);
 
+  // Helper para resolver los pasajeros de los viajes de la sesión
+  const resolveRidesPassengers = useCallback(async (rides: any[]) => {
+    try {
+      const [users, transactions] = await Promise.all([
+        getAllUsers(),
+        getAllTransactions(),
+      ]);
+
+      const cacheKey = 'gofare_account_to_user_uuid_cache';
+      const resolvedKey = 'gofare_resolved_user_uuids';
+
+      const cacheStr = await AsyncStorage.getItem(cacheKey);
+      const resolvedStr = await AsyncStorage.getItem(resolvedKey);
+
+      const accountToUserUuidCache = cacheStr ? JSON.parse(cacheStr) : {};
+      const resolvedUserUuids = resolvedStr ? JSON.parse(resolvedStr) : [];
+      const resolvedUserUuidsSet = new Set(resolvedUserUuids);
+
+      let cacheUpdated = false;
+
+      for (const ride of rides) {
+        if (
+          ride.passenger &&
+          (ride.passenger.displayName || ride.passenger.nationalId)
+        ) {
+          continue;
+        }
+
+        const tx = transactions.find(
+          (t) =>
+            t.transactionType === 'ride_payment' &&
+            t.description &&
+            ride.uuid &&
+            t.description.includes(ride.uuid),
+        );
+
+        if (tx && tx.fareAccount && tx.fareAccount.uuid) {
+          const accountUuid = tx.fareAccount.uuid;
+          let userUuid = accountToUserUuidCache[accountUuid];
+
+          if (!userUuid) {
+            const unresolvedUsers = users.filter(
+              (u) => u.uuid && !resolvedUserUuidsSet.has(u.uuid),
+            );
+
+            for (const u of unresolvedUsers) {
+              if (!u.uuid) continue;
+              resolvedUserUuidsSet.add(u.uuid);
+              resolvedUserUuids.push(u.uuid);
+              cacheUpdated = true;
+
+              try {
+                const acc = await getFareAccountByUserId(u.uuid);
+                if (acc && acc.id) {
+                  accountToUserUuidCache[acc.id] = u.uuid;
+                  if (acc.id === accountUuid) {
+                    userUuid = u.uuid;
+                    break;
+                  }
+                }
+              } catch (_e) {
+                // Ignore
+              }
+            }
+          }
+
+          if (userUuid) {
+            const foundUser = users.find((u) => u.uuid === userUuid);
+            if (foundUser) {
+              ride.passenger = foundUser;
+            }
+          }
+        }
+      }
+
+      if (cacheUpdated) {
+        await AsyncStorage.setItem(
+          cacheKey,
+          JSON.stringify(accountToUserUuidCache),
+        );
+        await AsyncStorage.setItem(
+          resolvedKey,
+          JSON.stringify(resolvedUserUuids),
+        );
+      }
+    } catch (err) {
+      console.warn('[Scan] Error resolving passenger details:', err);
+    }
+    return rides;
+  }, []);
+
   // Cargar estado inicial del turno
   const checkServiceStatus = useCallback(async () => {
     try {
@@ -63,7 +158,8 @@ export default function DriverScanScreen() {
         setQrCodeData(qrRes.qr);
 
         const rides = await getSessionRides(session.uuid);
-        setRecentPayments(rides.slice(0, 5));
+        const resolvedRides = await resolveRidesPassengers(rides);
+        setRecentPayments(resolvedRides.slice(0, 5));
       } else {
         setActiveSession(null);
         setQrCodeData(null);
@@ -74,7 +170,8 @@ export default function DriverScanScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [resolveRidesPassengers]);
+
 
   useFocusEffect(
     useCallback(() => {
@@ -103,12 +200,12 @@ export default function DriverScanScreen() {
 
         // 3. Consultar viajes recientes de la sesión en base de datos
         const rides = await getSessionRides(current.uuid);
-
+        const resolvedRides = await resolveRidesPassengers(rides);
+        
         // Detectar si hay nuevos cobros para alertas
-        if (rides.length > recentPayments.length) {
-          const newRides = rides.filter(
-            (r: any) =>
-              !recentPayments.some((prev: any) => prev.uuid === r.uuid),
+        if (resolvedRides.length > recentPayments.length) {
+          const newRides = resolvedRides.filter(
+            (r: any) => !recentPayments.some((prev: any) => prev.uuid === r.uuid)
           );
 
           for (const newRide of newRides) {
@@ -144,14 +241,14 @@ export default function DriverScanScreen() {
         }
 
         setActiveSession(current);
-        setRecentPayments(rides.slice(0, 5));
+        setRecentPayments(resolvedRides.slice(0, 5));
       } catch (err) {
         console.warn('[Scan] Error during polling in scan:', err);
       }
     }, 4000);
 
     return () => clearInterval(pollInterval);
-  }, [activeSession, recentPayments]);
+  }, [activeSession, recentPayments, resolveRidesPassengers]);
 
   // Validación manual de código de boleto (pasaje QR)
   const handleManualValidateTicket = async (code: string) => {
@@ -188,7 +285,8 @@ export default function DriverScanScreen() {
       // Recargar cobros recientes para reflejar el cambio en la sesión
       if (activeSession) {
         const rides = await getSessionRides(activeSession.uuid);
-        setRecentPayments(rides.slice(0, 5));
+        const resolvedRides = await resolveRidesPassengers(rides);
+        setRecentPayments(resolvedRides.slice(0, 5));
       }
 
       setQrCodeInput('');
@@ -724,6 +822,8 @@ const styles = StyleSheet.create({
   feedLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
   },
   feedIconWrapper: {
     width: 36,

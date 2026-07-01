@@ -201,7 +201,7 @@ export default function TopUpBalanceScreen() {
   const handleConfirmPurchase = async () => {
     // Validaciones
     if (selectedMethod === 'pago_movil') {
-      if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(pmPhone.trim())) {
+      if (!/^(04|02)\d{9}$/.test(pmPhone.trim())) {
         Alert.alert(
           'Atención',
           'Ingresa un número de Pago Móvil válido (11 dígitos).',

@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useState } from 'react';
@@ -7,27 +6,18 @@ import {
   ActivityIndicator,
   FlatList,
   Platform,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCurrentSession, getSessionRides, getAllUsers, getAllTransactions, getFareAccountByUserId } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
-interface ValidatedTicket {
-  id: string;
-  code: string;
-  fare: number;
-  route: string;
-  time: string;
-  date: string;
-  passengerName: string;
-}
-
 export default function DriverHistoryScreen() {
-  const [validations, setValidations] = useState<ValidatedTicket[]>([]);
+  const [validations, setValidations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [totalEarnings, setTotalEarnings] = useState(0);
@@ -35,22 +25,105 @@ export default function DriverHistoryScreen() {
 
   const loadValidations = useCallback(async () => {
     try {
-      const storedStr = await AsyncStorage.getItem('mock_validated_tickets');
-      if (storedStr) {
-        const list: ValidatedTicket[] = JSON.parse(storedStr);
-        setValidations(list);
+      const session = await getCurrentSession();
+      if (session && session.uuid) {
+        setTotalEarnings(Number(session.totalFares) || 0);
+        setTotalCount(Number(session.ridesCount) || 0);
 
-        // Calcular ganancias dinámicas de este turno
-        const sum = list.reduce(
-          (acc, item) => acc + (Number(item.fare) || 0),
-          0,
+        const rides = await getSessionRides(session.uuid);
+
+        try {
+          // Obtener usuarios y transacciones
+          const [users, transactions] = await Promise.all([
+            getAllUsers(),
+            getAllTransactions()
+          ]);
+
+          // Cargar cachés de mapeo desde AsyncStorage
+          const cacheKey = 'gofare_account_to_user_uuid_cache';
+          const resolvedKey = 'gofare_resolved_user_uuids';
+
+          const cacheStr = await AsyncStorage.getItem(cacheKey);
+          const resolvedStr = await AsyncStorage.getItem(resolvedKey);
+
+          const accountToUserUuidCache = cacheStr ? JSON.parse(cacheStr) : {};
+          const resolvedUserUuids = resolvedStr ? JSON.parse(resolvedStr) : [];
+          const resolvedUserUuidsSet = new Set(resolvedUserUuids);
+
+          let cacheUpdated = false;
+
+          for (const ride of rides) {
+            // Si el backend ya retorna el pasajero (por ejemplo, en local o futuras actualizaciones), lo respetamos
+            if (ride.passenger && (ride.passenger.displayName || ride.passenger.nationalId)) {
+              continue;
+            }
+
+            // Buscar la transacción correspondiente a este cobro (ride)
+            // La descripción de la transacción es "Pasaje <ride_uuid>"
+            const tx = transactions.find(
+              (t) =>
+                t.transactionType === 'ride_payment' &&
+                t.description &&
+                ride.uuid &&
+                t.description.includes(ride.uuid)
+            );
+
+            if (tx && tx.fareAccount && tx.fareAccount.uuid) {
+              const accountUuid = tx.fareAccount.uuid;
+              let userUuid = accountToUserUuidCache[accountUuid];
+
+              if (!userUuid) {
+                const unresolvedUsers = users.filter((u) => u.uuid && !resolvedUserUuidsSet.has(u.uuid));
+
+                for (const u of unresolvedUsers) {
+                  if (!u.uuid) continue;
+                  resolvedUserUuidsSet.add(u.uuid);
+                  resolvedUserUuids.push(u.uuid);
+                  cacheUpdated = true;
+
+                  try {
+                    const acc = await getFareAccountByUserId(u.uuid);
+                    if (acc && acc.id) {
+                      accountToUserUuidCache[acc.id] = u.uuid;
+                      if (acc.id === accountUuid) {
+                        userUuid = u.uuid;
+                        break; // Encontrado, detenemos la búsqueda para este ride
+                      }
+                    }
+                  } catch (_e) {
+                    // El usuario no tiene cuenta de tarifa creada
+                  }
+                }
+              }
+
+              // Si logramos resolver el userUuid, asociar el usuario del listado actual al ride
+              if (userUuid) {
+                const foundUser = users.find((u) => u.uuid === userUuid);
+                if (foundUser) {
+                  ride.passenger = foundUser;
+                }
+              }
+            }
+          }
+
+          // Guardar cachés actualizados
+          if (cacheUpdated) {
+            await AsyncStorage.setItem(cacheKey, JSON.stringify(accountToUserUuidCache));
+            await AsyncStorage.setItem(resolvedKey, JSON.stringify(resolvedUserUuids));
+          }
+        } catch (apiErr) {
+          console.warn('[DriverHistory] Error resolving passenger details via API fallback:', apiErr);
+        }
+
+        // Ordenar por fecha de creación descendente para mostrar cobros recientes arriba
+        const sortedRides = [...rides].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
-        setTotalEarnings(630.0 + sum); // 630.00 base + acumulado local
-        setTotalCount(42 + list.length); // 42 base + acumulado local
+        setValidations(sortedRides);
       } else {
         setValidations([]);
-        setTotalEarnings(630.0);
-        setTotalCount(42);
+        setTotalEarnings(0);
+        setTotalCount(0);
       }
     } catch (err) {
       console.warn('[DriverHistory] Error loading validated tickets:', err);
@@ -59,6 +132,7 @@ export default function DriverHistoryScreen() {
       setRefreshing(false);
     }
   }, []);
+
 
   useFocusEffect(
     useCallback(() => {
@@ -71,14 +145,33 @@ export default function DriverHistoryScreen() {
     loadValidations();
   };
 
-  const renderItem = ({ item }: { item: ValidatedTicket }) => {
+  const renderItem = ({ item }: { item: any }) => {
+    const passengerName =
+      item.passenger?.displayName ||
+      `${item.passenger?.firstName || ''} ${item.passenger?.lastName || ''}`.trim() ||
+      'Pasajero';
+
+    const passengerCedula = item.passenger?.nationalId 
+      ? `C.I. ${item.passenger.nationalId}` 
+      : 'C.I. No registrada';
+
     // Determinar iniciales del pasajero
-    const initials = item.passengerName
+    const initials = passengerName
       .split(' ')
-      .map((name) => name[0])
+      .map((name: string) => name[0])
       .join('')
       .toUpperCase()
       .substring(0, 2);
+
+    const routeName = item.route?.name || 'General';
+
+    // Formatear fecha y hora
+    const dateObj = new Date(item.createdAt);
+    const dateStr = dateObj.toLocaleDateString('es-VE');
+    const timeStr = dateObj.toLocaleTimeString('es-VE', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
     return (
       <View style={styles.card}>
@@ -90,9 +183,10 @@ export default function DriverHistoryScreen() {
 
           {/* Información del cobro */}
           <View style={styles.infoContainer}>
-            <Text style={styles.passengerText}>{item.passengerName}</Text>
+            <Text style={styles.passengerText}>{passengerName}</Text>
+            <Text style={styles.cedulaText}>{passengerCedula}</Text>
             <Text style={styles.routeText} numberOfLines={1}>
-              {item.route}
+              {routeName}
             </Text>
             <View style={styles.metaRow}>
               <Ionicons
@@ -102,16 +196,16 @@ export default function DriverHistoryScreen() {
                 style={{ marginRight: 4 }}
               />
               <Text style={styles.metaText}>
-                {item.date} • {item.time}
+                {dateStr} • {timeStr}
               </Text>
             </View>
           </View>
 
           {/* Tarifa cobrada */}
           <View style={styles.fareContainer}>
-            <Text style={styles.fareText}>+{item.fare.toFixed(2)} fares</Text>
+            <Text style={styles.fareText}>+{Number(item.fareCost).toFixed(2)} fares</Text>
             <Text style={styles.codeTextMono} numberOfLines={1}>
-              {item.code.substring(0, 10)}
+              GF-{item.uuid?.substring(0, 8).toUpperCase()}
             </Text>
           </View>
         </View>
@@ -158,7 +252,7 @@ export default function DriverHistoryScreen() {
 
       <FlatList
         data={validations}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.uuid}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
@@ -305,6 +399,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#1E293B',
+    marginBottom: 2,
+  },
+  cedulaText: {
+    fontSize: 11.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
     marginBottom: 2,
   },
   routeText: {
