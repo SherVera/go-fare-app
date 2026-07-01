@@ -12,6 +12,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import 'react-native-reanimated';
 
+import { Ionicons } from '@expo/vector-icons';
+import {
+  Outfit_400Regular,
+  Outfit_500Medium,
+  Outfit_700Bold,
+  Outfit_900Black,
+  useFonts,
+} from '@expo-google-fonts/outfit';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import * as LocalAuthentication from 'expo-local-authentication';
+import {
+  AppState,
+  type AppStateStatus,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { clearBackendJwt, getBackendProfile, syncWithBackend } from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
 import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
@@ -20,27 +41,6 @@ import {
   getInitialNotification,
   registerNotificationHandlers,
 } from '@/lib/notifications';
-import {
-  Outfit_400Regular,
-  Outfit_500Medium,
-  Outfit_700Bold,
-  Outfit_900Black,
-  useFonts,
-} from '@expo-google-fonts/outfit';
-import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import * as LocalAuthentication from 'expo-local-authentication';
-import {
-  AppState,
-  AppStateStatus,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -279,8 +279,7 @@ export default function RootLayout() {
         if (!cancelled) setPhase('signed_out');
         return;
       }
-
-      let backendUser;
+      let backendUser: any = null;
       try {
         const response = await syncWithBackend(currentUser);
         backendUser = response.user;

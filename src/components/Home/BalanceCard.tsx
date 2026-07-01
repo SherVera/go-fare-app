@@ -1,7 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { BalanceCardProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';

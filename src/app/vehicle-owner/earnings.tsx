@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -260,8 +260,8 @@ export default function VehicleOwnerEarnings() {
         <Text style={styles.sectionTitle}>Ingresos Semanales</Text>
         <View style={styles.chartCard}>
           <View style={styles.chartBarsContainer}>
-            {weeklyData.map((data, idx) => (
-              <View key={idx} style={styles.chartCol}>
+            {weeklyData.map((data) => (
+              <View key={data.day} style={styles.chartCol}>
                 <View style={styles.chartBarOuter}>
                   <View
                     style={[

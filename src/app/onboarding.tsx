@@ -1,7 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -240,8 +239,6 @@ export default function OnboardingScreen() {
       };
 
       await updateBackendProfile(response.user.id, updatePayload);
-
-
 
       // Guardar perfil completo en caché local
       const cachedProfile = {

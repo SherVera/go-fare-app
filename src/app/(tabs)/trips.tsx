@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -13,12 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type {
-  BackendTicket,
-  Trip,
-  TripFilter,
-  TripSummary,
-} from '@/interfaces';
+import type { BackendTicket, TripFilter, TripSummary } from '@/interfaces';
 import {
   getAccountTransactions,
   getBackendProfile,

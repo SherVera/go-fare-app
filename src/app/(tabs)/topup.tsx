@@ -78,7 +78,7 @@ export default function TopUpBalanceScreen() {
       const savings = grossAmount - netAmount;
 
       let tagText = pkg.tag;
-      if (pkg.tag && pkg.tag.startsWith('AHORRA')) {
+      if (pkg.tag?.startsWith('AHORRA')) {
         tagText = `${pkg.tag}${savings.toFixed(2).replace('.', ',')}`;
       }
 
@@ -149,7 +149,7 @@ export default function TopUpBalanceScreen() {
         setUserId(backendUser.id);
         setPmPhone(backendUser.phoneNumber || '');
 
-        let account;
+        let account = null;
         try {
           account = await getFareAccountByUserId(backendUser.id);
         } catch (_) {

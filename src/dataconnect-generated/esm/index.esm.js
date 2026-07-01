@@ -128,7 +128,7 @@ export function listMovies(dcOrOptions, options) {
   );
   return executeQuery(
     listMoviesRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 }
 
@@ -154,7 +154,7 @@ export function listUsers(dcOrOptions, options) {
   );
   return executeQuery(
     listUsersRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 }
 
@@ -180,7 +180,7 @@ export function listUserReviews(dcOrOptions, options) {
   );
   return executeQuery(
     listUserReviewsRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 }
 
@@ -211,7 +211,7 @@ export function getMovieById(dcOrVars, varsOrOptions, options) {
   );
   return executeQuery(
     getMovieByIdRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 }
 
@@ -241,6 +241,6 @@ export function searchMovie(dcOrVars, varsOrOptions, options) {
   );
   return executeQuery(
     searchMovieRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 }
