@@ -241,7 +241,7 @@ export async function isProfileOnboardingComplete(
   if (d.onboardingCompleted === true) return true;
   const phoneOk =
     typeof d.phoneNumber === 'string' &&
-    /^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(d.phoneNumber);
+    /^((04|02)\d{9}|\+\d{10,15})$/.test(d.phoneNumber);
   const idOk = typeof d.idNumber === 'string' && /^\d{5,10}$/.test(d.idNumber);
   const nameOk =
     typeof d.fullName === 'string' && d.fullName.trim().length >= 3;

@@ -62,6 +62,7 @@ const config: ExpoConfig = {
     },
     infoPlist: {
       UIBackgroundModes: ['remote-notification', 'fetch'],
+      NSFaceIDUsageDescription: 'Habilita FaceID para ingresar rápidamente a tu cuenta.',
     },
   },
   android: {
@@ -110,6 +111,12 @@ const config: ExpoConfig = {
     '@react-native-google-signin/google-signin',
     'expo-dev-client',
     'expo-secure-store',
+    [
+      'expo-local-authentication',
+      {
+        faceIDPermission: 'Habilita FaceID para ingresar rápidamente a tu cuenta.',
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

@@ -12,7 +12,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import 'react-native-reanimated';
 
-import { Ionicons } from '@expo/vector-icons';
+import { clearBackendJwt, getBackendProfile, syncWithBackend } from '@/lib/api';
+import { registerAuthSessionResolver } from '@/lib/auth-session';
+import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
+import {
+  getFcmToken,
+  getInitialNotification,
+  registerNotificationHandlers,
+} from '@/lib/notifications';
 import {
   Outfit_400Regular,
   Outfit_500Medium,
@@ -20,11 +27,11 @@ import {
   Outfit_900Black,
   useFonts,
 } from '@expo-google-fonts/outfit';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
-  Alert,
   AppState,
   AppStateStatus,
   Platform,
@@ -34,25 +41,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  clearBackendJwt,
-  clearGoFareToken,
-  getBackendProfile,
-  getGoFareToken,
-  syncWithBackend,
-} from '@/lib/api';
-import { registerAuthSessionResolver } from '@/lib/auth-session';
-import {
-  auth,
-  listenToAuthState,
-  sendVerificationEmail,
-  sigOutAccount,
-} from '@/lib/firebase';
-import {
-  getFcmToken,
-  getInitialNotification,
-  registerNotificationHandlers,
-} from '@/lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -66,6 +54,11 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const segments = useSegments();
   const router = useRouter();
+
+  const segmentsRef = useRef(segments);
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
 
   const [phase, setPhase] = useState<SessionPhase>('initializing');
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -263,49 +256,21 @@ export default function RootLayout() {
         : false;
 
       if (currentUser && !isVerified) {
-        Alert.alert(
-          'Correo No Verificado',
-          `Por favor, verifica tu correo electrónico (${currentUser.email}) para poder acceder a la aplicación.\n\nSi no recibiste el enlace de verificación, puedes solicitar que se reenvíe.`,
-          [
-            {
-              text: 'Cerrar Sesión',
-              style: 'destructive',
-              onPress: async () => {
-                try {
-                  await sigOutAccount();
-                  await clearBackendJwt();
-                } catch (err) {
-                  console.warn(
-                    '[Layout] Error al cerrar sesión de usuario no verificado:',
-                    err,
-                  );
-                }
-              },
-            },
-            {
-              text: 'Reenviar Correo',
-              onPress: async () => {
-                try {
-                  await sendVerificationEmail(currentUser);
-                  Alert.alert(
-                    'Correo Enviado',
-                    'Se ha enviado un enlace de verificación a tu correo electrónico. Por favor revisa tu bandeja de entrada o carpeta de spam.',
-                  );
-                } catch {
-                  Alert.alert(
-                    'Error',
-                    'No se pudo enviar el correo de verificación. Inténtalo de nuevo más tarde.',
-                  );
-                }
-                try {
-                  await sigOutAccount();
-                  await clearBackendJwt();
-                } catch {}
-              },
-            },
-          ],
-        );
-        if (!cancelled) setPhase('signed_out');
+        const currentSegment = segmentsRef.current[0] as string | undefined;
+        const allowedVRoutes = new Set(['register', 'verify-email']);
+        if (allowedVRoutes.has(currentSegment || '')) {
+          if (!cancelled) setPhase('signed_out');
+          return;
+        }
+
+        // Si no está verificado, redirigir a verify-email de inmediato sin popup
+        if (!cancelled) {
+          setPhase('signed_out');
+          router.replace({
+            pathname: '/verify-email',
+            params: { email: currentUser.email || '' },
+          } as any);
+        }
         return;
       }
 
@@ -447,9 +412,7 @@ export default function RootLayout() {
           const idOk = /^\d{5,10}$/.test(cleanId);
 
           const phone = checkObj.phoneNumber || '';
-          const phoneOk = /^(0412|0414|0424|0416|0426|0212|\+58)\d{7,11}$/.test(
-            phone.trim(),
-          );
+          const phoneOk = /^((04|02)\d{9}|\+\d{10,15})$/.test(phone.trim());
 
           complete = Boolean(nameOk && idOk && phoneOk);
         } else {
@@ -475,7 +438,7 @@ export default function RootLayout() {
       registerAuthSessionResolver(async (_user) => {});
       unsubscribe();
     };
-  }, []);
+  }, [router.replace]);
 
   // Cargar el rol del usuario desde AsyncStorage y verificar con el backend
   useEffect(() => {
@@ -670,6 +633,7 @@ export default function RootLayout() {
       'forgot-password',
       'phone-login',
       'register-vehicle-owner',
+      'verify-email',
     ]);
 
     if (phase === 'signed_in') {

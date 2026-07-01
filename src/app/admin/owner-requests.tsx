@@ -111,18 +111,18 @@ export default function AdminOwnerRequestsScreen() {
   const handleApprove = (req: any) => {
     Alert.alert(
       'Aprobar Solicitud',
-      `¿Deseas aprobar a ${req.displayName} como Socio/Dueño de Vehículo?\n\nEsto le dará permisos para gestionar unidades y conductores de: ${req.businessName}.`,
+      `¿Deseas aprobar a ${req.displayName} como Propietario?\n\nEsto le dará permisos para gestionar unidades y conductores de: ${req.businessName}.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Aprobar Socio',
+          text: 'Aprobar Propietario',
           onPress: async () => {
             setLoading(true);
             try {
               await verifyOwnerRequest(req.uuid, req.userUuid);
               Alert.alert(
                 'Éxito',
-                'El usuario ha sido ascendido a Socio con éxito.',
+                'El usuario ha sido aprobado como Propietario de vehiculo con éxito.',
               );
               fetchRequests();
             } catch (err: any) {
@@ -174,7 +174,7 @@ export default function AdminOwnerRequestsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <ScreenHeader
-        title="Solicitudes de Socios"
+        title="Solicitudes de Propietarios"
         onMenu={() => setIsOpen(true)}
       />
 
@@ -358,7 +358,7 @@ export default function AdminOwnerRequestsScreen() {
                         size={18}
                         color="#FFFFFF"
                       />
-                      <Text style={styles.approveBtnText}>Aprobar Socio</Text>
+                      <Text style={styles.approveBtnText}>Aprobar Propietario</Text>
                     </Pressable>
                   </View>
                 )}

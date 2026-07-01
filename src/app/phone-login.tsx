@@ -51,17 +51,17 @@ export default function PhoneLoginScreen() {
 
   const handleSendCode = async () => {
     const trimmed = phoneNumber.trim();
-    // Formatos venezolanos: 04XX-XXXXXXX → +58 4XX XXXXXXX
-    if (!/^(0412|0414|0424|0416|0426)\d{7}$/.test(trimmed)) {
+    // Formatos venezolanos: 04XX-XXXXXXX → +58 4XX XXXXXXX o internacionales
+    if (!/^((04|02)\d{9}|\+\d{10,15})$/.test(trimmed)) {
       Alert.alert(
         'Número inválido',
-        'Ingresa un número venezolano válido (ej. 04140000000).',
+        'Ingresa un número de teléfono válido.',
       );
       return;
     }
 
-    // Convertir 04XXXXXXXXX → +584XXXXXXXXX
-    const e164 = `+58${trimmed.slice(1)}`;
+    // Convertir 04XXXXXXXXX o 02XXXXXXXXX → +58XXXXXXXXX
+    const e164 = trimmed.startsWith('+') ? trimmed : `+58${trimmed.slice(1)}`;
 
     try {
       setLoading(true);
