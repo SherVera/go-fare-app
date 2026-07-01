@@ -19,32 +19,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { MockDriver, MockVehicle } from '@/interfaces';
 import {
   createBackendInviteCode,
   getBackendInviteCodes,
   getBackendProfile,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
-
-interface MockDriver {
-  id: string;
-  name: string;
-  nationalId: string;
-  phone: string;
-  status: 'active' | 'inactive';
-}
-
-interface MockVehicle {
-  uuid: string;
-  vehicleMake: string;
-  vehicleModel: string;
-  vehicleYear: number;
-  licensePlate: string;
-  cooperativeName: string;
-  status: 'approved' | 'pending' | 'rejected';
-  createdAt: string;
-  assignedDriver?: MockDriver;
-}
 
 const MOCK_DRIVERS_BASE: MockDriver[] = [
   {
