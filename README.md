@@ -2,6 +2,17 @@
 
 Una aplicación móvil moderna y fluida para la gestión de viajes y recargas de saldo en transporte público.
 
+## 📱 Build iOS en iPhone (guía desde cero)
+
+Guía completa para instalar GoFare en un iPhone **sin experiencia previa**: Terminal, Xcode, Node, dependencias, Firebase, `.env`, compilación Release.
+
+- **Hoy (sin Apple Developer de pago):** Mac + iPhone con cable.
+- **Futuro (con cuenta de pago):** TestFlight, App Store.
+
+→ **[IOS_PRODUCTION_BUILD.md](./IOS_PRODUCTION_BUILD.md)**
+
+---
+
 ## 🚀 Cómo correr la app
 
 Este proyecto utiliza **Expo** y **Expo Router**.
