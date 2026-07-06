@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -16,7 +16,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { submitDriverRequest } from '@/lib/api';
+import {
+  getBackendProfile,
+  redeemBackendInviteCode,
+  submitDriverRequest,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 interface FormFields {
@@ -24,6 +28,7 @@ interface FormFields {
   licenseType: string;
   experienceYears: string;
   emergencyPhone: string;
+  inviteCode: string;
 }
 
 interface FormErrors {
@@ -31,19 +36,36 @@ interface FormErrors {
   licenseType?: string;
   experienceYears?: string;
   emergencyPhone?: string;
+  inviteCode?: string;
 }
 
 export default function RegisterDriverScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ code?: string }>();
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<FormFields>({
     licenseNumber: '',
     licenseType: '',
     experienceYears: '',
     emergencyPhone: '',
+    inviteCode: '',
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
+
+  // Cargar código de invitación si viene del Deep Link (URL query param)
+  useEffect(() => {
+    if (params.code) {
+      console.log(
+        '[RegisterDriver] Código de invitación recibido por Deep Link:',
+        params.code,
+      );
+      setForm((prev) => ({
+        ...prev,
+        inviteCode: params.code?.toUpperCase() || '',
+      }));
+    }
+  }, [params.code]);
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {};
@@ -57,12 +79,19 @@ export default function RegisterDriverScreen() {
     const expNum = parseInt(form.experienceYears, 10);
     if (!form.experienceYears.trim()) {
       newErrors.experienceYears = 'Los años de experiencia son requeridos';
-    } else if (isNaN(expNum) || expNum < 0 || expNum > 70) {
+    } else if (Number.isNaN(expNum) || expNum < 0 || expNum > 70) {
       newErrors.experienceYears = 'Ingresa un número de años válido';
     }
 
     if (!form.emergencyPhone.trim()) {
       newErrors.emergencyPhone = 'El teléfono de emergencia es requerido';
+    }
+
+    if (!form.inviteCode.trim()) {
+      newErrors.inviteCode =
+        'El código de invitación del socio es requerido para asociarte a una flota';
+    } else if (form.inviteCode.trim().length !== 6) {
+      newErrors.inviteCode = 'El código debe tener exactamente 6 caracteres';
     }
 
     setErrors(newErrors);
@@ -74,6 +103,41 @@ export default function RegisterDriverScreen() {
 
     try {
       setLoading(true);
+
+      // 1. Obtener perfil actual para el canje
+      const profile = await getBackendProfile().catch(() => null);
+      if (!profile) {
+        Alert.alert(
+          'Error de Sesión',
+          'Debes haber iniciado sesión en la aplicación antes de registrarte como conductor.',
+        );
+        setLoading(false);
+        return;
+      }
+
+      const _driverUuid = profile.id;
+      const _driverName = profile.displayName || 'Conductor Registrado';
+      const _driverPhone = profile.phoneNumber || form.emergencyPhone;
+      const _driverNationalId = profile.nationalId || 'V-00000000';
+
+      // 2. Canjear el código de invitación en el backend real
+      console.log(
+        '[RegisterDriver] Canjeando código de invitación en backend:',
+        form.inviteCode,
+      );
+      try {
+        await redeemBackendInviteCode(form.inviteCode.trim());
+      } catch (err: any) {
+        Alert.alert(
+          'Invitación Inválida',
+          err.message ||
+            'El código ingresado es incorrecto, ya ha sido canjeado o está vencido.',
+        );
+        setLoading(false);
+        return;
+      }
+
+      // 3. Registrar al conductor en el backend
       await submitDriverRequest({
         licenseNumber: form.licenseNumber.trim(),
         licenseType: form.licenseType.trim(),
@@ -82,8 +146,8 @@ export default function RegisterDriverScreen() {
       });
 
       Alert.alert(
-        'Solicitud Enviada',
-        'Tu solicitud para registrarte como conductor ha sido recibida y está en proceso de revisión por el equipo de administración.',
+        'Registro Exitoso',
+        '¡Tu registro como conductor y la asociación con la flota del socio se han completado con éxito!',
         [
           {
             text: 'Aceptar',
@@ -130,11 +194,51 @@ export default function RegisterDriverScreen() {
               color="#0F766E"
             />
             <Text style={styles.infoText}>
-              Ingresa los datos de tu licencia de conducir y contacto de
-              emergencia para registrarte como conductor en la plataforma.
-              Evaluaremos tu solicitud en la brevedad.
+              Ingresa los datos de tu licencia de conducir, el código de
+              invitación que recibiste por correo del socio y el teléfono de
+              contacto de emergencia para completar tu registro.
             </Text>
           </View>
+
+          {/* Código de Invitación */}
+          <Text style={styles.inputLabel}>CÓDIGO DE INVITACIÓN (SOCIO)</Text>
+          <View
+            style={[
+              styles.inputCard,
+              errors.inviteCode && styles.inputCardError,
+              params.code && styles.inputCardDisabled,
+            ]}
+          >
+            <Ionicons
+              name="mail-open-outline"
+              size={20}
+              color={errors.inviteCode ? '#EF4444' : '#0F766E'}
+              style={styles.inputIcon}
+            />
+            <TextInput
+              style={[styles.input, params.code && styles.inputDisabled]}
+              placeholder="Ej. AB42FD"
+              placeholderTextColor="#A1A1AA"
+              autoCapitalize="characters"
+              maxLength={6}
+              value={form.inviteCode}
+              onChangeText={(text) =>
+                updateField('inviteCode', text.toUpperCase())
+              }
+              editable={!loading && !params.code}
+            />
+            {params.code && (
+              <Ionicons
+                name="checkmark-circle"
+                size={20}
+                color="#10B981"
+                style={{ marginLeft: 8 }}
+              />
+            )}
+          </View>
+          {errors.inviteCode && (
+            <Text style={styles.errorText}>{errors.inviteCode}</Text>
+          )}
 
           {/* Número de Licencia */}
           <Text style={styles.inputLabel}>NÚMERO DE LICENCIA</Text>
@@ -256,7 +360,7 @@ export default function RegisterDriverScreen() {
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
-                <Text style={styles.ctaText}>Enviar Solicitud</Text>
+                <Text style={styles.ctaText}>Completar Registro</Text>
                 <Ionicons
                   name="send-outline"
                   size={18}
@@ -326,6 +430,13 @@ const styles = StyleSheet.create({
     shadowColor: '#EF4444',
     shadowOpacity: 0.1,
   },
+  inputCardDisabled: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+    borderWidth: 1,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   inputIcon: {
     marginRight: 12,
   },
@@ -334,6 +445,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#18243E',
+  },
+  inputDisabled: {
+    color: '#64748B',
   },
   errorText: {
     color: '#EF4444',

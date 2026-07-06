@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,19 +18,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import type { RegisterFormState } from '@/interfaces';
 import {
+  createBackendUser,
   createFareAccount,
   loginWithFirebaseToken,
   registerWithEmail,
+  resolveRoleUuid,
   sendFirebaseVerificationEmail,
+  updateBackendProfile,
 } from '@/lib/api';
-import {
-  createUser,
-  sendVerificationEmail,
-  setDocument,
-  signIn,
-  sigOutAccount,
-  updateUser,
-} from '@/lib/firebase';
+import { auth, signIn } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function RegisterScreen() {
@@ -45,10 +42,6 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] =
     useState<RegisterFormState['showPassword']>(false);
   const [loading, setLoading] = useState<RegisterFormState['loading']>(false);
-  const [verificationSent, setVerificationSent] =
-    useState<RegisterFormState['verificationSent']>(false);
-  const [registeredEmail, setRegisteredEmail] =
-    useState<RegisterFormState['registeredEmail']>('');
   const registerInFlightRef = useRef(false);
 
   // Estado para los errores de validación de campos
@@ -89,7 +82,7 @@ export default function RegisterScreen() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       newErrors.email = 'Por favor, ingresa un correo electrónico válido.';
     }
-    if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(trimmedPhoneNumber)) {
+    if (!/^((04|02)\d{9}|\+\d{10,15})$/.test(trimmedPhoneNumber)) {
       newErrors.phoneNumber =
         'Por favor, ingresa un número de teléfono válido (ej. 04120000000).';
     }
@@ -107,53 +100,99 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
+      const formattedPhoneNumber = trimmedPhoneNumber.startsWith('+')
+        ? trimmedPhoneNumber
+        : trimmedPhoneNumber.startsWith('0')
+          ? `+58${trimmedPhoneNumber.slice(1)}`
+          : `+58${trimmedPhoneNumber}`;
+
       // 1. Registrar usuario en Firebase Auth via el backend.
       // El backend crea el usuario, asigna el rol solicitado y devuelve idToken + refreshToken.
+      // Omitimos displayName y phoneNumber ya que no son permitidos en el DTO de registro inicial del servidor.
       const credentials = await registerWithEmail({
         email: trimmedEmail,
         password: trimmedPassword,
         registrationRole,
-        displayName: trimmedFullName,
-        phoneNumber: trimmedPhoneNumber,
         nationalId: trimmedIdNumber,
       });
 
-      // 2. Firmar sesión local temporalmente para poder escribir a Firestore
-      const userCredential = await signIn({
+      // 2. Guardar perfil pendiente en AsyncStorage de forma asíncrona pero sin bloquear la redirección
+      try {
+        const pendingProfile = {
+          fullName: trimmedFullName,
+          phoneNumber: formattedPhoneNumber,
+          idNumber: trimmedIdNumber,
+        };
+        await AsyncStorage.setItem(
+          'gofare_pending_profile',
+          JSON.stringify(pendingProfile),
+        );
+      } catch (storageErr) {
+        console.warn('[Register] Error saving pending profile:', storageErr);
+      }
+
+      // 3. Firmar sesión local para que el SDK nativo tenga la sesión activa de cara al polling y verificación
+      await signIn({
         email: trimmedEmail,
         password: trimmedPassword,
       });
-      const { user: firebaseUser } = userCredential;
 
-      // 3. Escribir perfil en Firestore para pasar la validación de onboarding
-      const profilePayload = {
-        fullName: trimmedFullName,
-        idNumber: trimmedIdNumber,
-        email: trimmedEmail,
-        phoneNumber: trimmedPhoneNumber,
-        balance: 0,
-        carnetId: `GO-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
-        onboardingCompleted: true,
-      };
+      // 4. Sincronizar en segundo plano la base de datos de inmediato (sin bloquear la interfaz del usuario)
+      (async () => {
+        try {
+          const parts = trimmedFullName.split(/\s+/);
+          const firstName = parts[0] || '';
+          const lastName = parts.slice(1).join(' ') || '';
 
-      try {
-        await setDocument(`users/${firebaseUser.uid}`, profilePayload);
-      } catch (fsErr: any) {
-        console.warn('[Register] Error writing firestore document:', fsErr);
-      }
+          // Intentar crear el usuario directamente en PostgreSQL primero para persistir el número de teléfono
+          try {
+            const roleUuid = await resolveRoleUuid(registrationRole);
+            await createBackendUser({
+              provider: 'local',
+              providerId: credentials.localId || auth.currentUser?.uid || '',
+              email: trimmedEmail,
+              phoneNumber: formattedPhoneNumber || undefined,
+              firstName,
+              lastName,
+              displayName: trimmedFullName,
+              roleIds: roleUuid ? [roleUuid] : [],
+            });
+            console.log(
+              '[Register Background Sync] Usuario creado en PostgreSQL con teléfono exitosamente.',
+            );
+          } catch (createErr) {
+            console.log(
+              '[Register Background Sync] createBackendUser omitido o ya creado:',
+              createErr,
+            );
+          }
 
-      // 4. Sincronizar o crear cuenta de tarifa
-      try {
-        const { user: backendUser } = await loginWithFirebaseToken(
-          credentials.idToken,
-        );
-        await createFareAccount(backendUser.id);
-      } catch (backendError: any) {
-        console.error(
-          '[Register] Error al sincronizar usuario/cuenta con el backend:',
-          backendError,
-        );
-      }
+          // Intercambiar el token para iniciar sesión en el backend y obtener el backendUser
+          const { user: backendUser } = await loginWithFirebaseToken(
+            credentials.idToken,
+          );
+
+          // Guardar los datos en PostgreSQL de inmediato
+          await updateBackendProfile(backendUser.id, {
+            displayName: trimmedFullName,
+            firstName,
+            lastName,
+            phoneNumber: formattedPhoneNumber,
+            nationalId: trimmedIdNumber,
+          });
+
+          // Crear la billetera del usuario
+          await createFareAccount(backendUser.id);
+          console.log(
+            '[Register Background Sync] Perfil y cuenta de tarifa guardados en base de datos con éxito.',
+          );
+        } catch (bgErr) {
+          console.warn(
+            '[Register Background Sync] Error al sincronizar datos en base de datos:',
+            bgErr,
+          );
+        }
+      })();
 
       // 5. Enviar el correo de verificación via el backend (usa el idToken ya obtenido).
       try {
@@ -162,16 +201,16 @@ export default function RegisterScreen() {
         console.warn('Verification email error:', emailError);
       }
 
-      // 6. Cerrar sesión local
-      try {
-        await sigOutAccount();
-      } catch (signOutError) {
-        console.warn('[register] signOut:', signOutError);
-      }
-
-      // 7. Mostrar la pantalla de verificación pendiente
-      setRegisteredEmail(trimmedEmail);
-      setVerificationSent(true);
+      // 5. Redirigir de inmediato a la pantalla dedicada de verificación
+      router.replace({
+        pathname: '/verify-email',
+        params: {
+          email: trimmedEmail,
+          fullName: trimmedFullName,
+          phoneNumber: formattedPhoneNumber,
+          idNumber: trimmedIdNumber,
+        },
+      } as any);
     } catch (error: any) {
       console.warn('Registration error:', error);
       const serverErrors: typeof errors = {};
@@ -190,11 +229,26 @@ export default function RegisterScreen() {
         serverErrors.password =
           'La contraseña es muy débil (mínimo 6 caracteres).';
       } else if (
-        errorMsg.toLowerCase().includes('teléfono') ||
+        errorMsg.toLowerCase().includes('already-in-use') ||
+        errorMsg.toLowerCase().includes('already exists') ||
+        errorMsg.toLowerCase().includes('registrado') ||
+        errorMsg.toLowerCase().includes('duplicado')
+      ) {
+        if (
+          errorMsg.toLowerCase().includes('phone') ||
+          errorMsg.toLowerCase().includes('teléfono') ||
+          errorMsg.toLowerCase().includes('telef')
+        ) {
+          serverErrors.phoneNumber =
+            'El número de teléfono ya está registrado.';
+        }
+      } else if (
         errorMsg.toLowerCase().includes('phone') ||
+        errorMsg.toLowerCase().includes('teléfono') ||
         errorMsg.toLowerCase().includes('telef')
       ) {
-        serverErrors.phoneNumber = 'El número de teléfono ya está registrado.';
+        serverErrors.phoneNumber =
+          'El formato de número de teléfono es inválido o no soportado.';
       } else if (error.code === 'auth/network-request-failed') {
         Alert.alert('Error', 'Error de red. Revisa tu conexión a internet.');
       } else if (error.code === 'auth/internal-error') {
@@ -217,133 +271,6 @@ export default function RegisterScreen() {
       registerInFlightRef.current = false;
     }
   };
-
-  // Redirige al login para reenviar el correo, ya que cerramos sesión tras el registro
-  const handleResendEmail = () => {
-    Alert.alert(
-      'Inicia sesión para reenviar',
-      'Para reenviar el correo de verificación, por favor inicia sesión con tus credenciales.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Ir al Login', onPress: () => router.replace('/login' as any) },
-      ],
-    );
-  };
-
-  // Pantalla de verificación pendiente — se muestra tras registrarse exitosamente
-  if (verificationSent) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.blob} />
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <ScreenHeader title="Verifica tu Correo" onBack={handleBack} />
-          <ScrollView
-            contentContainerStyle={[
-              styles.scroll,
-              { justifyContent: 'center' },
-            ]}
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* ── ÍCONO DE CORREO ── */}
-            <View style={styles.iconSection}>
-              <View style={styles.fakeShadow} />
-              <View style={styles.iconCard}>
-                <View style={styles.topShine} />
-                <MaterialCommunityIcons
-                  name="email-check-outline"
-                  size={96}
-                  color={tokens.colors.primary}
-                />
-              </View>
-            </View>
-
-            {/* ── TÍTULOS ── */}
-            <View style={[styles.titleBlock, { alignItems: 'center' }]}>
-              <Text style={[styles.titleDark, { textAlign: 'center' }]}>
-                Revisa tu
-              </Text>
-              <Text style={[styles.titleBlue, { textAlign: 'center' }]}>
-                Bandeja de Entrada
-              </Text>
-              <Text style={[styles.subtitle, { textAlign: 'center' }]}>
-                {`Hemos enviado un enlace de verificación a:\n`}
-                <Text
-                  style={{
-                    fontFamily: tokens.typography.fontFamily.bold,
-                    color: '#18243E',
-                  }}
-                >
-                  {registeredEmail}
-                </Text>
-                {`\n\nHaz clic en el enlace del correo para activar\ntu cuenta y luego inicia sesión.`}
-              </Text>
-            </View>
-
-            {/* ── INSTRUCCIONES ANTI-SPAM ── */}
-            <View style={styles.spamCard}>
-              <View style={styles.spamRow}>
-                <Ionicons
-                  name="warning-outline"
-                  size={18}
-                  color="#B45309"
-                  style={{ marginRight: 10 }}
-                />
-                <Text style={styles.spamTitle}>¿No llega el correo?</Text>
-              </View>
-              <Text style={styles.spamText}>
-                1. Revisa tu carpeta{' '}
-                <Text style={styles.spamBold}>Spam / Correo no deseado</Text>.
-                {'\n'}
-                2. Busca también en{' '}
-                <Text style={styles.spamBold}>Promociones</Text> (Gmail).{'\n'}
-                3. Agrega{' '}
-                <Text style={styles.spamBold}>
-                  noreply@go-fare-dev-e7501.firebaseapp.com
-                </Text>{' '}
-                a tus contactos.{'\n'}
-                4. Si sigue sin llegar, espera 1 minuto y presiona reenviar.
-              </Text>
-            </View>
-
-            {/* ── BOTÓN — Ir a Login ── */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.cta,
-                pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
-              ]}
-              onPress={() => router.replace('/login' as any)}
-            >
-              <Text style={styles.ctaText}>Ir al Login</Text>
-              <Ionicons
-                name="arrow-forward-circle-outline"
-                size={20}
-                color="#fff"
-                style={{ marginLeft: 10 }}
-              />
-            </Pressable>
-
-            {/* ── REENVIAR CORREO ── */}
-            <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>¿Aún nada? </Text>
-              <Pressable onPress={handleResendEmail} disabled={loading}>
-                <Text style={styles.registerLink}>
-                  {loading ? 'Enviando...' : 'Reenviar correo'}
-                </Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.footerLegal}>
-              CARACAS MOVE • REGISTRO SEGURO
-            </Text>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.safeArea}>

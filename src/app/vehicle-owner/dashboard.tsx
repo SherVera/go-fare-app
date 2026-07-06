@@ -2,12 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
-  FlatList,
   Modal,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -93,7 +90,7 @@ const formatDate = (dateStr: string | Date) => {
     return dateStr;
   }
   const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return String(dateStr);
+  if (Number.isNaN(date.getTime())) return String(dateStr);
 
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');

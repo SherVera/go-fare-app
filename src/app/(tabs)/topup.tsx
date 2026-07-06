@@ -78,7 +78,7 @@ export default function TopUpBalanceScreen() {
       const savings = grossAmount - netAmount;
 
       let tagText = pkg.tag;
-      if (pkg.tag && pkg.tag.startsWith('AHORRA')) {
+      if (pkg.tag?.startsWith('AHORRA')) {
         tagText = `${pkg.tag}${savings.toFixed(2).replace('.', ',')}`;
       }
 
@@ -149,7 +149,7 @@ export default function TopUpBalanceScreen() {
         setUserId(backendUser.id);
         setPmPhone(backendUser.phoneNumber || '');
 
-        let account;
+        let account = null;
         try {
           account = await getFareAccountByUserId(backendUser.id);
         } catch (_) {
@@ -201,7 +201,7 @@ export default function TopUpBalanceScreen() {
   const handleConfirmPurchase = async () => {
     // Validaciones
     if (selectedMethod === 'pago_movil') {
-      if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(pmPhone.trim())) {
+      if (!/^(04|02)\d{9}$/.test(pmPhone.trim())) {
         Alert.alert(
           'Atención',
           'Ingresa un número de Pago Móvil válido (11 dígitos).',
