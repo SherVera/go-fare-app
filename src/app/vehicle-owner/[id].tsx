@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { deleteVehicle, getVehicleDetail } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 interface MockDriver {
@@ -174,28 +175,13 @@ export default function VehicleDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [isDriverModalVisible, setIsDriverModalVisible] = useState(false);
 
-  // Cargar datos del vehículo desde AsyncStorage o base estática
+  // Cargar datos del vehículo desde el backend
   const loadVehicle = useCallback(async () => {
     try {
       setLoading(true);
-      const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
-      const localVehicles: MockVehicle[] = localStr ? JSON.parse(localStr) : [];
-
-      const merged = [
-        ...localVehicles,
-        ...MOCK_VEHICLES_BASE.filter(
-          (mv) =>
-            !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
-        ),
-      ];
-
-      const found = merged.find((v) => v.uuid === id);
+      if (!id) return;
+      const found = await getVehicleDetail(id);
       if (found) {
-        // Inicializar campos de simulación si no existen
-        if (found.totalEarnings === undefined)
-          found.totalEarnings = found.status === 'approved' ? 450.0 : 0.0;
-        if (found.tripsCount === undefined)
-          found.tripsCount = found.status === 'approved' ? 30 : 0;
         setVehicle(found);
       }
     } catch (err) {
@@ -263,42 +249,8 @@ export default function VehicleDetailsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const localStr = await AsyncStorage.getItem(
-                'mock_vehicle_requests',
-              );
-              const localVehicles: MockVehicle[] = localStr
-                ? JSON.parse(localStr)
-                : [];
-
-              // Filtrar y remover el vehículo por placa
-              const filtered = localVehicles.filter(
-                (v) => v.licensePlate !== vehicle.licensePlate,
-              );
-
-              // Si el vehículo era un mock estático (no persistido inicialmente en AsyncStorage),
-              // agregamos una bandera de borrado o simplemente guardamos la lista filtrada.
-              // Pero para dar de baja uno estático, necesitamos registrar que ha sido eliminado localmente.
-              // Para simplificar, guardamos la lista completa filtrada y marcamos la placa como borrada.
-              // Vamos a agregar la placa a una lista negra local si no estaba en AsyncStorage
-              const deletedPlatesStr = await AsyncStorage.getItem(
-                'mock_deleted_vehicle_plates',
-              );
-              const deletedPlates: string[] = deletedPlatesStr
-                ? JSON.parse(deletedPlatesStr)
-                : [];
-              if (!deletedPlates.includes(vehicle.licensePlate)) {
-                deletedPlates.push(vehicle.licensePlate);
-                await AsyncStorage.setItem(
-                  'mock_deleted_vehicle_plates',
-                  JSON.stringify(deletedPlates),
-                );
-              }
-
-              await AsyncStorage.setItem(
-                'mock_vehicle_requests',
-                JSON.stringify(filtered),
-              );
-
+              setLoading(true);
+              await deleteVehicle(vehicle.uuid);
               Alert.alert(
                 'Baja Exitosa',
                 'El vehículo ha sido removido de la flota.',
@@ -312,6 +264,8 @@ export default function VehicleDetailsScreen() {
             } catch (err) {
               console.error('[Details] Error deleting vehicle:', err);
               Alert.alert('Error', 'No se pudo dar de baja la unidad.');
+            } finally {
+              setLoading(false);
             }
           },
         },
@@ -515,7 +469,16 @@ export default function VehicleDetailsScreen() {
                 </View>
                 <Pressable
                   style={styles.driverActionBtn}
-                  onPress={() => setIsDriverModalVisible(true)}
+                  onPress={() => {
+                    if (isApproved) {
+                      setIsDriverModalVisible(true);
+                    } else {
+                      Alert.alert(
+                        'Operación no permitida',
+                        'No puedes modificar el conductor asignado hasta que la unidad esté aprobada.',
+                      );
+                    }
+                  }}
                 >
                   <Ionicons
                     name="create-outline"
@@ -529,21 +492,36 @@ export default function VehicleDetailsScreen() {
                 <Text style={styles.noDriverText}>
                   No hay un conductor asignado a este vehículo.
                 </Text>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.assignBtn,
-                    pressed && { opacity: 0.88 },
-                  ]}
-                  onPress={() => setIsDriverModalVisible(true)}
-                >
-                  <Ionicons
-                    name="person-add-outline"
-                    size={16}
-                    color="#FFFFFF"
-                    style={{ marginRight: 8 }}
-                  />
-                  <Text style={styles.assignBtnText}>Asignar Conductor</Text>
-                </Pressable>
+                {isApproved ? (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.assignBtn,
+                      pressed && { opacity: 0.88 },
+                    ]}
+                    onPress={() => setIsDriverModalVisible(true)}
+                  >
+                    <Ionicons
+                      name="person-add-outline"
+                      size={16}
+                      color="#FFFFFF"
+                      style={{ marginRight: 8 }}
+                    />
+                    <Text style={styles.assignBtnText}>Asignar Conductor</Text>
+                  </Pressable>
+                ) : (
+                  <View style={styles.pendingDriverWarning}>
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={18}
+                      color="#D97706"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.pendingDriverWarningText}>
+                      Debes esperar a que la unidad sea aprobada para poder
+                      asignarle un conductor.
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -1152,5 +1130,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#DC2626',
+  },
+  pendingDriverWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFBEB',
+    borderColor: '#FDE68A',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+  },
+  pendingDriverWarningText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#B45309',
+    fontFamily: tokens.typography.fontFamily.medium,
+    lineHeight: 18,
   },
 });

@@ -196,7 +196,10 @@ export default function AdminDashboardScreen() {
         {/* Sección de Indicadores Rápidos */}
         <Text style={styles.sectionTitle}>Métricas Generales</Text>
         <View style={styles.statsGrid}>
-          <View style={styles.statBox}>
+          <Pressable
+            style={styles.statBox}
+            onPress={() => router.push('/admin/users?role=passenger')}
+          >
             <View
               style={[styles.statIconCircle, { backgroundColor: '#E0F2FE' }]}
             >
@@ -204,9 +207,12 @@ export default function AdminDashboardScreen() {
             </View>
             <Text style={styles.statValue}>{stats.passengers}</Text>
             <Text style={styles.statLabel}>Pasajeros</Text>
-          </View>
+          </Pressable>
 
-          <View style={styles.statBox}>
+          <Pressable
+            style={styles.statBox}
+            onPress={() => router.push('/admin/transport-units')}
+          >
             <View
               style={[styles.statIconCircle, { backgroundColor: '#ECFDF5' }]}
             >
@@ -214,9 +220,12 @@ export default function AdminDashboardScreen() {
             </View>
             <Text style={styles.statValue}>{stats.units}</Text>
             <Text style={styles.statLabel}>Unidades</Text>
-          </View>
+          </Pressable>
 
-          <View style={styles.statBox}>
+          <Pressable
+            style={styles.statBox}
+            onPress={() => router.push('/admin/users?role=driver')}
+          >
             <View
               style={[styles.statIconCircle, { backgroundColor: '#EEF2F6' }]}
             >
@@ -224,7 +233,7 @@ export default function AdminDashboardScreen() {
             </View>
             <Text style={styles.statValue}>{stats.drivers}</Text>
             <Text style={styles.statLabel}>Conductores</Text>
-          </View>
+          </Pressable>
 
           <Pressable
             style={styles.statBox}

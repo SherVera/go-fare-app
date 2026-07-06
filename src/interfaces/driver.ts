@@ -16,4 +16,5 @@ export interface MockVehicle {
   status: 'approved' | 'pending' | 'rejected';
   createdAt: string;
   assignedDriver?: MockDriver;
+  adminNotes?: string;
 }

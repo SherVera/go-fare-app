@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,6 +25,7 @@ import { tokens } from '@/theme/tokens';
 
 export default function AdminUsersScreen() {
   const _router = useRouter();
+  const { role } = useLocalSearchParams<{ role?: string }>();
   const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,7 +34,11 @@ export default function AdminUsersScreen() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<
     'all' | 'passenger' | 'driver' | 'transport_owner' | 'civil_association'
-  >('all');
+  >(
+    role && ['passenger', 'driver', 'transport_owner', 'civil_association'].includes(role)
+      ? (role as any)
+      : 'all'
+  );
 
   // Estado para el modal de detalles/acciones
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
@@ -123,6 +128,13 @@ export default function AdminUsersScreen() {
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    if (role && ['all', 'passenger', 'driver', 'transport_owner', 'civil_association'].includes(role)) {
+      setActiveTab(role as any);
+      applyFilters(users, search, role as any);
+    }
+  }, [role, users, search, applyFilters]);
 
   const handleSearchChange = (text: string) => {
     setSearch(text);

@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { getAllTransportUnits } from '@/lib/api';
+import { getAllTransportUnits, toggleTransportUnitStatus } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function AdminTransportUnitsScreen() {
@@ -102,6 +102,38 @@ export default function AdminTransportUnitsScreen() {
   const handleTabChange = (tab: typeof activeTab) => {
     setActiveTab(tab);
     applyFilters(units, search, tab);
+  };
+
+  const handleManageUnit = (item: any) => {
+    Alert.alert(
+      `Gestionar Unidad ${item.plate}`,
+      `Estado actual: ${item.isActive ? 'Activa' : 'Inactiva'}\nSocio: ${item.owner?.displayName || 'Dueño'}\n\n¿Qué acción deseas realizar sobre esta unidad de transporte?`,
+      [
+        {
+          text: item.isActive ? 'Desactivar Unidad' : 'Aprobar y Activar',
+          style: item.isActive ? 'destructive' : 'default',
+          onPress: async () => {
+            try {
+              setLoading(true);
+              await toggleTransportUnitStatus(item.uuid, !item.isActive);
+              Alert.alert(
+                'Éxito',
+                `Unidad ${item.plate} ha sido ${!item.isActive ? 'aprobada y activada' : 'desactivada'} con éxito.`
+              );
+              await fetchUnits();
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'No se pudo actualizar el estado de la unidad.');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   return (
@@ -202,7 +234,10 @@ export default function AdminTransportUnitsScreen() {
             const statusText = item.isActive ? 'Activa' : 'Inactiva';
 
             return (
-              <View style={styles.unitCard}>
+              <Pressable
+                style={styles.unitCard}
+                onPress={() => handleManageUnit(item)}
+              >
                 <View style={styles.cardHeader}>
                   <View style={styles.iconCircle}>
                     <Ionicons
@@ -279,7 +314,7 @@ export default function AdminTransportUnitsScreen() {
                     <Text style={styles.codeValue}>{item.inviteCode}</Text>
                   </View>
                 </View>
-              </View>
+              </Pressable>
             );
           }}
         />

@@ -14,18 +14,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { clearGoFareToken, getBackendProfile } from '@/lib/api';
+import {
+  clearGoFareToken,
+  getBackendInviteCodes,
+  getBackendProfile,
+  getOwnerVehicles,
+} from '@/lib/api';
 import { auth, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
-
-interface MockVehicle {
-  licensePlate: string;
-  status: 'approved' | 'pending' | 'rejected';
-}
-
-interface MockDriver {
-  nationalId: string;
-}
 
 export default function VehicleOwnerProfile() {
   const router = useRouter();
@@ -93,59 +89,25 @@ export default function VehicleOwnerProfile() {
         );
       }
 
-      // Contar unidades
-      const localVehiclesStr = await AsyncStorage.getItem(
-        'mock_vehicle_requests',
-      );
-      const localVehicles: MockVehicle[] = localVehiclesStr
-        ? JSON.parse(localVehiclesStr)
-        : [];
+      // Contar unidades reales
+      const realVehicles = await getOwnerVehicles().catch(() => []);
+      setUnitsCount(realVehicles.length);
 
-      const deletedPlatesStr = await AsyncStorage.getItem(
-        'mock_deleted_vehicle_plates',
-      );
-      const deletedPlates: string[] = deletedPlatesStr
-        ? JSON.parse(deletedPlatesStr)
-        : [];
+      // Contar conductores reales desde invitaciones canjeadas y asignados a vehículos
+      const realInvites = await getBackendInviteCodes().catch(() => []);
+      const uniqueDriverIds = new Set<string>();
 
-      const baseVehicles = [
-        { licensePlate: 'AB123CD', status: 'approved' },
-        { licensePlate: 'XY987ZT', status: 'approved' },
-        { licensePlate: 'HJ321OP', status: 'approved' },
-        { licensePlate: 'E2E-990T', status: 'pending' },
-        { licensePlate: 'RJ456KL', status: 'rejected' },
-      ].filter((v) => !deletedPlates.includes(v.licensePlate));
-
-      const mergedVehCount = [
-        ...localVehicles,
-        ...baseVehicles.filter(
-          (mv) =>
-            !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
-        ),
-      ].length;
-
-      setUnitsCount(mergedVehCount);
-
-      // Contar conductores
-      const localDriversStr = await AsyncStorage.getItem(
-        'mock_cooperative_drivers',
-      );
-      const localDrivers: MockDriver[] = localDriversStr
-        ? JSON.parse(localDriversStr)
-        : [];
-
-      const baseDriversCount = 3; // MOCK_DRIVERS_BASE has 3 elements
-      const mergedDriversCount = [
-        ...localDrivers,
-        ...Array(baseDriversCount)
-          .fill(0)
-          .map((_, i) => ({ nationalId: `base-${i}` }))
-          .filter(
-            (md) => !localDrivers.some((ld) => ld.nationalId === md.nationalId),
-          ),
-      ].length;
-
-      setDriversCount(mergedDriversCount);
+      for (const v of realVehicles) {
+        if (v.assignedDriver?.id) {
+          uniqueDriverIds.add(v.assignedDriver.id);
+        }
+      }
+      for (const inv of realInvites) {
+        if (inv.driver?.id) {
+          uniqueDriverIds.add(inv.driver.id);
+        }
+      }
+      setDriversCount(uniqueDriverIds.size);
     } catch (err) {
       console.warn('[Profile] Error loading profile stats:', err);
     } finally {
@@ -222,7 +184,7 @@ export default function VehicleOwnerProfile() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Perfil de Socio</Text>
+        <Text style={styles.headerTitle}>Perfil de Dueño de Vehiculo</Text>
       </View>
 
       <ScrollView

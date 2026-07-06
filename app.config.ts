@@ -119,6 +119,7 @@ const config: ExpoConfig = {
           'Habilita FaceID para ingresar rápidamente a tu cuenta.',
       },
     ],
+    '@react-native-community/datetimepicker',
   ],
   experiments: {
     typedRoutes: true,
