@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-import { Alert, Platform } from 'react-native';
-import {
+import { Platform } from 'react-native';
+import type {
   BackendFareAccount,
   BackendTicket,
   BackendUser,
@@ -87,7 +86,7 @@ function sanitizeNumericFields(data: any): any {
   if (typeof data === 'object') {
     const copy = { ...data };
     for (const key in copy) {
-      if (Object.prototype.hasOwnProperty.call(copy, key)) {
+      if (Object.hasOwn(copy, key)) {
         if (copy[key] && typeof copy[key] === 'object') {
           copy[key] = sanitizeNumericFields(copy[key]);
         }
@@ -120,7 +119,7 @@ function sanitizeNumericFields(data: any): any {
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-  timeoutMs = 8000,
+  timeoutMs = 25000,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -156,7 +155,7 @@ async function fetchWithAuth(
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
@@ -224,6 +223,46 @@ export async function registerWithEmail(
   }
 
   return response.json();
+}
+
+/**
+ * Crea un usuario directamente en PostgreSQL.
+ * Permite guardar el phoneNumber en la creación inicial del usuario local.
+ */
+export async function createBackendUser(data: {
+  provider: 'local' | 'google' | 'phone';
+  providerId: string;
+  email?: string;
+  phoneNumber?: string;
+  firstName?: string;
+  lastName?: string;
+  displayName?: string;
+  roleIds?: string[];
+}): Promise<BackendUser> {
+  const response = await fetchWithTimeout(
+    `${BASE_URL}/users`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    },
+    30000,
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.message || 'Error al crear el usuario en el backend.',
+    );
+  }
+
+  const user = await response.json();
+  if (user) {
+    user.id = user.uuid || user.id;
+  }
+  return user;
 }
 
 /**
@@ -346,6 +385,11 @@ export async function updateBackendProfile(
   if (data.lastName !== undefined) {
     whitelistedData.lastName = data.lastName;
   }
+
+  // NOTA: phoneNumber y nationalId se omiten del cuerpo de la petición PUT /users/:id
+  // porque el backend (UpdateUserDto) no los permite en actualizaciones de perfil y devuelve 400.
+  // El nationalId ya se guarda automáticamente en PostgreSQL mediante las Custom Claims de Firebase en el primer login.
+  // El phoneNumber se vincula por separado mediante verificación SMS en /auth/phone/link por motivos de seguridad.
 
   const responseData = await fetchWithAuth(`/users/${userId}`, {
     method: 'PUT',
@@ -879,60 +923,13 @@ export async function submitVehicleOwnerRequest(requestData: {
   businessName: string;
   idNumber: string;
 }): Promise<any> {
-  const profile = await getBackendProfile().catch(() => null);
-
-  const newRequest = {
-    uuid: `owner-req-${profile?.id || Date.now()}`,
-    userUuid: profile?.id || 'unknown',
-    displayName: profile?.displayName || 'Usuario de Pruebas',
-    email: profile?.email || 'test@example.com',
-    nationalId: profile?.nationalId || 'V-00000000',
-    phoneNumber: profile?.phoneNumber || '04120000000',
-    businessName: requestData.businessName,
-    idNumber: requestData.idNumber,
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-  };
-
-  try {
-    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
-    const requests = cached ? JSON.parse(cached) : [];
-    const filtered = requests.filter(
-      (r: any) => r.userUuid !== newRequest.userUuid,
-    );
-    filtered.unshift(newRequest);
-    await AsyncStorage.setItem(
-      'mock_global_owner_requests',
-      JSON.stringify(filtered),
-    );
-  } catch (err) {
-    console.warn('[API] Error al guardar solicitud de socio globalmente:', err);
-  }
-
-  try {
-    await AsyncStorage.setItem(
-      'mock_vehicle_owner_cooperative',
-      JSON.stringify(requestData),
-    );
-  } catch (storageErr) {
-    console.warn(
-      '[API] Error al guardar cooperativa de dueño localmente:',
-      storageErr,
-    );
-  }
-
-  try {
-    return await fetchWithAuth('/vehicle-owner-requests', {
-      method: 'POST',
-      body: JSON.stringify(requestData),
-    });
-  } catch (error) {
-    console.warn(
-      '[API] submitVehicleOwnerRequest falló en backend (se usará mock local):',
-      error,
-    );
-    return { success: true, mocked: true };
-  }
+  return await fetchWithAuth('/transport-owners/me/application', {
+    method: 'POST',
+    body: JSON.stringify({
+      legalName: requestData.businessName,
+      rif: requestData.idNumber,
+    }),
+  });
 }
 
 /**
@@ -1099,6 +1096,13 @@ export async function getUsedTicketsByRoute(
  */
 export async function getAllUsers(): Promise<BackendUser[]> {
   return fetchWithAuth('/users');
+}
+
+/**
+ * Obtiene todas las transacciones de tarifa del sistema.
+ */
+export async function getAllTransactions(): Promise<any[]> {
+  return fetchWithAuth('/fare/transactions');
 }
 
 /**
@@ -1385,7 +1389,7 @@ export async function updateCivilAssociationProfile(
  */
 export async function getAllDocuments(): Promise<any[]> {
   try {
-    const docs = await fetchWithAuth('/documents');
+    const docs = await fetchWithAuth('/legal-documents');
     if (Array.isArray(docs)) return docs;
   } catch (err) {
     console.warn(
@@ -1451,7 +1455,7 @@ export async function getAllDocuments(): Promise<any[]> {
  */
 export async function verifyDocument(uuid: string): Promise<any> {
   try {
-    const res = await fetchWithAuth(`/documents/${uuid}/verify`, {
+    const res = await fetchWithAuth(`/legal-documents/${uuid}/verify`, {
       method: 'PATCH',
     });
     return res;
@@ -1488,7 +1492,7 @@ export async function rejectDocument(
   reason: string,
 ): Promise<any> {
   try {
-    const res = await fetchWithAuth(`/documents/${uuid}/reject`, {
+    const res = await fetchWithAuth(`/legal-documents/${uuid}/reject`, {
       method: 'PATCH',
       body: JSON.stringify({ reason }),
     });
@@ -1523,7 +1527,7 @@ export async function rejectDocument(
  */
 export async function getAllTransportUnits(): Promise<any[]> {
   try {
-    const units = await fetchWithAuth('/transport-units');
+    const units = await fetchWithAuth('/vehicles');
     if (Array.isArray(units)) return units;
   } catch (err) {
     console.warn(
@@ -1579,102 +1583,177 @@ export async function getAllTransportUnits(): Promise<any[]> {
 
 /**
  * Obtiene todas las solicitudes de registro de dueños de vehículos.
- * Si está vacío, se auto-inicializa basándose en usuarios pasajeros reales en PostgreSQL.
+ * Si está vacío, se auto-inicializa basándose en usuarios reales con rol 'transport_owner' en PostgreSQL.
  */
 export async function getAllOwnerRequests(): Promise<any[]> {
-  let cachedRequests: any[] = [];
   try {
-    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
-    if (cached) {
-      cachedRequests = JSON.parse(cached);
-    }
-  } catch (err) {
+    // Intentar obtener de los endpoints reales de Render
+    const [pending, approved, rejected] = await Promise.all([
+      fetchWithAuth('/transport-owners?status=pending_review'),
+      fetchWithAuth('/transport-owners?status=approved'),
+      fetchWithAuth('/transport-owners?status=rejected'),
+    ]);
+
+    const mappedPending = pending.map((o: any) => ({
+      uuid: o.uuid,
+      userUuid: o.user?.uuid || o.user?.id,
+      displayName:
+        o.user?.displayName ||
+        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+      email: o.user?.email,
+      nationalId: o.user?.nationalId,
+      phoneNumber: o.user?.phoneNumber,
+      businessName: o.legalName,
+      idNumber: o.rif,
+      status: 'pending',
+      createdAt: o.submittedAt || o.createdAt,
+      rejectionReason: o.rejectionReason,
+    }));
+
+    const mappedApproved = approved.map((o: any) => ({
+      uuid: o.uuid,
+      userUuid: o.user?.uuid || o.user?.id,
+      displayName:
+        o.user?.displayName ||
+        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+      email: o.user?.email,
+      nationalId: o.user?.nationalId,
+      phoneNumber: o.user?.phoneNumber,
+      businessName: o.legalName,
+      idNumber: o.rif,
+      status: 'approved',
+      createdAt: o.submittedAt || o.createdAt,
+    }));
+
+    const mappedRejected = rejected.map((o: any) => ({
+      uuid: o.uuid,
+      userUuid: o.user?.uuid || o.user?.id,
+      displayName:
+        o.user?.displayName ||
+        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+      email: o.user?.email,
+      nationalId: o.user?.nationalId,
+      phoneNumber: o.user?.phoneNumber,
+      businessName: o.legalName,
+      idNumber: o.rif,
+      status: 'rejected',
+      createdAt: o.submittedAt || o.createdAt,
+      rejectionReason: o.rejectionReason,
+    }));
+
+    return [...mappedPending, ...mappedApproved, ...mappedRejected];
+  } catch (error) {
     console.warn(
-      '[API] Error al leer solicitudes de socio de AsyncStorage:',
-      err,
+      '[API] Falló la obtención de solicitudes desde Render, usando mock local:',
+      error,
     );
-  }
 
-  // Cargar usuarios reales de la DB para hacer la simulación coherente
-  let users: any[] = [];
-  try {
-    users = await getAllUsers();
-  } catch (err) {
-    console.warn(
-      '[API] Error al cargar usuarios para solicitudes de socio:',
-      err,
-    );
-  }
-
-  // Filtrar los pasajeros puros (usuarios que no tienen rol Socio o Conductor)
-  const passengers = users.filter((u) => {
-    const roles = u.roles || [];
-    const isOwner = roles.some((r: any) => r.name === 'transport_owner');
-    const isDriver = roles.some((r: any) => r.name === 'driver');
-    const isAdmin = roles.some(
-      (r: any) => r.name === 'platform_admin' || r.name === 'admin',
-    );
-    return !isOwner && !isDriver && !isAdmin;
-  });
-
-  // Si no hay solicitudes en caché y hay pasajeros en la DB, inicializamos algunas solicitudes
-  if (cachedRequests.length === 0 && passengers.length > 0) {
-    cachedRequests = passengers.map((p, index) => {
-      // Usar RIFs ficticios pero consistentes
-      const rifs = ['J-409823124', 'J-312984716', 'J-481920384', 'J-501238472'];
-      const coops = [
-        'Cooperativa Caracas Move R.L.',
-        'Línea de Transporte Chacao',
-        'Asociación de Conductores La India',
-        'Cooperativa Metrópolis',
-      ];
-      return {
-        uuid: `owner-req-${p.uuid || p.id}`,
-        userUuid: p.uuid || p.id,
-        displayName:
-          p.displayName || `${p.firstName || ''} ${p.lastName || ''}`,
-        email: p.email,
-        nationalId: p.nationalId || `V-${12000000 + index}`,
-        phoneNumber: p.phoneNumber || '04125550000',
-        businessName: coops[index % coops.length],
-        idNumber: rifs[index % rifs.length],
-        status: 'pending',
-        createdAt: new Date(Date.now() - index * 7200000).toISOString(),
-      };
-    });
+    let cachedRequests: any[] = [];
     try {
-      await AsyncStorage.setItem(
-        'mock_global_owner_requests',
-        JSON.stringify(cachedRequests),
+      const cached = await AsyncStorage.getItem('mock_global_owner_requests');
+      if (cached) {
+        cachedRequests = JSON.parse(cached);
+      }
+    } catch (err) {
+      console.warn(
+        '[API] Error al leer solicitudes de socio de AsyncStorage:',
+        err,
       );
-    } catch (storageErr) {
-      console.warn('[API] Error al guardar solicitudes iniciales:', storageErr);
     }
-  }
 
-  return cachedRequests;
+    // Cargar usuarios reales de la DB para hacer la simulación coherente
+    let users: any[] = [];
+    try {
+      users = await getAllUsers();
+    } catch (err) {
+      console.warn(
+        '[API] Error al cargar usuarios para solicitudes de socio:',
+        err,
+      );
+    }
+
+    // Filtrar únicamente los usuarios que tienen rol transport_owner
+    const owners = users.filter((u) => {
+      const roles = u.roles || [];
+      return roles.some((r: any) => r.name === 'transport_owner');
+    });
+
+    // Mantener en el cache solo los que son dueños reales
+    const ownerUuids = new Set(owners.map((o) => o.uuid || o.id));
+    if (cachedRequests.length > 0) {
+      cachedRequests = cachedRequests.filter((r) => ownerUuids.has(r.userUuid));
+    }
+
+    // Si no hay solicitudes en caché y hay dueños en la DB, inicializamos algunas solicitudes
+    if (cachedRequests.length === 0 && owners.length > 0) {
+      cachedRequests = owners.map((p, index) => {
+        const rifs = [
+          'J-409823124',
+          'J-312984716',
+          'J-481920384',
+          'J-501238472',
+        ];
+        const coops = [
+          'Cooperativa Caracas Move R.L.',
+          'Línea de Transporte Chacao',
+          'Asociación de Conductores La India',
+          'Cooperativa Metrópolis',
+        ];
+        return {
+          uuid: `owner-req-${p.uuid || p.id}`,
+          userUuid: p.uuid || p.id,
+          displayName:
+            p.displayName || `${p.firstName || ''} ${p.lastName || ''}`,
+          email: p.email,
+          nationalId: p.nationalId || `V-${12000000 + index}`,
+          phoneNumber: p.phoneNumber || '04125550000',
+          businessName: coops[index % coops.length],
+          idNumber: rifs[index % rifs.length],
+          status: 'pending',
+          createdAt: new Date(Date.now() - index * 7200000).toISOString(),
+        };
+      });
+      try {
+        await AsyncStorage.setItem(
+          'mock_global_owner_requests',
+          JSON.stringify(cachedRequests),
+        );
+      } catch (storageErr) {
+        console.warn(
+          '[API] Error al guardar solicitudes iniciales:',
+          storageErr,
+        );
+      }
+    }
+
+    return cachedRequests;
+  }
 }
 
 /**
- * Aprueba una solicitud de dueño de vehículo: asigna el rol Socio (ID '3')
- * en la base de datos real de PostgreSQL y marca la solicitud como aprobada.
+ * Aprueba una solicitud de dueño de vehículo.
  */
 export async function verifyOwnerRequest(
   requestUuid: string,
   userUuid: string,
 ): Promise<any> {
-  // 1. Llamada real al backend para ascender el rol del usuario a Socio (ID '3')
   try {
-    await updateUserRoles(userUuid, ['3']);
+    await fetchWithAuth(`/transport-owners/${requestUuid}/approve`, {
+      method: 'PATCH',
+    });
   } catch (err) {
     console.warn(
-      '[API] Error al ascender el rol del usuario en la base de datos:',
+      '[API] Error al aprobar la solicitud del dueño en Render, intentando fallback de rol:',
       err,
     );
-    throw new Error('No se pudo ascender al usuario a Socio en el servidor.');
+    try {
+      await updateUserRoles(userUuid, ['3']);
+    } catch (roleErr) {
+      console.warn('[API] Fallback de rol también falló:', roleErr);
+      throw new Error('No se pudo aprobar al socio en el servidor.');
+    }
   }
 
-  // 2. Actualizar el estado local de la solicitud
   try {
     const cached = await AsyncStorage.getItem('mock_global_owner_requests');
     if (cached) {
@@ -1707,6 +1786,18 @@ export async function rejectOwnerRequest(
   requestUuid: string,
   reason: string,
 ): Promise<any> {
+  try {
+    await fetchWithAuth(`/transport-owners/${requestUuid}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (err) {
+    console.warn(
+      '[API] Error al rechazar la solicitud del dueño en Render:',
+      err,
+    );
+  }
+
   try {
     const cached = await AsyncStorage.getItem('mock_global_owner_requests');
     if (cached) {
@@ -1821,7 +1912,7 @@ export async function getExternalBcvRate(): Promise<{
     if (apiRes.ok) {
       const list = await apiRes.json();
       const oficial = list.find((item: any) => item.fuente === 'oficial');
-      if (oficial && oficial.promedio) {
+      if (oficial?.promedio) {
         const suggestedRateVal = oficial.promedio;
         const suggestedDateVal = oficial.fechaActualizacion
           ? oficial.fechaActualizacion.slice(0, 10)
@@ -1881,7 +1972,7 @@ export async function confirmRide(qr: string): Promise<{
  */
 export async function getCurrentSession(): Promise<any> {
   const session = await fetchWithAuth('/cash-sessions/me/current');
-  if (!session || !session.uuid) {
+  if (!session?.uuid) {
     return null;
   }
   return session;
@@ -1977,4 +2068,32 @@ export async function getSessionQr(
  */
 export async function getSessionRides(sessionUuid: string): Promise<any[]> {
   return await fetchWithAuth(`/rides/session/${sessionUuid}`);
+}
+
+/**
+ * Crea una invitación real en el backend.
+ */
+export async function createBackendInviteCode(): Promise<any> {
+  return await fetchWithAuth('/invite-codes', {
+    method: 'POST',
+  });
+}
+
+/**
+ * Canjea un código de invitación vinculando al conductor autenticado con el socio.
+ */
+export async function redeemBackendInviteCode(code: string): Promise<any> {
+  return await fetchWithAuth('/invite-codes/redeem', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
+/**
+ * Obtiene los códigos emitidos por el socio autenticado.
+ */
+export async function getBackendInviteCodes(): Promise<any[]> {
+  return await fetchWithAuth('/invite-codes', {
+    method: 'GET',
+  });
 }

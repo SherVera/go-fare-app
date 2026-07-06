@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -39,14 +39,14 @@ export function PhoneLinkModal({
 
   const handleSendCode = async () => {
     const trimmed = phone.trim();
-    if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(trimmed)) {
+    if (!/^((04|02)\d{9}|\+\d{10,15})$/.test(trimmed)) {
       Alert.alert(
         'Atención',
         'Ingresa un número venezolano válido (ej. 04120000000).',
       );
       return;
     }
-    const e164 = `+58${trimmed.slice(1)}`;
+    const e164 = trimmed.startsWith('+') ? trimmed : `+58${trimmed.slice(1)}`;
     const user = auth.currentUser;
     if (!user) return;
 

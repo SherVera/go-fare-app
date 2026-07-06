@@ -1,6 +1,6 @@
 // ─── Interfaces de Rutas y Transporte ──────────────────────────────────────
 
-import { Ionicons } from '@expo/vector-icons';
+import type { Ionicons } from '@expo/vector-icons';
 
 /** Tipo de vehículo de transporte */
 export type TransportType = 'bus' | 'metro' | 'other';
