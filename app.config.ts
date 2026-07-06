@@ -36,6 +36,10 @@ assertFirebaseClientFilesPresent();
 
 const googleMapsIosApiKey = optionalEnv('GOOGLE_MAPS_IOS_API_KEY');
 
+// Free Apple "Personal Team" cannot provision Push Notifications. Set in local `.env`
+// when installing on a physical device without a paid Apple Developer account.
+const iosPersonalTeamBuild = process.env.IOS_PERSONAL_TEAM_BUILD === '1';
+
 const config: ExpoConfig = {
   name: 'GoFare',
   slug: 'GoFare',
@@ -55,14 +59,21 @@ const config: ExpoConfig = {
     ...(googleMapsIosApiKey
       ? { config: { googleMapsApiKey: googleMapsIosApiKey } }
       : {}),
-    // Push Notifications capability + background delivery for FCM data-only
-    // messages and silent push (also required for Phone Auth APNs flow).
-    entitlements: {
-      'aps-environment': 'production',
-    },
-    infoPlist: {
-      UIBackgroundModes: ['remote-notification', 'fetch'],
-    },
+    // Push requires a paid Apple Developer account. Omit for Personal Team local builds.
+    ...(iosPersonalTeamBuild
+      ? {
+          infoPlist: {
+            UIBackgroundModes: ['fetch'],
+          },
+        }
+      : {
+          entitlements: {
+            'aps-environment': 'production',
+          },
+          infoPlist: {
+            UIBackgroundModes: ['remote-notification', 'fetch'],
+          },
+        }),
   },
   android: {
     package: 'com.gofare.app',
@@ -110,6 +121,13 @@ const config: ExpoConfig = {
     '@react-native-google-signin/google-signin',
     'expo-dev-client',
     'expo-secure-store',
+    [
+      'expo-local-authentication',
+      {
+        faceIDPermission:
+          'Habilita FaceID para ingresar rápidamente a tu cuenta.',
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

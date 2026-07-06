@@ -64,3 +64,6 @@ token.txt
 firebase.json
 dataconnect/
 
+# built apks
+*.apk
+

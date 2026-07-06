@@ -1,5 +1,5 @@
 import * as Location from 'expo-location';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -35,7 +35,7 @@ export const MapCard = () => {
     ).start();
 
     (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setErrorMsg('Permiso denegado');
         setAddress('Ubicación desconocida');
@@ -43,12 +43,12 @@ export const MapCard = () => {
       }
 
       try {
-        let location = await Location.getCurrentPositionAsync({
+        const location = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
         });
         setLocation(location);
 
-        let geocode = await Location.reverseGeocodeAsync({
+        const geocode = await Location.reverseGeocodeAsync({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         });
@@ -64,7 +64,7 @@ export const MapCard = () => {
       } catch {
         try {
           // Fallback to last known position
-          let location = await Location.getLastKnownPositionAsync({});
+          const location = await Location.getLastKnownPositionAsync({});
           if (location) {
             setLocation(location);
             setAddress('Ubicación aproximada');
