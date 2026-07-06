@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,13 +25,7 @@ import {
   loginWithFirebaseToken,
   syncWithBackend,
 } from '@/lib/api';
-import {
-  auth,
-  sendVerificationEmail,
-  signIn,
-  signInWithGoogle,
-  sigOutAccount,
-} from '@/lib/firebase';
+import { auth, signIn, signInWithGoogle, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
@@ -270,49 +264,16 @@ export default function LoginScreen() {
 
       // Bloquear acceso si el correo no ha sido verificado
       if (!currentUser.emailVerified) {
-        // Cerrar sesión para no dejar al usuario en un estado intermedio
-        try {
-          await sigOutAccount();
-        } catch {
-          /* Ignorar errores de cierre de sesión; el guardián de rutas ya maneja el estado */
-        }
-        Alert.alert(
-          'Correo No Verificado',
-          'Por favor, verifica tu correo antes de iniciar sesión.\n\nSi no ves el correo, revisa tu carpeta de Spam o Promociones y agrega noreply@go-fare-dev-e7501.firebaseapp.com a tus contactos.',
-          [
-            { text: 'Cerrar', style: 'cancel' },
-            {
-              text: 'Reenviar Correo',
-              onPress: async () => {
-                try {
-                  // Necesitamos volver a autenticar brevemente para enviar el correo
-                  const temp = await signIn({
-                    email: trimmedEmail,
-                    password: trimmedPassword,
-                  });
-                  if (temp.user) {
-                    await sendVerificationEmail(temp.user);
-                    await sigOutAccount();
-                    Alert.alert(
-                      'Correo Enviado',
-                      'Se ha enviado un nuevo correo de verificación.',
-                    );
-                  }
-                } catch {
-                  Alert.alert(
-                    'Error',
-                    'No se pudo enviar el correo. Intenta de nuevo más tarde.',
-                  );
-                }
-              },
-            },
-          ],
-        );
+        // Redirigir a la pantalla dedicada de verificación
+        router.replace({
+          pathname: '/verify-email',
+          params: { email: trimmedEmail },
+        } as any);
         return;
       }
 
       // Correo verificado — sincronizar con backend y permitir acceso
-      let backendUser;
+      let backendUser = null;
       try {
         const response = await syncWithBackend(currentUser);
         backendUser = response.user;

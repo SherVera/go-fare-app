@@ -136,7 +136,7 @@ exports.listMovies = function listMovies(dcOrOptions, options) {
   );
   return executeQuery(
     listMoviesRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 };
 
@@ -163,7 +163,7 @@ exports.listUsers = function listUsers(dcOrOptions, options) {
   );
   return executeQuery(
     listUsersRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 };
 
@@ -190,7 +190,7 @@ exports.listUserReviews = function listUserReviews(dcOrOptions, options) {
   );
   return executeQuery(
     listUserReviewsRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 };
 
@@ -222,7 +222,7 @@ exports.getMovieById = function getMovieById(dcOrVars, varsOrOptions, options) {
   );
   return executeQuery(
     getMovieByIdRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 };
 
@@ -253,6 +253,6 @@ exports.searchMovie = function searchMovie(dcOrVars, varsOrOptions, options) {
   );
   return executeQuery(
     searchMovieRef(dcInstance, inputVars),
-    inputOpts && inputOpts.fetchPolicy,
+    inputOpts?.fetchPolicy,
   );
 };

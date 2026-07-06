@@ -3,7 +3,7 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!patches/**"]
+    "includes": ["**", "!patches"]
   },
   "formatter": {
     "enabled": true,
@@ -14,7 +14,6 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "none",
       "correctness": {
         "noChildrenProp": "error",
         "noEmptyCharacterClassInRegex": "warn",

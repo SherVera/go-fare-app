@@ -1,6 +1,6 @@
 import {
   AuthorizationStatus,
-  FirebaseMessagingTypes,
+  type FirebaseMessagingTypes,
   getInitialNotification as getInitialNotificationModular,
   getMessaging,
   getToken,

@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -23,7 +23,6 @@ import {
   createFareAccount,
   getBackendProfile,
   getFareAccountByUserId,
-  getUserTickets,
 } from '@/lib/api';
 import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -55,7 +54,7 @@ export default function HomeDashboard() {
     try {
       // Obtener perfil y cuenta de tarifa desde el backend de GoFare
       const backendUser = await getBackendProfile();
-      let fareAccount;
+      let fareAccount = null;
       try {
         fareAccount = await getFareAccountByUserId(backendUser.id);
       } catch (_) {

@@ -2,12 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -216,7 +215,7 @@ export default function VehicleDetailsScreen() {
 
     try {
       const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
-      let localVehicles: MockVehicle[] = localStr ? JSON.parse(localStr) : [];
+      const localVehicles: MockVehicle[] = localStr ? JSON.parse(localStr) : [];
 
       // Buscar si este vehículo ya está en AsyncStorage
       const idx = localVehicles.findIndex((v) => v.uuid === vehicle.uuid);
@@ -267,7 +266,7 @@ export default function VehicleDetailsScreen() {
               const localStr = await AsyncStorage.getItem(
                 'mock_vehicle_requests',
               );
-              let localVehicles: MockVehicle[] = localStr
+              const localVehicles: MockVehicle[] = localStr
                 ? JSON.parse(localStr)
                 : [];
 

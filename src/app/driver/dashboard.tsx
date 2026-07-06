@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -82,7 +81,7 @@ export default function DriverDashboard() {
     const pollInterval = setInterval(async () => {
       try {
         const session = await getCurrentSession();
-        if (session && session.uuid) {
+        if (session?.uuid) {
           setActiveSession((prev: any) => {
             if (prev && Number(session.ridesCount) > Number(prev.ridesCount)) {
               const diff = Number(session.ridesCount) - Number(prev.ridesCount);
@@ -138,7 +137,7 @@ export default function DriverDashboard() {
 
       // Consultar si hay una sesión activa de caja en el backend
       const session = await getCurrentSession();
-      if (session && session.uuid) {
+      if (session?.uuid) {
         setActiveSession(session);
         // Sincronizar ruta y vehículo locales con los de la sesión activa
         if (session.vehicle) {

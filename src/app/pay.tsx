@@ -3,7 +3,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,16 +15,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
-import type { QRScanResult } from '@/interfaces';
 import {
   confirmRide,
-  getBackendProfile,
-  getFareAccountByUserId,
   getTicketByQr,
   previewRide,
   validateTicketByQr,
 } from '@/lib/api';
-import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function PayTripScreen() {

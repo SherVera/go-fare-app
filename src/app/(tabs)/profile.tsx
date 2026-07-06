@@ -1,14 +1,13 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,14 +15,12 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import type {
   ProfileInfoCard,
   ProfileMenuItem,
   UserProfile,
 } from '@/interfaces';
 import {
-  BASE_URL,
   clearGoFareToken,
   getBackendProfile,
   getFareAccountByUserId,
@@ -280,8 +277,8 @@ export default function ProfileScreen() {
         </View>
 
         {/* ── INFO CARDS ── */}
-        {infoCards.map((card, idx) => (
-          <View key={idx} style={styles.infoCard}>
+        {infoCards.map((card) => (
+          <View key={card.label} style={styles.infoCard}>
             <Text style={styles.infoLabel}>{card.label}</Text>
             {card.type === 'location' ? (
               <View style={styles.locationRow}>

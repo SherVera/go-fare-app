@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -17,11 +17,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
   clearGoFareToken,
+  createBackendUser,
   createFareAccount,
   getCooperatives,
   loginWithFirebaseToken,
   registerWithEmail,
+  resolveRoleUuid,
   submitVehicleOwnerRequest,
+  updateBackendProfile,
 } from '@/lib/api';
 import { sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -103,7 +106,7 @@ export default function RegisterVehicleOwnerScreen() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       newErrors.email = 'Ingresa un correo electrónico válido.';
     }
-    if (!/^(0412|0414|0424|0416|0426|0212)\d{7}$/.test(trimmedPhoneNumber)) {
+    if (!/^((04|02)\d{9}|\+\d{10,15})$/.test(trimmedPhoneNumber)) {
       newErrors.phoneNumber = 'Ingresa un número válido (ej. 04120000000).';
     }
     if (trimmedPassword.length < 6) {
@@ -132,21 +135,71 @@ export default function RegisterVehicleOwnerScreen() {
     setLoading(true);
 
     try {
-      // 1. Crear el usuario en Firebase/PostgreSQL con el rol 'passenger' inicialmente.
-      // Su rol será ascendido a 'transport_owner' únicamente cuando el administrador apruebe la solicitud.
+      const formattedPhone = phoneNumber.trim().startsWith('+')
+        ? phoneNumber.trim()
+        : phoneNumber.trim().startsWith('0')
+          ? `+58${phoneNumber.trim().slice(1)}`
+          : `+58${phoneNumber.trim()}`;
+
+      // 1. Crear el usuario en Firebase/PostgreSQL con el rol 'transport_owner'.
+      // Omitimos displayName y phoneNumber ya que el DTO del backend no los permite en el registro inicial.
       const credentials = await registerWithEmail({
         email: email.trim(),
         password: password.trim(),
-        registrationRole: 'passenger',
-        displayName: fullName.trim(),
-        phoneNumber: phoneNumber.trim(),
+        registrationRole: 'transport_owner',
+        nationalId: idNumber.trim(),
       });
 
       // 2. Intercambiar el ID Token por el JWT de GoFare
-      let backendUser;
+      let backendUser = null;
       try {
+        // Intentar crear el usuario local primero en PostgreSQL para asegurar el número de teléfono
+        try {
+          const roleUuid = await resolveRoleUuid('transport_owner');
+          const parts = fullName.trim().split(/\s+/);
+          const firstName = parts[0] || '';
+          const lastName = parts.slice(1).join(' ') || '';
+          await createBackendUser({
+            provider: 'local',
+            providerId: credentials.localId || '',
+            email: email.trim(),
+            phoneNumber: formattedPhone || undefined,
+            firstName,
+            lastName,
+            displayName: fullName.trim(),
+            roleIds: roleUuid ? [roleUuid] : [],
+          });
+          console.log(
+            '[RegisterVehicleOwner] Usuario creado preventivamente en PostgreSQL con teléfono y rol transport_owner.',
+          );
+        } catch (createErr) {
+          console.log(
+            '[RegisterVehicleOwner] Creación preventiva saltada o ya existente:',
+            createErr,
+          );
+        }
+
         const result = await loginWithFirebaseToken(credentials.idToken);
         backendUser = result.user;
+
+        // Actualizar el perfil en el backend ya que no se pudo hacer en el registro inicial
+        const parts = fullName.trim().split(/\s+/);
+        const firstName = parts[0];
+        const lastName = parts.slice(1).join(' ') || undefined;
+        try {
+          await updateBackendProfile(backendUser.id, {
+            displayName: fullName.trim(),
+            firstName,
+            lastName,
+            phoneNumber: formattedPhone,
+            nationalId: idNumber.trim(),
+          });
+        } catch (profileUpdateErr) {
+          console.warn(
+            '[RegisterVehicleOwner] Error updating backend profile:',
+            profileUpdateErr,
+          );
+        }
       } catch (authError: any) {
         console.error(
           '[RegisterVehicleOwner] Error en intercambio de token:',
@@ -207,10 +260,24 @@ export default function RegisterVehicleOwnerScreen() {
         serverErrors.email =
           'El correo electrónico tiene un formato incorrecto.';
       } else if (
-        errorMsg.toLowerCase().includes('teléfono') ||
-        errorMsg.toLowerCase().includes('phone')
+        errorMsg.toLowerCase().includes('already-in-use') ||
+        errorMsg.toLowerCase().includes('already exists') ||
+        errorMsg.toLowerCase().includes('registrado') ||
+        errorMsg.toLowerCase().includes('duplicado')
       ) {
-        serverErrors.phoneNumber = 'El número de teléfono ya está registrado.';
+        if (
+          errorMsg.toLowerCase().includes('phone') ||
+          errorMsg.toLowerCase().includes('teléfono')
+        ) {
+          serverErrors.phoneNumber =
+            'El número de teléfono ya está registrado.';
+        }
+      } else if (
+        errorMsg.toLowerCase().includes('phone') ||
+        errorMsg.toLowerCase().includes('teléfono')
+      ) {
+        serverErrors.phoneNumber =
+          'El formato de número de teléfono es inválido o no soportado.';
       } else {
         Alert.alert(
           'Error',
