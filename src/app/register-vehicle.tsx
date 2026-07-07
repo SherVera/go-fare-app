@@ -24,6 +24,7 @@ interface FormFields {
   vehicleModel: string;
   vehicleYear: string;
   licensePlate: string;
+  capacity: string;
   cooperativeUuid: string;
 }
 
@@ -32,6 +33,7 @@ interface FormErrors {
   vehicleModel?: string;
   vehicleYear?: string;
   licensePlate?: string;
+  capacity?: string;
   cooperativeUuid?: string;
 }
 
@@ -47,6 +49,7 @@ export default function RegisterVehicleScreen() {
     vehicleModel: '',
     vehicleYear: '',
     licensePlate: '',
+    capacity: '',
     cooperativeUuid: '',
   });
 
@@ -89,6 +92,13 @@ export default function RegisterVehicleScreen() {
       newErrors.licensePlate = 'La placa del vehículo es requerida';
     }
 
+    const capacityNum = parseInt(form.capacity, 10);
+    if (!form.capacity.trim()) {
+      newErrors.capacity = 'La capacidad es requerida';
+    } else if (Number.isNaN(capacityNum) || capacityNum < 1) {
+      newErrors.capacity = 'La capacidad debe ser al menos 1';
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -103,12 +113,13 @@ export default function RegisterVehicleScreen() {
         vehicleModel: form.vehicleModel.trim(),
         vehicleYear: parseInt(form.vehicleYear, 10),
         licensePlate: form.licensePlate.trim().toUpperCase(),
-        cooperativeUuid: form.cooperativeUuid || undefined,
+        capacity: parseInt(form.capacity, 10),
+        lineUuid: form.cooperativeUuid || undefined,
       });
 
       Alert.alert(
-        'Solicitud Enviada',
-        'Tu solicitud de registro de vehículo ha sido recibida y está en proceso de revisión por el administrador.',
+        'Vehículo Registrado',
+        'Tu vehículo ha sido registrado correctamente.',
         [
           {
             text: 'Aceptar',
@@ -271,8 +282,28 @@ export default function RegisterVehicleScreen() {
             </View>
           </View>
 
-          {/* Cooperativa Asociada (Opcional) */}
-          <Text style={styles.inputLabel}>COOPERATIVA ASOCIADA (OPCIONAL)</Text>
+          {/* Capacidad */}
+          <Text style={styles.inputLabel}>CAPACIDAD (PASAJEROS)</Text>
+          <View
+            style={[styles.inputCard, errors.capacity && styles.inputCardError]}
+          >
+            <TextInput
+              style={styles.input}
+              placeholder="Ej. 30"
+              placeholderTextColor="#A1A1AA"
+              keyboardType="numeric"
+              maxLength={3}
+              value={form.capacity}
+              onChangeText={(text) => updateField('capacity', text)}
+              editable={!loading}
+            />
+          </View>
+          {errors.capacity && (
+            <Text style={styles.errorText}>{errors.capacity}</Text>
+          )}
+
+          {/* Línea de Transporte Asociada (Opcional) */}
+          <Text style={styles.inputLabel}>LÍNEA DE TRANSPORTE (OPCIONAL)</Text>
           <Pressable
             style={styles.dropdownButton}
             onPress={() => {

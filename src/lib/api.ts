@@ -9,8 +9,13 @@ import type {
 } from '@/interfaces';
 
 const getBaseUrl = () => {
-  // Forzar el uso del servidor de Render en desarrollo y producción para evitar desajuste de llaves criptográficas
-  return 'https://go-fare-backend.onrender.com/api/v1';
+  // Base configurable vía EXPO_PUBLIC_API_URL (sin barra final, sin /api/v1).
+  // Fallback: backend de Render. Apunta siempre a un backend cuyas llaves QR_*
+  // coincidan con las del entorno, o los QR de cobro fallarán al descifrar.
+  const base = (
+    process.env.EXPO_PUBLIC_API_URL ?? 'https://go-fare-backend.onrender.com'
+  ).replace(/\/+$/, '');
+  return `${base}/api/v1`;
 };
 
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
@@ -560,6 +565,26 @@ export async function addAccountBalance(
 }
 
 /**
+ * Recarga real vía Pago Móvil / C2P: el backend verifica la referencia contra
+ * la tesorería (POST /fare/me/top-up) y acredita solo si el pago es válido.
+ */
+export async function topUpBalance(data: {
+  bsAmount: number;
+  reference: string;
+  phone?: string;
+  document?: string;
+}): Promise<{
+  balanceFares: number;
+  faresCredited: number;
+  bsAmount: number;
+}> {
+  return await fetchWithAuth('/fare/me/top-up', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
  * Deduce saldo de la cuenta de tarifa del usuario.
  */
 export async function deductAccountBalance(
@@ -903,20 +928,6 @@ export async function updateTicket(
 }
 
 /**
- * Cooperativas simuladas para pruebas en frontend en caso de error del servidor.
- */
-export const MOCK_COOPERATIVES = [
-  { uuid: 'coop-1', name: 'Cooperativa Caracas Move R.L.', rif: 'J-304598124' },
-  { uuid: 'coop-2', name: 'Línea de Transporte Chacao', rif: 'J-401234567' },
-  {
-    uuid: 'coop-3',
-    name: 'Asociación de Conductores La India',
-    rif: 'J-298765432',
-  },
-  { uuid: 'coop-4', name: 'Cooperativa Metrópolis', rif: 'J-311223344' },
-];
-
-/**
  * Envía una solicitud para registrarse como dueño de vehículo.
  */
 export async function submitVehicleOwnerRequest(requestData: {
@@ -933,87 +944,38 @@ export async function submitVehicleOwnerRequest(requestData: {
 }
 
 /**
- * Envía una solicitud para registrar un vehículo (propietario ya aprobado).
+ * Registra un vehículo real en el backend (POST /vehicles). Lo asocia
+ * opcionalmente a una línea de transporte (`lineUuid`).
  */
 export async function submitVehicleRequest(requestData: {
   vehicleMake: string;
   vehicleModel: string;
   vehicleYear: number;
   licensePlate: string;
-  cooperativeUuid?: string;
+  capacity: number;
+  lineUuid?: string;
 }): Promise<any> {
-  // Guardar localmente en AsyncStorage para simulación
-  try {
-    const existingStr = await AsyncStorage.getItem('mock_vehicle_requests');
-    const existing = existingStr ? JSON.parse(existingStr) : [];
-
-    let coopName = 'Particular / Ninguna';
-    if (requestData.cooperativeUuid) {
-      const found = MOCK_COOPERATIVES.find(
-        (c) => c.uuid === requestData.cooperativeUuid,
-      );
-      if (found) coopName = found.name;
-    }
-
-    const newRequest = {
-      uuid: `mock-veh-${Date.now()}`,
-      vehicleMake: requestData.vehicleMake,
-      vehicleModel: requestData.vehicleModel,
-      vehicleYear: requestData.vehicleYear,
-      licensePlate: requestData.licensePlate,
-      cooperativeName: coopName,
-      status: 'pending',
-      createdAt: new Date().toLocaleDateString('es-VE'), // formato DD/MM/YYYY
-    };
-
-    existing.unshift(newRequest);
-    await AsyncStorage.setItem(
-      'mock_vehicle_requests',
-      JSON.stringify(existing),
-    );
-  } catch (storageErr) {
-    console.warn('[API] Error al guardar vehículo localmente:', storageErr);
-  }
-
-  try {
-    return await fetchWithAuth('/vehicle-requests', {
-      method: 'POST',
-      body: JSON.stringify(requestData),
-    });
-  } catch (error) {
-    console.warn(
-      '[API] submitVehicleRequest falló en backend (se guardó localmente como simulado):',
-      error,
-    );
-    return { success: true, mocked: true };
-  }
-}
-
-/**
- * Obtiene la lista de cooperativas registradas.
- */
-export async function getCooperatives(): Promise<any[]> {
-  try {
-    return await fetchWithAuth('/cooperatives');
-  } catch (error) {
-    console.warn('[API] getCooperatives falló, usando datos simulados:', error);
-    return MOCK_COOPERATIVES;
-  }
-}
-
-/**
- * Envía una solicitud para registrarse como conductor.
- */
-export async function submitDriverRequest(requestData: {
-  licenseNumber: string;
-  licenseType: string;
-  experienceYears: number;
-  emergencyPhone: string;
-}): Promise<any> {
-  return await fetchWithAuth('/driver-requests', {
+  return await fetchWithAuth('/vehicles', {
     method: 'POST',
-    body: JSON.stringify(requestData),
+    body: JSON.stringify({
+      brand: requestData.vehicleMake,
+      model: requestData.vehicleModel,
+      year: requestData.vehicleYear,
+      plate: requestData.licensePlate,
+      capacity: requestData.capacity,
+      lineUuid: requestData.lineUuid || undefined,
+    }),
   });
+}
+
+/**
+ * Líneas de transporte activas (GET /transport-lines), para el selector
+ * al registrar un vehículo. Reemplaza a las "cooperativas" simuladas.
+ */
+export async function getCooperatives(): Promise<
+  { uuid: string; name: string; code?: string }[]
+> {
+  return await fetchWithAuth('/transport-lines');
 }
 
 /**
@@ -1900,28 +1862,21 @@ export async function updateBcvRate(
 }
 
 /**
- * Consulta la API externa de DolarApi para obtener la tasa BCV oficial más reciente.
- * Retorna la tasa promedio y la fecha de actualización, o null si falla.
+ * Tasa BCV oficial sugerida desde la fuente externa. La integración con DolarAPI
+ * vive en el backend (GET /rates/bcv/external); aquí solo se consume.
+ * Retorna la tasa y su fecha, o null si el backend/fuente no responde.
  */
 export async function getExternalBcvRate(): Promise<{
   rate: number;
   date: string;
 } | null> {
   try {
-    const apiRes = await fetch('https://ve.dolarapi.com/v1/dolares');
-    if (apiRes.ok) {
-      const list = await apiRes.json();
-      const oficial = list.find((item: any) => item.fuente === 'oficial');
-      if (oficial?.promedio) {
-        const suggestedRateVal = oficial.promedio;
-        const suggestedDateVal = oficial.fechaActualizacion
-          ? oficial.fechaActualizacion.slice(0, 10)
-          : new Date().toISOString().slice(0, 10);
-        return {
-          rate: suggestedRateVal,
-          date: suggestedDateVal,
-        };
-      }
+    const data = await fetchWithAuth('/rates/bcv/external');
+    if (data?.rate) {
+      return {
+        rate: Number(data.rate),
+        date: (data.fetchedAt ?? new Date().toISOString()).slice(0, 10),
+      };
     }
     return null;
   } catch (error) {
