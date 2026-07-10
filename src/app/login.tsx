@@ -158,7 +158,7 @@ export default function LoginScreen() {
             } catch {}
           }
 
-          await AsyncStorage.setItem('user_role', biometricRole);
+          await SecureStore.setItemAsync('user_role', biometricRole);
           if (biometricRole === 'platform_admin' || biometricRole === 'admin') {
             router.replace('/admin/dashboard' as any);
           } else if (biometricRole === 'transport_owner') {
@@ -360,7 +360,7 @@ export default function LoginScreen() {
         }
       }
 
-      await AsyncStorage.setItem('user_role', userRole);
+      await SecureStore.setItemAsync('user_role', userRole);
 
       if (userRole === 'platform_admin' || userRole === 'admin') {
         router.replace('/admin/dashboard' as any);
