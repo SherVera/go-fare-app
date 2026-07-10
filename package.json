@@ -81,7 +81,10 @@
     "patch-package": "^8.0.1",
     "react-dom": "19.1.0",
     "standard-version": "^9.5.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
+    "@emnapi/wasi-threads": "1.2.2"
   },
   "config": {
     "commitizen": {

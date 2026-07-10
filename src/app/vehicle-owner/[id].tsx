@@ -16,8 +16,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   deleteVehicle,
-  getVehicleDetail,
   getBackendInviteCodes,
+  getVehicleDetail,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 

@@ -1,4 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker, {
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -22,9 +25,6 @@ import {
   submitLegalDocument,
   submitVehicleRequest,
 } from '@/lib/api';
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from '@react-native-community/datetimepicker';
 import { tokens } from '@/theme/tokens';
 
 const isValidDate = (dateStr: string) => {

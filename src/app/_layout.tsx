@@ -21,9 +21,9 @@ import {
   useFonts,
 } from '@expo-google-fonts/outfit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
 import {
   AppState,
   type AppStateStatus,

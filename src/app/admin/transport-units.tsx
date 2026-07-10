@@ -18,14 +18,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
-  getAllTransportUnits,
-  toggleTransportUnitStatus,
   approveVehicle,
-  rejectVehicle,
-  getVehicleDetail,
   getAllDocuments,
-  verifyDocument,
+  getAllTransportUnits,
+  getVehicleDetail,
   rejectDocument,
+  rejectVehicle,
+  toggleTransportUnitStatus,
+  verifyDocument,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 

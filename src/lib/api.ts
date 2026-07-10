@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type {
@@ -8,8 +9,6 @@ import type {
   FirebaseEmailRegisterDto,
   FirebaseIssuedCredentialsDto,
 } from '@/interfaces';
-
-import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { auth, sigOutAccount } from './firebase';
 
 export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
@@ -1070,7 +1069,7 @@ export async function getVehicleDetail(uuid: string): Promise<any> {
           appStatus = 'pending';
         }
 
-        let assignedDriver: any = undefined;
+        let assignedDriver: any;
         try {
           const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
           const localVehicles = localStr ? JSON.parse(localStr) : [];
