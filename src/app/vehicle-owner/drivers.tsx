@@ -10,6 +10,8 @@ import {
   FlatList,
   Linking,
   Modal,
+  Platform,
+  KeyboardAvoidingView,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -24,100 +26,14 @@ import {
   createBackendInviteCode,
   getBackendInviteCodes,
   getBackendProfile,
+  getOwnerVehicles,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
-
-const MOCK_DRIVERS_BASE: MockDriver[] = [
-  {
-    id: 'd1',
-    name: 'Carlos Mendoza',
-    nationalId: 'V-14.892.401',
-    phone: '0412-5551234',
-    status: 'active',
-  },
-  {
-    id: 'd2',
-    name: 'Ramón Delgado',
-    nationalId: 'V-18.304.582',
-    phone: '0414-9994567',
-    status: 'active',
-  },
-  {
-    id: 'd3',
-    name: 'José Gregorio',
-    nationalId: 'V-11.204.381',
-    phone: '0424-3338888',
-    status: 'active',
-  },
-  {
-    id: 'd4',
-    name: 'Luis Alejandro',
-    nationalId: 'V-20.155.678',
-    phone: '0416-8889900',
-    status: 'active',
-  },
-  {
-    id: 'd5',
-    name: 'Pedro Infante',
-    nationalId: 'V-13.444.555',
-    phone: '0426-7771122',
-    status: 'active',
-  },
-  {
-    id: 'd6',
-    name: 'Francisco Bello',
-    nationalId: 'V-15.666.777',
-    phone: '0412-9998877',
-    status: 'active',
-  },
-  {
-    id: 'd7',
-    name: 'Manuel Salazar',
-    nationalId: 'V-12.888.999',
-    phone: '0414-6663322',
-    status: 'active',
-  },
-];
-
-const MOCK_VEHICLES_BASE: MockVehicle[] = [
-  {
-    uuid: '1',
-    vehicleMake: 'Toyota',
-    vehicleModel: 'Coaster Bus',
-    vehicleYear: 2018,
-    licensePlate: 'AB123CD',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '24/05/2026',
-    assignedDriver: MOCK_DRIVERS_BASE[0],
-  },
-  {
-    uuid: '2',
-    vehicleMake: 'Encava',
-    vehicleModel: 'ENT-610',
-    vehicleYear: 2015,
-    licensePlate: 'XY987ZT',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '25/05/2026',
-    assignedDriver: MOCK_DRIVERS_BASE[1],
-  },
-  {
-    uuid: '3',
-    vehicleMake: 'Hyundai',
-    vehicleModel: 'County',
-    vehicleYear: 2017,
-    licensePlate: 'HJ321OP',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '26/05/2026',
-  },
-];
 
 export default function VehicleOwnerDrivers() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'active' | 'invited'>('active');
-  const [drivers, setDrivers] = useState<MockDriver[]>(MOCK_DRIVERS_BASE);
+  const [drivers, setDrivers] = useState<MockDriver[]>([]);
   const [vehicles, setVehicles] = useState<MockVehicle[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -173,49 +89,14 @@ export default function VehicleOwnerDrivers() {
     try {
       setLoading(true);
 
-      // 1. Cargar vehículos de AsyncStorage
-      const localVehiclesStr = await AsyncStorage.getItem(
-        'mock_vehicle_requests',
-      );
-      const localVehicles: MockVehicle[] = localVehiclesStr
-        ? JSON.parse(localVehiclesStr)
-        : [];
+      // 1. Cargar vehículos reales del backend
+      const realVehicles = await getOwnerVehicles().catch((err) => {
+        console.warn('[Drivers] Error al obtener vehículos del backend:', err);
+        return [];
+      });
+      setVehicles(realVehicles);
 
-      const deletedPlatesStr = await AsyncStorage.getItem(
-        'mock_deleted_vehicle_plates',
-      );
-      const deletedPlates: string[] = deletedPlatesStr
-        ? JSON.parse(deletedPlatesStr)
-        : [];
-
-      const mergedVehicles = [
-        ...localVehicles,
-        ...MOCK_VEHICLES_BASE.filter(
-          (mv) =>
-            !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
-        ),
-      ].filter((v) => !deletedPlates.includes(v.licensePlate));
-
-      setVehicles(mergedVehicles);
-
-      // 2. Cargar conductores locales de AsyncStorage
-      const localDriversStr = await AsyncStorage.getItem(
-        'mock_cooperative_drivers',
-      );
-      const localDrivers: MockDriver[] = localDriversStr
-        ? JSON.parse(localDriversStr)
-        : [];
-
-      const mergedDrivers = [
-        ...localDrivers,
-        ...MOCK_DRIVERS_BASE.filter(
-          (md) => !localDrivers.some((ld) => ld.nationalId === md.nationalId),
-        ),
-      ];
-
-      setDrivers(mergedDrivers);
-
-      // 3. Cargar invitaciones de la API real del backend
+      // 2. Cargar invitaciones de la API real del backend
       const backendInvites = await getBackendInviteCodes().catch((err) => {
         console.warn(
           '[Drivers] Error al obtener invitaciones del backend:',
@@ -224,7 +105,22 @@ export default function VehicleOwnerDrivers() {
         return [];
       });
 
-      // Cargar mapeo local de teléfonos desde AsyncStorage
+      // 3. Mapear conductores reales a partir de las invitaciones canjeadas
+      const realDrivers: MockDriver[] = backendInvites
+        .filter((inv: any) => inv.driver)
+        .map((inv: any) => ({
+          id: inv.driver.id,
+          name:
+            inv.driver.displayName ||
+            `${inv.driver.firstName} ${inv.driver.lastName}`.trim() ||
+            'Conductor sin nombre',
+          nationalId: inv.driver.nationalId || 'Sin cédula',
+          phone: inv.driver.phoneNumber || 'Sin teléfono',
+          status: 'active',
+        }));
+      setDrivers(realDrivers);
+
+      // Cargar mapeo local de teléfonos desde AsyncStorage para mostrar en pestaña "Invitados WA"
       const mapStr = await AsyncStorage.getItem('gofare_invited_phones_map');
       const phoneMap = mapStr ? JSON.parse(mapStr) : {};
 
@@ -305,7 +201,7 @@ export default function VehicleOwnerDrivers() {
       }
 
       // 3. Construir mensaje de WhatsApp
-      const redirectUrl = `https://go-fare-backend.onrender.com/api/v1/invite-codes/redirect/${code}`;
+      const redirectUrl = `https://www.swiftfare.app/invite-codes/redirect/${code}`;
       const message = `¡Hola! El socio ${ownerName} te invita a registrarte como conductor en su flota de GoFare.
 
 1. Registrate e inicia sesión en la aplicación.
@@ -680,84 +576,92 @@ Tu código de invitación único es: *${code}*`;
         animationType="fade"
         onRequestClose={() => setIsModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Agregar Conductor</Text>
-              <Pressable onPress={() => setIsModalVisible(false)} hitSlop={10}>
-                <Ionicons name="close" size={24} color="#8594AB" />
-              </Pressable>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={styles.modalForm}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* Formulario Invitación por WhatsApp */}
-              <View>
-                <Text style={styles.inputLabel}>
-                  NÚMERO DE TELÉFONO DEL CONDUCTOR
-                </Text>
-                <View
-                  style={[
-                    styles.inputCard,
-                    invitePhoneError && styles.inputCardError,
-                  ]}
-                >
-                  <Ionicons
-                    name="call-outline"
-                    size={20}
-                    color="#8594AB"
-                    style={{ marginRight: 10 }}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ej. 04125556677"
-                    placeholderTextColor="#A1A1AA"
-                    keyboardType="phone-pad"
-                    value={invitePhone}
-                    onChangeText={(val) => {
-                      setInvitePhone(val);
-                      if (invitePhoneError) setInvitePhoneError(undefined);
-                    }}
-                    editable={!sendingInvite}
-                  />
-                </View>
-                {invitePhoneError && (
-                  <Text style={styles.errorText}>{invitePhoneError}</Text>
-                )}
-
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Agregar Conductor</Text>
                 <Pressable
-                  style={({ pressed }) => [
-                    styles.submitBtn,
-                    pressed && { opacity: 0.9 },
-                    sendingInvite && { backgroundColor: '#94A3B8' },
-                  ]}
-                  onPress={handleSendInviteWhatsApp}
-                  disabled={sendingInvite}
+                  onPress={() => setIsModalVisible(false)}
+                  hitSlop={10}
                 >
-                  {sendingInvite ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <View
-                      style={{ flexDirection: 'row', alignItems: 'center' }}
-                    >
-                      <Ionicons
-                        name="logo-whatsapp"
-                        size={20}
-                        color="#FFFFFF"
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text style={styles.submitBtnText}>
-                        Enviar por WhatsApp
-                      </Text>
-                    </View>
-                  )}
+                  <Ionicons name="close" size={24} color="#8594AB" />
                 </Pressable>
               </View>
-            </ScrollView>
+
+              <ScrollView
+                contentContainerStyle={styles.modalForm}
+                keyboardShouldPersistTaps="handled"
+              >
+                {/* Formulario Invitación por WhatsApp */}
+                <View>
+                  <Text style={styles.inputLabel}>
+                    NÚMERO DE TELÉFONO DEL CONDUCTOR
+                  </Text>
+                  <View
+                    style={[
+                      styles.inputCard,
+                      invitePhoneError && styles.inputCardError,
+                    ]}
+                  >
+                    <Ionicons
+                      name="call-outline"
+                      size={20}
+                      color="#8594AB"
+                      style={{ marginRight: 10 }}
+                    />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Ej. 04125556677"
+                      placeholderTextColor="#A1A1AA"
+                      keyboardType="phone-pad"
+                      value={invitePhone}
+                      onChangeText={(val) => {
+                        setInvitePhone(val);
+                        if (invitePhoneError) setInvitePhoneError(undefined);
+                      }}
+                      editable={!sendingInvite}
+                    />
+                  </View>
+                  {invitePhoneError && (
+                    <Text style={styles.errorText}>{invitePhoneError}</Text>
+                  )}
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.submitBtn,
+                      pressed && { opacity: 0.9 },
+                      sendingInvite && { backgroundColor: '#94A3B8' },
+                    ]}
+                    onPress={handleSendInviteWhatsApp}
+                    disabled={sendingInvite}
+                  >
+                    {sendingInvite ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <View
+                        style={{ flexDirection: 'row', alignItems: 'center' }}
+                      >
+                        <Ionicons
+                          name="logo-whatsapp"
+                          size={20}
+                          color="#FFFFFF"
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.submitBtnText}>
+                          Enviar por WhatsApp
+                        </Text>
+                      </View>
+                    )}
+                  </Pressable>
+                </View>
+              </ScrollView>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

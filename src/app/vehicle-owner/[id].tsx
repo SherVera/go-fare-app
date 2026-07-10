@@ -14,7 +14,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { deleteVehicle, getVehicleDetail } from '@/lib/api';
+import {
+  deleteVehicle,
+  getVehicleDetail,
+  getBackendInviteCodes,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 interface MockDriver {
@@ -40,133 +44,6 @@ interface MockVehicle {
   tripsCount?: number;
 }
 
-const MOCK_VEHICLES_BASE: MockVehicle[] = [
-  {
-    uuid: '1',
-    vehicleMake: 'Toyota',
-    vehicleModel: 'Coaster Bus',
-    vehicleYear: 2018,
-    licensePlate: 'AB123CD',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '24/05/2026',
-    totalEarnings: 3240.0,
-    tripsCount: 216,
-  },
-  {
-    uuid: '2',
-    vehicleMake: 'Encava',
-    vehicleModel: 'ENT-610',
-    vehicleYear: 2015,
-    licensePlate: 'XY987ZT',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '25/05/2026',
-    totalEarnings: 1890.0,
-    tripsCount: 126,
-  },
-  {
-    uuid: '3',
-    vehicleMake: 'Hyundai',
-    vehicleModel: 'County',
-    vehicleYear: 2017,
-    licensePlate: 'HJ321OP',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '26/05/2026',
-    totalEarnings: 840.0,
-    tripsCount: 56,
-  },
-  {
-    uuid: '4',
-    vehicleMake: 'Ford',
-    vehicleModel: 'F-350',
-    vehicleYear: 2016,
-    licensePlate: 'E2E-990T',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'pending',
-    createdAt: '27/05/2026',
-    totalEarnings: 0.0,
-    tripsCount: 0,
-  },
-  {
-    uuid: '5',
-    vehicleMake: 'Chevrolet',
-    vehicleModel: 'NPR Turbo',
-    vehicleYear: 2012,
-    licensePlate: 'RJ456KL',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'rejected',
-    createdAt: '22/05/2026',
-    totalEarnings: 0.0,
-    tripsCount: 0,
-    adminNotes:
-      'El documento de propiedad (título del vehículo) cargado está borroso y no se puede leer la matrícula oficial. Por favor, realiza una nueva solicitud con fotos nítidas del título de propiedad del vehículo y la revisión de tránsito vigente.',
-  },
-];
-
-const MOCK_DRIVERS: MockDriver[] = [
-  {
-    id: 'd1',
-    name: 'Carlos Mendoza',
-    nationalId: 'V-14.892.401',
-    phone: '0412-5551234',
-    status: 'active',
-  },
-  {
-    id: 'd2',
-    name: 'Ramón Delgado',
-    nationalId: 'V-18.304.582',
-    phone: '0414-9994567',
-    status: 'active',
-  },
-  {
-    id: 'd3',
-    name: 'José Gregorio',
-    nationalId: 'V-11.204.381',
-    phone: '0424-3338888',
-    status: 'active',
-  },
-];
-
-const MOCK_TRIPS = [
-  {
-    id: 't1',
-    route: 'Ruta 201: Chacaíto - El Hatillo',
-    amount: 15.0,
-    date: 'Hoy, 02:40 PM',
-    type: 'ticket',
-  },
-  {
-    id: 't2',
-    route: 'Ruta 201: Chacaíto - El Hatillo',
-    amount: 15.0,
-    date: 'Hoy, 01:15 PM',
-    type: 'ticket',
-  },
-  {
-    id: 't3',
-    route: 'Ruta L1: Propatria - Palo Verde',
-    amount: 20.0,
-    date: 'Ayer, 06:30 PM',
-    type: 'ticket',
-  },
-  {
-    id: 't4',
-    route: 'Ruta 201: Chacaíto - El Hatillo',
-    amount: 15.0,
-    date: 'Ayer, 11:24 AM',
-    type: 'ticket',
-  },
-  {
-    id: 't5',
-    route: 'Ruta L1: Propatria - Palo Verde',
-    amount: 20.0,
-    date: '26/05/2026, 04:55 PM',
-    type: 'ticket',
-  },
-];
-
 export default function VehicleDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -174,6 +51,29 @@ export default function VehicleDetailsScreen() {
   const [vehicle, setVehicle] = useState<MockVehicle | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDriverModalVisible, setIsDriverModalVisible] = useState(false);
+  const [drivers, setDrivers] = useState<MockDriver[]>([]);
+
+  // Cargar conductores reales del backend (de invitaciones canjeadas)
+  const loadAssociatedDrivers = useCallback(async () => {
+    try {
+      const invites = await getBackendInviteCodes().catch(() => []);
+      const realDrivers = invites
+        .filter((inv: any) => inv.driver)
+        .map((inv: any) => ({
+          id: inv.driver.id,
+          name:
+            inv.driver.displayName ||
+            `${inv.driver.firstName} ${inv.driver.lastName}`.trim() ||
+            'Conductor sin nombre',
+          nationalId: inv.driver.nationalId || 'Sin cédula',
+          phone: inv.driver.phoneNumber || 'Sin teléfono',
+          status: 'active' as const,
+        }));
+      setDrivers(realDrivers);
+    } catch (err) {
+      console.warn('[Details] Error loading associated drivers:', err);
+    }
+  }, []);
 
   // Cargar datos del vehículo desde el backend
   const loadVehicle = useCallback(async () => {
@@ -193,7 +93,8 @@ export default function VehicleDetailsScreen() {
 
   useEffect(() => {
     loadVehicle();
-  }, [loadVehicle]);
+    loadAssociatedDrivers();
+  }, [loadVehicle, loadAssociatedDrivers]);
 
   // Actualizar conductor asignado
   const handleAssignDriver = async (driver: MockDriver | undefined) => {
@@ -572,24 +473,17 @@ export default function VehicleDetailsScreen() {
                 <Text style={styles.sectionCardTitle}>Historial Reciente</Text>
               </View>
 
-              {MOCK_TRIPS.map((trip) => (
-                <View key={trip.id} style={styles.tripItem}>
-                  <View style={styles.tripIconWrapper}>
-                    <Ionicons
-                      name="checkmark-circle-outline"
-                      size={18}
-                      color="#16A34A"
-                    />
-                  </View>
-                  <View style={styles.tripMeta}>
-                    <Text style={styles.tripRoute}>{trip.route}</Text>
-                    <Text style={styles.tripDate}>{trip.date}</Text>
-                  </View>
-                  <Text style={styles.tripAmount}>
-                    +{trip.amount.toFixed(2)} Bs
-                  </Text>
-                </View>
-              ))}
+              <View style={styles.emptyTripsWrapper}>
+                <Ionicons
+                  name="document-text-outline"
+                  size={32}
+                  color="#94A3B8"
+                  style={{ marginBottom: 6 }}
+                />
+                <Text style={styles.emptyTripsText}>
+                  No hay viajes registrados para este vehículo
+                </Text>
+              </View>
             </View>
           </>
         )}
@@ -614,7 +508,7 @@ export default function VehicleDetailsScreen() {
         </Pressable>
 
         {/* Padding final */}
-        <View style={{ height: 40 }} />
+        <View style={{ height: 120 }} />
       </ScrollView>
 
       {/* ── MODAL SELECCIONAR CONDUCTOR ── */}
@@ -640,44 +534,82 @@ export default function VehicleDetailsScreen() {
               style={styles.modalScroll}
               showsVerticalScrollIndicator={true}
             >
-              {MOCK_DRIVERS.map((driver) => {
-                const isSelected = vehicle.assignedDriver?.id === driver.id;
-
-                return (
-                  <Pressable
-                    key={driver.id}
-                    style={[
-                      styles.driverSelectItem,
-                      isSelected && styles.driverSelectItemActive,
-                    ]}
-                    onPress={() => handleAssignDriver(driver)}
+              {drivers.length === 0 ? (
+                <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+                  <Ionicons
+                    name="people-outline"
+                    size={36}
+                    color="#8594AB"
+                    style={{ marginBottom: 8 }}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      color: '#64748B',
+                      fontFamily: tokens.typography.fontFamily.medium,
+                      textAlign: 'center',
+                    }}
                   >
-                    <View style={styles.driverSelectInfo}>
-                      <Text
-                        style={[
-                          styles.driverSelectName,
-                          isSelected && { color: tokens.colors.primary },
-                        ]}
-                      >
-                        {driver.name}
-                      </Text>
-                      <Text style={styles.driverSelectMeta}>
-                        Cédula: {driver.nationalId}
-                      </Text>
-                      <Text style={styles.driverSelectMeta}>
-                        Telf: {driver.phone}
-                      </Text>
-                    </View>
-                    {isSelected && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={24}
-                        color={tokens.colors.primary}
-                      />
-                    )}
-                  </Pressable>
-                );
-              })}
+                    No tienes conductores asociados.
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      color: '#8594AB',
+                      fontFamily: tokens.typography.fontFamily.regular,
+                      textAlign: 'center',
+                      marginTop: 2,
+                    }}
+                  >
+                    Invita a un conductor desde la sección de Conductores.
+                  </Text>
+                </View>
+              ) : (
+                drivers.map((driver) => {
+                  const isSelected = vehicle.assignedDriver?.id === driver.id;
+
+                  return (
+                    <Pressable
+                      key={driver.id}
+                      style={[
+                        styles.driverSelectItem,
+                        isSelected && styles.driverSelectItemActive,
+                      ]}
+                      onPress={() => handleAssignDriver(driver)}
+                    >
+                      <View style={styles.driverSelectInfo}>
+                        <Text
+                          style={[
+                            styles.driverSelectName,
+                            isSelected && { color: tokens.colors.primary },
+                          ]}
+                        >
+                          {driver.name}
+                        </Text>
+                        <Text style={styles.driverSelectMeta}>
+                          Cédula: {driver.nationalId}
+                        </Text>
+                        <Text style={styles.driverSelectMeta}>
+                          Telf: {driver.phone}
+                        </Text>
+                      </View>
+                      {isSelected ? (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color={tokens.colors.primary}
+                        />
+                      ) : (
+                        <Ionicons
+                          name="chevron-forward"
+                          size={20}
+                          color="#8594AB"
+                        />
+                      )}
+                    </Pressable>
+                  );
+                })
+              )}
 
               {vehicle.assignedDriver && (
                 <Pressable
@@ -808,6 +740,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
     padding: 12,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   statusLabel: {
     fontSize: 11,
@@ -1147,5 +1081,22 @@ const styles = StyleSheet.create({
     color: '#B45309',
     fontFamily: tokens.typography.fontFamily.medium,
     lineHeight: 18,
+  },
+  emptyTripsWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 24,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    marginTop: 8,
+  },
+  emptyTripsText: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    textAlign: 'center',
   },
 });

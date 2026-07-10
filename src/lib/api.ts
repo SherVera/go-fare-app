@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type {
   BackendFareAccount,
@@ -8,52 +9,50 @@ import type {
   FirebaseIssuedCredentialsDto,
 } from '@/interfaces';
 
-const getBaseUrl = () => {
-  // Forzar el uso del servidor de Render en desarrollo y producción para evitar desajuste de llaves criptográficas
-  return 'https://go-fare-backend.onrender.com/api/v1';
-};
-
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { auth, sigOutAccount } from './firebase';
 
-export const BASE_URL = getBaseUrl();
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
 console.log('[API] Resolved BASE_URL:', BASE_URL);
 const GOFARE_JWT_KEY = 'gofare_jwt_token';
 const BACKEND_JWT_KEY = 'backend_jwt';
 
 /**
- * Guarda el token JWT de GoFare en el almacenamiento local.
+ * Guarda el token JWT de GoFare en el almacenamiento local cifrado de forma segura.
  */
 export async function saveGoFareToken(token: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(GOFARE_JWT_KEY, token);
-    await AsyncStorage.setItem(BACKEND_JWT_KEY, token);
+    await SecureStore.setItemAsync(GOFARE_JWT_KEY, token);
+    await SecureStore.setItemAsync(BACKEND_JWT_KEY, token);
   } catch (error) {
-    console.error('[API] Error al guardar el token JWT:', error);
+    console.error('[API] Error al guardar el token JWT en SecureStore:', error);
   }
 }
 
 /**
- * Obtiene el token JWT de GoFare desde el almacenamiento local.
+ * Obtiene el token JWT de GoFare desde el almacenamiento local cifrado de forma segura.
  */
 export async function getGoFareToken(): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(GOFARE_JWT_KEY);
+    return await SecureStore.getItemAsync(GOFARE_JWT_KEY);
   } catch (error) {
-    console.error('[API] Error al obtener el token JWT:', error);
+    console.error('[API] Error al obtener el token JWT de SecureStore:', error);
     return null;
   }
 }
 
 /**
- * Elimina el token JWT de GoFare del almacenamiento local.
+ * Elimina el token JWT de GoFare del almacenamiento local cifrado de forma segura.
  */
 export async function clearGoFareToken(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(GOFARE_JWT_KEY);
-    await AsyncStorage.removeItem(BACKEND_JWT_KEY);
+    await SecureStore.deleteItemAsync(GOFARE_JWT_KEY);
+    await SecureStore.deleteItemAsync(BACKEND_JWT_KEY);
   } catch (error) {
-    console.error('[API] Error al eliminar el token JWT:', error);
+    console.error(
+      '[API] Error al eliminar el token JWT de SecureStore:',
+      error,
+    );
   }
 }
 
@@ -147,6 +146,7 @@ async function fetchWithTimeout(
 async function fetchWithAuth(
   path: string,
   options: RequestInit = {},
+  timeoutMs?: number,
 ): Promise<any> {
   const token = await getGoFareToken();
   const headers: Record<string, string> = {
@@ -158,10 +158,14 @@ async function fetchWithAuth(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const response = await fetchWithTimeout(
+    `${BASE_URL}${path}`,
+    {
+      ...options,
+      headers,
+    },
+    timeoutMs,
+  );
 
   // Si la respuesta es No Content (204), retornamos null directamente
   if (response.status === 204) {
@@ -273,9 +277,15 @@ export async function sendFirebaseVerificationEmail(
   idToken: string,
 ): Promise<void> {
   const FIREBASE_API_KEY = Platform.select({
-    ios: 'AIzaSyAptMIEEKqMB6M1K3IjWeaWxL6Ihi4RxL4',
-    android: 'AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ',
-    default: 'AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ',
+    ios:
+      process.env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS ||
+      'AIzaSyAptMIEEKqMB6M1K3IjWeaWxL6Ihi4RxL4',
+    android:
+      process.env.EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID ||
+      'AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ',
+    default:
+      process.env.EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID ||
+      'AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ',
   });
 
   const headers: Record<string, string> = {
@@ -990,13 +1000,18 @@ export async function getOwnerVehicles(): Promise<any[]> {
       });
     }
   } catch (error) {
-    console.warn('[API] getOwnerVehicles backend falló, usando sólo local:', error);
+    console.warn(
+      '[API] getOwnerVehicles backend falló, usando sólo local:',
+      error,
+    );
   }
 
   // Leer placas de vehículos dados de baja
   let deletedPlates: string[] = [];
   try {
-    const deletedPlatesStr = await AsyncStorage.getItem('mock_deleted_vehicle_plates');
+    const deletedPlatesStr = await AsyncStorage.getItem(
+      'mock_deleted_vehicle_plates',
+    );
     if (deletedPlatesStr) {
       deletedPlates = JSON.parse(deletedPlatesStr);
     }
@@ -1017,7 +1032,9 @@ export async function getOwnerVehicles(): Promise<any[]> {
   // Agregar los locales que no colisionen por placa o uuid
   for (const lv of localVehicles) {
     if (deletedPlates.includes(lv.licensePlate)) continue;
-    const idx = combined.findIndex((bv) => bv.licensePlate === lv.licensePlate || bv.uuid === lv.uuid);
+    const idx = combined.findIndex(
+      (bv) => bv.licensePlate === lv.licensePlate || bv.uuid === lv.uuid,
+    );
     if (idx !== -1) {
       combined[idx] = {
         ...combined[idx],
@@ -1057,7 +1074,9 @@ export async function getVehicleDetail(uuid: string): Promise<any> {
         try {
           const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
           const localVehicles = localStr ? JSON.parse(localStr) : [];
-          const localMatch = localVehicles.find((lv: any) => lv.uuid === uuid || lv.licensePlate === v.plate);
+          const localMatch = localVehicles.find(
+            (lv: any) => lv.uuid === uuid || lv.licensePlate === v.plate,
+          );
           if (localMatch) {
             assignedDriver = localMatch.assignedDriver;
           }
@@ -1075,10 +1094,17 @@ export async function getVehicleDetail(uuid: string): Promise<any> {
           totalEarnings: 0,
           tripsCount: 0,
           assignedDriver,
+          color: v.color,
+          capacity: v.capacity,
+          photoUrl: v.photoUrl,
+          routeNumber: v.routeNumber,
         };
       }
     } catch (err) {
-      console.warn('[API] Error al obtener detalle de vehículo desde backend:', err);
+      console.warn(
+        '[API] Error al obtener detalle de vehículo desde backend:',
+        err,
+      );
     }
   }
 
@@ -1107,20 +1133,33 @@ export async function deleteVehicle(uuid: string): Promise<any> {
     const list = await getOwnerVehicles();
     const target = list.find((v) => v.uuid === uuid);
     if (target?.licensePlate) {
-      const deletedPlatesStr = await AsyncStorage.getItem('mock_deleted_vehicle_plates');
-      const deletedPlates = deletedPlatesStr ? JSON.parse(deletedPlatesStr) : [];
+      const deletedPlatesStr = await AsyncStorage.getItem(
+        'mock_deleted_vehicle_plates',
+      );
+      const deletedPlates = deletedPlatesStr
+        ? JSON.parse(deletedPlatesStr)
+        : [];
       deletedPlates.push(target.licensePlate);
-      await AsyncStorage.setItem('mock_deleted_vehicle_plates', JSON.stringify(deletedPlates));
+      await AsyncStorage.setItem(
+        'mock_deleted_vehicle_plates',
+        JSON.stringify(deletedPlates),
+      );
     }
 
     const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
     if (localStr) {
       const localVehicles = JSON.parse(localStr);
       const filtered = localVehicles.filter((v: any) => v.uuid !== uuid);
-      await AsyncStorage.setItem('mock_vehicle_requests', JSON.stringify(filtered));
+      await AsyncStorage.setItem(
+        'mock_vehicle_requests',
+        JSON.stringify(filtered),
+      );
     }
   } catch (storageErr) {
-    console.warn('[API] Error al actualizar baja de vehículo en AsyncStorage:', storageErr);
+    console.warn(
+      '[API] Error al actualizar baja de vehículo en AsyncStorage:',
+      storageErr,
+    );
   }
 
   return { success: true };
@@ -1149,6 +1188,10 @@ export async function submitLegalDocument(requestData: {
       expiresAt: requestData.expiresAt,
       status: 'pending_review',
       createdAt: new Date().toISOString(),
+      vehicleUuid: requestData.vehicleUuid,
+      vehicle: {
+        uuid: requestData.vehicleUuid,
+      },
       owner: {
         uuid: 'me',
         displayName: 'Mi Usuario',
@@ -1572,45 +1615,42 @@ export async function updateCivilAssociationProfile(
  * Intenta consumir del backend, si no existe el endpoint usa datos mock de AsyncStorage.
  */
 export async function getAllDocuments(): Promise<any[]> {
-  let cachedDocs: any[] = [];
+  // 1. Intentar obtener datos actualizados en tiempo real del backend
+  try {
+    const docs = await fetchWithAuth('/legal-documents');
+    if (Array.isArray(docs)) {
+      await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(docs));
+      return docs;
+    }
+  } catch (err: any) {
+    // Si falla la red o da 404, usamos el fallback de AsyncStorage
+    console.warn(
+      '[API] Error al consultar documentos del backend, usando caché local:',
+      err.message || err,
+    );
+  }
+
+  // 2. Fallback de caché local en AsyncStorage
   try {
     const cached = await AsyncStorage.getItem('mock_admin_documents');
     if (cached) {
-      cachedDocs = JSON.parse(cached);
+      const cachedDocs = JSON.parse(cached);
+      if (Array.isArray(cachedDocs)) {
+        // Filtrar mocks obsoletos
+        return cachedDocs.filter(
+          (d: any) =>
+            d &&
+            d.uuid !== 'doc-1111-2222' &&
+            d.uuid !== 'doc-3333-4444' &&
+            d.uuid !== 'doc-5555-6666',
+        );
+      }
     }
   } catch (err) {
     console.warn('[API] Error al leer caché de documentos:', err);
   }
 
-  // Filtrar los mocks por defecto que confunden al usuario
-  cachedDocs = cachedDocs.filter(
-    (d: any) =>
-      d &&
-      d.uuid !== 'doc-1111-2222' &&
-      d.uuid !== 'doc-3333-4444' &&
-      d.uuid !== 'doc-5555-6666'
-  );
-
-  // Consulta en segundo plano
-  fetchWithAuth('/legal-documents')
-    .then(async (docs) => {
-      if (Array.isArray(docs)) {
-        await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(docs));
-      }
-    })
-    .catch((err) => {
-      // Silenciar errores esperados 404 / Cannot GET
-      if (
-        err.message &&
-        !err.message.includes('404') &&
-        !err.message.includes('Cannot GET') &&
-        !err.message.includes('servidor')
-      ) {
-        console.warn('[API] Error en segundo plano al actualizar documentos:', err);
-      }
-    });
-
-  return cachedDocs;
+  return [];
 }
 
 /**
@@ -1700,13 +1740,17 @@ export async function getAllTransportUnits(): Promise<any[]> {
         model: u.model,
         inviteCode: u.inviteCode || `INV-${u.plate.toUpperCase()}`,
         isActive: u.status === 'active',
-        owner: u.owner ? {
-          displayName: u.owner.displayName || `${u.owner.firstName || ''} ${u.owner.lastName || ''}`,
-          email: u.owner.email,
-        } : {
-          displayName: 'Dueño GoFare',
-          email: '',
-        },
+        owner: u.owner
+          ? {
+              displayName:
+                u.owner.displayName ||
+                `${u.owner.firstName || ''} ${u.owner.lastName || ''}`,
+              email: u.owner.email,
+            }
+          : {
+              displayName: 'Dueño GoFare',
+              email: '',
+            },
       }));
     }
   } catch (err) {
@@ -1718,7 +1762,10 @@ export async function getAllTransportUnits(): Promise<any[]> {
 /**
  * Modifica el estado de activación de una unidad de transporte (aprobación/desaprobación de admin).
  */
-export async function toggleTransportUnitStatus(uuid: string, isActive: boolean): Promise<any> {
+export async function toggleTransportUnitStatus(
+  uuid: string,
+  isActive: boolean,
+): Promise<any> {
   return await fetchWithAuth(`/vehicles/${uuid}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ isActive }),
@@ -1737,12 +1784,15 @@ export async function getAllOwnerRequests(): Promise<any[]> {
       cachedRequests = JSON.parse(cached);
     }
   } catch (err) {
-    console.warn('[API] Error al leer solicitudes de socio de AsyncStorage:', err);
+    console.warn(
+      '[API] Error al leer solicitudes de socio de AsyncStorage:',
+      err,
+    );
   }
 
   // Filtrar los mocks por defecto que confunden al usuario
   cachedRequests = cachedRequests.filter(
-    (r: any) => r && !r.uuid.startsWith('owner-req-')
+    (r: any) => r && !r.uuid.startsWith('owner-req-'),
   );
 
   // Consulta en segundo plano
@@ -1800,7 +1850,10 @@ export async function getAllOwnerRequests(): Promise<any[]> {
       }));
 
       const merged = [...mappedPending, ...mappedApproved, ...mappedRejected];
-      await AsyncStorage.setItem('mock_global_owner_requests', JSON.stringify(merged));
+      await AsyncStorage.setItem(
+        'mock_global_owner_requests',
+        JSON.stringify(merged),
+      );
     })
     .catch(async (error) => {
       // Silenciar warnings esperados
@@ -1810,7 +1863,10 @@ export async function getAllOwnerRequests(): Promise<any[]> {
         !error.message.includes('Cannot GET') &&
         !error.message.includes('servidor')
       ) {
-        console.warn('[API] Error en segundo plano al actualizar solicitudes de socio:', error);
+        console.warn(
+          '[API] Error en segundo plano al actualizar solicitudes de socio:',
+          error,
+        );
       }
     });
 
@@ -1987,37 +2043,6 @@ export async function updateBcvRate(
 }
 
 /**
- * Consulta la API externa de DolarApi para obtener la tasa BCV oficial más reciente.
- * Retorna la tasa promedio y la fecha de actualización, o null si falla.
- */
-export async function getExternalBcvRate(): Promise<{
-  rate: number;
-  date: string;
-} | null> {
-  try {
-    const apiRes = await fetch('https://ve.dolarapi.com/v1/dolares');
-    if (apiRes.ok) {
-      const list = await apiRes.json();
-      const oficial = list.find((item: any) => item.fuente === 'oficial');
-      if (oficial?.promedio) {
-        const suggestedRateVal = oficial.promedio;
-        const suggestedDateVal = oficial.fechaActualizacion
-          ? oficial.fechaActualizacion.slice(0, 10)
-          : new Date().toISOString().slice(0, 10);
-        return {
-          rate: suggestedRateVal,
-          date: suggestedDateVal,
-        };
-      }
-    }
-    return null;
-  } catch (error) {
-    console.warn('[API] getExternalBcvRate falló:', error);
-    return null;
-  }
-}
-
-/**
  * Obtiene el resumen/preview de un cobro de viaje antes de confirmar decodificando el QR.
  */
 export async function previewRide(qr: string): Promise<{
@@ -2182,5 +2207,23 @@ export async function redeemBackendInviteCode(code: string): Promise<any> {
 export async function getBackendInviteCodes(): Promise<any[]> {
   return await fetchWithAuth('/invite-codes', {
     method: 'GET',
+  });
+}
+
+/**
+ * [Admin] Aprueba una unidad de transporte (inactive -> active).
+ */
+export async function approveVehicle(uuid: string): Promise<any> {
+  return await fetchWithAuth(`/vehicles/${uuid}/approve`, {
+    method: 'PATCH',
+  });
+}
+
+/**
+ * [Admin] Rechaza una unidad de transporte (inactive -> suspended).
+ */
+export async function rejectVehicle(uuid: string): Promise<any> {
+  return await fetchWithAuth(`/vehicles/${uuid}/reject`, {
+    method: 'PATCH',
   });
 }

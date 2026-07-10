@@ -21,6 +21,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/outfit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import * as LocalAuthentication from 'expo-local-authentication';
 import {
@@ -227,7 +228,7 @@ export default function RootLayout() {
       if (!user) {
         await clearBackendJwt();
         try {
-          await AsyncStorage.removeItem('user_role');
+          await SecureStore.deleteItemAsync('user_role');
           await AsyncStorage.removeItem('gofare_cached_user_profile');
         } catch (storageErr) {
           console.warn(
@@ -303,7 +304,7 @@ export default function RootLayout() {
               ? 'driver'
               : 'passenger';
       } else {
-        role = await AsyncStorage.getItem('user_role');
+        role = await SecureStore.getItemAsync('user_role');
       }
 
       // Si el backend devuelve 'passenger', verificar los Firebase Custom Claims.
@@ -347,7 +348,7 @@ export default function RootLayout() {
         return;
       }
 
-      await AsyncStorage.setItem('user_role', role || 'passenger');
+      await SecureStore.setItemAsync('user_role', role || 'passenger');
 
       let complete = false;
       if (
@@ -444,7 +445,7 @@ export default function RootLayout() {
     let active = true;
     const loadAndVerifyRole = async () => {
       try {
-        const cachedRole = await AsyncStorage.getItem('user_role');
+        const cachedRole = await SecureStore.getItemAsync('user_role');
         if (active) {
           setUserRole(cachedRole);
         }
@@ -502,7 +503,7 @@ export default function RootLayout() {
 
             if (newRole !== cachedRole) {
               console.log('[Layout] User role updated from backend:', newRole);
-              await AsyncStorage.setItem('user_role', newRole);
+              await SecureStore.setItemAsync('user_role', newRole);
               if (active) {
                 setUserRole(newRole);
               }
@@ -540,11 +541,11 @@ export default function RootLayout() {
       if (phase === 'initializing') return;
       const currentSegment = segments[0] as string | undefined;
       try {
-        const cachedRole = await AsyncStorage.getItem('user_role');
+        const cachedRole = await SecureStore.getItemAsync('user_role');
         if (active && cachedRole) {
           if (cachedRole !== userRole) {
             console.log(
-              `[Layout] Sincronizando userRole con AsyncStorage en navegación (${currentSegment || 'root'}):`,
+              `[Layout] Sincronizando userRole con SecureStore en navegación (${currentSegment || 'root'}):`,
               cachedRole,
             );
             setUserRole(cachedRole);

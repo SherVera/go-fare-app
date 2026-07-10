@@ -34,7 +34,11 @@ const isValidDate = (dateStr: string) => {
   const month = parseInt(parts[1], 10) - 1;
   const year = parseInt(parts[2], 10);
   const date = new Date(year, month, day);
-  return date.getFullYear() === year && date.getMonth() === month && date.getDate() === day;
+  return (
+    date.getFullYear() === year &&
+    date.getMonth() === month &&
+    date.getDate() === day
+  );
 };
 
 interface FormFields {
@@ -81,7 +85,9 @@ export default function RegisterVehicleScreen() {
   const [searchText, setSearchText] = useState('');
   const [currentStep, setCurrentStep] = useState<1 | 2>(1);
 
-  const [activeDateField, setActiveDateField] = useState<keyof FormFields | null>(null);
+  const [activeDateField, setActiveDateField] = useState<
+    keyof FormFields | null
+  >(null);
   const [tempDate, setTempDate] = useState<Date>(new Date());
 
   const [form, setForm] = useState<FormFields>({
@@ -112,14 +118,17 @@ export default function RegisterVehicleScreen() {
       initialDate = new Date(
         parseInt(parts[2], 10),
         parseInt(parts[1], 10) - 1,
-        parseInt(parts[0], 10)
+        parseInt(parts[0], 10),
       );
     }
     setTempDate(initialDate);
     setActiveDateField(field);
   };
 
-  const onDatePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+  const onDatePickerChange = (
+    event: DateTimePickerEvent,
+    selectedDate?: Date,
+  ) => {
     const currentField = activeDateField;
     if (Platform.OS === 'android') {
       setActiveDateField(null);
@@ -193,7 +202,8 @@ export default function RegisterVehicleScreen() {
       newErrors.tituloPropiedadIssuedAt = 'Formato inválido (DD/MM/AAAA)';
     }
     if (!form.tituloPropiedadExpiresAt.trim()) {
-      newErrors.tituloPropiedadExpiresAt = 'La fecha de expiración es requerida';
+      newErrors.tituloPropiedadExpiresAt =
+        'La fecha de expiración es requerida';
     } else if (!isValidDate(form.tituloPropiedadExpiresAt)) {
       newErrors.tituloPropiedadExpiresAt = 'Formato inválido (DD/MM/AAAA)';
     }
@@ -223,7 +233,8 @@ export default function RegisterVehicleScreen() {
       newErrors.revisionTecnicaIssuedAt = 'Formato inválido (DD/MM/AAAA)';
     }
     if (!form.revisionTecnicaExpiresAt.trim()) {
-      newErrors.revisionTecnicaExpiresAt = 'La fecha de expiración es requerida';
+      newErrors.revisionTecnicaExpiresAt =
+        'La fecha de expiración es requerida';
     } else if (!isValidDate(form.revisionTecnicaExpiresAt)) {
       newErrors.revisionTecnicaExpiresAt = 'Formato inválido (DD/MM/AAAA)';
     }
@@ -721,7 +732,12 @@ export default function RegisterVehicleScreen() {
           {currentStep === 2 && (
             <>
               {/* ── SECCIÓN DE DOCUMENTOS ── */}
-              <Text style={[styles.sectionTitle, { marginTop: 16, marginBottom: 16 }]}>
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { marginTop: 16, marginBottom: 16 },
+                ]}
+              >
                 DOCUMENTOS OBLIGATORIOS
               </Text>
 
@@ -733,7 +749,9 @@ export default function RegisterVehicleScreen() {
                     size={20}
                     color={tokens.colors.primary}
                   />
-                  <Text style={styles.documentSectionTitle}>Título de Propiedad</Text>
+                  <Text style={styles.documentSectionTitle}>
+                    Título de Propiedad
+                  </Text>
                 </View>
 
                 <Text style={styles.inputLabelText}>NÚMERO DE TÍTULO</Text>
@@ -766,7 +784,8 @@ export default function RegisterVehicleScreen() {
                     <Pressable
                       style={[
                         styles.inputRowCard,
-                        errors.tituloPropiedadIssuedAt && styles.inputRowCardError,
+                        errors.tituloPropiedadIssuedAt &&
+                          styles.inputRowCardError,
                       ]}
                       onPress={() => openDatePicker('tituloPropiedadIssuedAt')}
                       disabled={loading}
@@ -774,13 +793,16 @@ export default function RegisterVehicleScreen() {
                       <Ionicons
                         name="calendar-outline"
                         size={18}
-                        color={errors.tituloPropiedadIssuedAt ? '#EF4444' : '#8594AB'}
+                        color={
+                          errors.tituloPropiedadIssuedAt ? '#EF4444' : '#8594AB'
+                        }
                         style={{ marginRight: 8 }}
                       />
                       <Text
                         style={[
                           styles.rowDateInputText,
-                          !form.tituloPropiedadIssuedAt && styles.placeholderDateText,
+                          !form.tituloPropiedadIssuedAt &&
+                            styles.placeholderDateText,
                         ]}
                         numberOfLines={1}
                         ellipsizeMode="tail"
@@ -800,7 +822,8 @@ export default function RegisterVehicleScreen() {
                     <Pressable
                       style={[
                         styles.inputRowCard,
-                        errors.tituloPropiedadExpiresAt && styles.inputRowCardError,
+                        errors.tituloPropiedadExpiresAt &&
+                          styles.inputRowCardError,
                       ]}
                       onPress={() => openDatePicker('tituloPropiedadExpiresAt')}
                       disabled={loading}
@@ -808,13 +831,18 @@ export default function RegisterVehicleScreen() {
                       <Ionicons
                         name="calendar-outline"
                         size={18}
-                        color={errors.tituloPropiedadExpiresAt ? '#EF4444' : '#8594AB'}
+                        color={
+                          errors.tituloPropiedadExpiresAt
+                            ? '#EF4444'
+                            : '#8594AB'
+                        }
                         style={{ marginRight: 8 }}
                       />
                       <Text
                         style={[
                           styles.rowDateInputText,
-                          !form.tituloPropiedadExpiresAt && styles.placeholderDateText,
+                          !form.tituloPropiedadExpiresAt &&
+                            styles.placeholderDateText,
                         ]}
                         numberOfLines={1}
                         ellipsizeMode="tail"
@@ -839,7 +867,9 @@ export default function RegisterVehicleScreen() {
                     size={20}
                     color={tokens.colors.primary}
                   />
-                  <Text style={styles.documentSectionTitle}>Responsabilidad Civil (RCV)</Text>
+                  <Text style={styles.documentSectionTitle}>
+                    Responsabilidad Civil (RCV)
+                  </Text>
                 </View>
 
                 <Text style={styles.inputLabelText}>NÚMERO DE RCV</Text>
@@ -891,7 +921,9 @@ export default function RegisterVehicleScreen() {
                       </Text>
                     </Pressable>
                     {errors.rcvIssuedAt && (
-                      <Text style={styles.errorTextSmall}>{errors.rcvIssuedAt}</Text>
+                      <Text style={styles.errorTextSmall}>
+                        {errors.rcvIssuedAt}
+                      </Text>
                     )}
                   </View>
 
@@ -923,7 +955,9 @@ export default function RegisterVehicleScreen() {
                       </Text>
                     </Pressable>
                     {errors.rcvExpiresAt && (
-                      <Text style={styles.errorTextSmall}>{errors.rcvExpiresAt}</Text>
+                      <Text style={styles.errorTextSmall}>
+                        {errors.rcvExpiresAt}
+                      </Text>
                     )}
                   </View>
                 </View>
@@ -937,7 +971,9 @@ export default function RegisterVehicleScreen() {
                     size={20}
                     color={tokens.colors.primary}
                   />
-                  <Text style={styles.documentSectionTitle}>Revisión Técnica (INTT)</Text>
+                  <Text style={styles.documentSectionTitle}>
+                    Revisión Técnica (INTT)
+                  </Text>
                 </View>
 
                 <Text style={styles.inputLabelText}>NÚMERO DE REVISIÓN</Text>
@@ -970,7 +1006,8 @@ export default function RegisterVehicleScreen() {
                     <Pressable
                       style={[
                         styles.inputRowCard,
-                        errors.revisionTecnicaIssuedAt && styles.inputRowCardError,
+                        errors.revisionTecnicaIssuedAt &&
+                          styles.inputRowCardError,
                       ]}
                       onPress={() => openDatePicker('revisionTecnicaIssuedAt')}
                       disabled={loading}
@@ -978,13 +1015,16 @@ export default function RegisterVehicleScreen() {
                       <Ionicons
                         name="calendar-outline"
                         size={18}
-                        color={errors.revisionTecnicaIssuedAt ? '#EF4444' : '#8594AB'}
+                        color={
+                          errors.revisionTecnicaIssuedAt ? '#EF4444' : '#8594AB'
+                        }
                         style={{ marginRight: 8 }}
                       />
                       <Text
                         style={[
                           styles.rowDateInputText,
-                          !form.revisionTecnicaIssuedAt && styles.placeholderDateText,
+                          !form.revisionTecnicaIssuedAt &&
+                            styles.placeholderDateText,
                         ]}
                         numberOfLines={1}
                         ellipsizeMode="tail"
@@ -1004,7 +1044,8 @@ export default function RegisterVehicleScreen() {
                     <Pressable
                       style={[
                         styles.inputRowCard,
-                        errors.revisionTecnicaExpiresAt && styles.inputRowCardError,
+                        errors.revisionTecnicaExpiresAt &&
+                          styles.inputRowCardError,
                       ]}
                       onPress={() => openDatePicker('revisionTecnicaExpiresAt')}
                       disabled={loading}
@@ -1012,13 +1053,18 @@ export default function RegisterVehicleScreen() {
                       <Ionicons
                         name="calendar-outline"
                         size={18}
-                        color={errors.revisionTecnicaExpiresAt ? '#EF4444' : '#8594AB'}
+                        color={
+                          errors.revisionTecnicaExpiresAt
+                            ? '#EF4444'
+                            : '#8594AB'
+                        }
                         style={{ marginRight: 8 }}
                       />
                       <Text
                         style={[
                           styles.rowDateInputText,
-                          !form.revisionTecnicaExpiresAt && styles.placeholderDateText,
+                          !form.revisionTecnicaExpiresAt &&
+                            styles.placeholderDateText,
                         ]}
                         numberOfLines={1}
                         ellipsizeMode="tail"
@@ -1077,24 +1123,32 @@ export default function RegisterVehicleScreen() {
       </KeyboardAvoidingView>
 
       {/* Date Picker Modal/Overlay */}
-      {activeDateField && (
-        Platform.OS === 'ios' ? (
+      {activeDateField &&
+        (Platform.OS === 'ios' ? (
           <Modal visible={true} transparent={true} animationType="slide">
             <View style={styles.modalOverlay}>
-              <Pressable style={StyleSheet.absoluteFill} onPress={() => setActiveDateField(null)} />
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => setActiveDateField(null)}
+              />
               <View style={styles.iosPickerContainer}>
                 <View style={styles.iosPickerHeader}>
                   <Pressable onPress={() => setActiveDateField(null)}>
                     <Text style={styles.iosPickerCancelText}>Cancelar</Text>
                   </Pressable>
-                  <Pressable onPress={() => {
-                    const day = String(tempDate.getDate()).padStart(2, '0');
-                    const month = String(tempDate.getMonth() + 1).padStart(2, '0');
-                    const year = tempDate.getFullYear();
-                    const formatted = `${day}/${month}/${year}`;
-                    updateField(activeDateField!, formatted);
-                    setActiveDateField(null);
-                  }}>
+                  <Pressable
+                    onPress={() => {
+                      const day = String(tempDate.getDate()).padStart(2, '0');
+                      const month = String(tempDate.getMonth() + 1).padStart(
+                        2,
+                        '0',
+                      );
+                      const year = tempDate.getFullYear();
+                      const formatted = `${day}/${month}/${year}`;
+                      updateField(activeDateField!, formatted);
+                      setActiveDateField(null);
+                    }}
+                  >
                     <Text style={styles.iosPickerConfirmText}>Confirmar</Text>
                   </Pressable>
                 </View>
@@ -1115,8 +1169,7 @@ export default function RegisterVehicleScreen() {
             display="default"
             onChange={onDatePickerChange}
           />
-        )
-      )}
+        ))}
     </SafeAreaView>
   );
 }

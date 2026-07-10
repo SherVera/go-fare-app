@@ -35,9 +35,12 @@ export default function AdminUsersScreen() {
   const [activeTab, setActiveTab] = useState<
     'all' | 'passenger' | 'driver' | 'transport_owner' | 'civil_association'
   >(
-    role && ['passenger', 'driver', 'transport_owner', 'civil_association'].includes(role)
+    role &&
+      ['passenger', 'driver', 'transport_owner', 'civil_association'].includes(
+        role,
+      )
       ? (role as any)
-      : 'all'
+      : 'all',
   );
 
   // Estado para el modal de detalles/acciones
@@ -130,7 +133,16 @@ export default function AdminUsersScreen() {
   }, [fetchUsers]);
 
   useEffect(() => {
-    if (role && ['all', 'passenger', 'driver', 'transport_owner', 'civil_association'].includes(role)) {
+    if (
+      role &&
+      [
+        'all',
+        'passenger',
+        'driver',
+        'transport_owner',
+        'civil_association',
+      ].includes(role)
+    ) {
       setActiveTab(role as any);
       applyFilters(users, search, role as any);
     }

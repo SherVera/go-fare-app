@@ -197,7 +197,10 @@ export default function AdminDashboardScreen() {
         <Text style={styles.sectionTitle}>Métricas Generales</Text>
         <View style={styles.statsGrid}>
           <Pressable
-            style={styles.statBox}
+            style={[
+              styles.statBox,
+              { borderColor: '#0284C7', borderWidth: 1.5 },
+            ]}
             onPress={() => router.push('/admin/users?role=passenger')}
           >
             <View
@@ -210,7 +213,10 @@ export default function AdminDashboardScreen() {
           </Pressable>
 
           <Pressable
-            style={styles.statBox}
+            style={[
+              styles.statBox,
+              { borderColor: '#059669', borderWidth: 1.5 },
+            ]}
             onPress={() => router.push('/admin/transport-units')}
           >
             <View
@@ -218,12 +224,17 @@ export default function AdminDashboardScreen() {
             >
               <Ionicons name="bus" size={20} color="#059669" />
             </View>
-            <Text style={styles.statValue}>{stats.units}</Text>
+            <Text style={stats.units > 0 ? styles.statValue : styles.statValue}>
+              {stats.units}
+            </Text>
             <Text style={styles.statLabel}>Unidades</Text>
           </Pressable>
 
           <Pressable
-            style={styles.statBox}
+            style={[
+              styles.statBox,
+              { borderColor: '#475569', borderWidth: 1.5 },
+            ]}
             onPress={() => router.push('/admin/users?role=driver')}
           >
             <View
@@ -236,7 +247,10 @@ export default function AdminDashboardScreen() {
           </Pressable>
 
           <Pressable
-            style={styles.statBox}
+            style={[
+              styles.statBox,
+              { borderColor: '#EA580C', borderWidth: 1.5 },
+            ]}
             onPress={() => router.push('/admin/civil-associations' as any)}
           >
             <View
@@ -251,7 +265,7 @@ export default function AdminDashboardScreen() {
           <Pressable
             style={[
               styles.statBox,
-              stats.pendingDocs > 0 && {
+              {
                 borderColor: '#F59E0B',
                 borderWidth: 1.5,
               },
@@ -287,7 +301,7 @@ export default function AdminDashboardScreen() {
           <Pressable
             style={[
               styles.statBox,
-              stats.pendingOwners > 0 && {
+              {
                 borderColor: '#EF4444',
                 borderWidth: 1.5,
               },

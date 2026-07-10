@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
@@ -170,7 +171,7 @@ export default function HomeDashboard() {
         }
       }
 
-      await AsyncStorage.setItem('user_role', newRole);
+      await SecureStore.setItemAsync('user_role', newRole);
 
       if (newRole === 'platform_admin' || newRole === 'admin') {
         console.log('[Home] User is platform admin, redirecting...');
