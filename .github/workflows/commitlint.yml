@@ -2,7 +2,7 @@ name: Commitlint
 
 on:
   pull_request:
-    branches: [main, staging, dev]
+    branches: [main, staging, qa, dev]
 
 permissions:
   contents: read
@@ -31,3 +31,4 @@ jobs:
         uses: wagoid/commitlint-github-action@v6
         with:
           failOnWarnings: false
+          configFile: ./commitlint.config.cjs

@@ -2,8 +2,9 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Modal,
   Pressable,
   RefreshControl,
@@ -13,74 +14,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { MockVehicle } from '@/interfaces';
+import { getOwnerVehicles } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
-
-interface MockVehicle {
-  uuid: string;
-  vehicleMake: string;
-  vehicleModel: string;
-  vehicleYear: number;
-  licensePlate: string;
-  cooperativeName: string;
-  status: 'approved' | 'pending' | 'rejected';
-  createdAt: string;
-  adminNotes?: string;
-}
-
-const MOCK_VEHICLES: MockVehicle[] = [
-  {
-    uuid: '1',
-    vehicleMake: 'Toyota',
-    vehicleModel: 'Coaster Bus',
-    vehicleYear: 2018,
-    licensePlate: 'AB123CD',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '24/05/2026',
-  },
-  {
-    uuid: '2',
-    vehicleMake: 'Encava',
-    vehicleModel: 'ENT-610',
-    vehicleYear: 2015,
-    licensePlate: 'XY987ZT',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '25/05/2026',
-  },
-  {
-    uuid: '3',
-    vehicleMake: 'Hyundai',
-    vehicleModel: 'County',
-    vehicleYear: 2017,
-    licensePlate: 'HJ321OP',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'approved',
-    createdAt: '26/05/2026',
-  },
-  {
-    uuid: '4',
-    vehicleMake: 'Ford',
-    vehicleModel: 'F-350',
-    vehicleYear: 2016,
-    licensePlate: 'E2E-990T',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'pending',
-    createdAt: '27/05/2026',
-  },
-  {
-    uuid: '5',
-    vehicleMake: 'Chevrolet',
-    vehicleModel: 'NPR Turbo',
-    vehicleYear: 2012,
-    licensePlate: 'RJ456KL',
-    cooperativeName: 'Cooperativa Caracas Move R.L.',
-    status: 'rejected',
-    createdAt: '22/05/2026',
-    adminNotes:
-      'El documento de propiedad (título del vehículo) cargado está borroso y no se puede leer la matrícula oficial. Por favor, realiza una nueva solicitud con fotos nítidas del título de propiedad del vehículo y la revisión de tránsito vigente.',
-  },
-];
 
 type FilterType = 'all' | 'approved' | 'pending' | 'rejected';
 
@@ -106,7 +42,7 @@ export default function VehicleOwnerDashboard() {
   );
   const [isModalVisible, setIsModalVisible] = useState(false);
 
-  const [vehicles, setVehicles] = useState<MockVehicle[]>(MOCK_VEHICLES);
+  const [vehicles, setVehicles] = useState<MockVehicle[]>([]);
   const [cooperative, setCooperative] = useState<{ name: string; rif: string }>(
     {
       name: 'Cooperativa Caracas Move R.L.',
@@ -115,34 +51,47 @@ export default function VehicleOwnerDashboard() {
   );
   const [refreshing, setRefreshing] = useState(false);
 
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const scrollTimeoutRef = useRef<any>(null);
+
+  const handleScroll = useCallback(
+    (_event: any) => {
+      Animated.spring(slideAnim, {
+        toValue: 100,
+        useNativeDriver: true,
+        tension: 50,
+        friction: 10,
+      }).start();
+
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          useNativeDriver: true,
+          tension: 40,
+          friction: 8,
+        }).start();
+      }, 450);
+    },
+    [slideAnim],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const loadData = useCallback(async () => {
     try {
-      // 1. Cargar vehículos guardados y eliminados localmente
-      const localVehiclesStr = await AsyncStorage.getItem(
-        'mock_vehicle_requests',
-      );
-      const localVehicles: MockVehicle[] = localVehiclesStr
-        ? JSON.parse(localVehiclesStr)
-        : [];
-
-      const deletedPlatesStr = await AsyncStorage.getItem(
-        'mock_deleted_vehicle_plates',
-      );
-      const deletedPlates: string[] = deletedPlatesStr
-        ? JSON.parse(deletedPlatesStr)
-        : [];
-
-      // Combinar los predeterminados de MOCK_VEHICLES con los guardados localmente
-      // Evitamos duplicar por placa/licencia y filtramos las eliminadas
-      const merged = [
-        ...localVehicles,
-        ...MOCK_VEHICLES.filter(
-          (mv) =>
-            !localVehicles.some((lv) => lv.licensePlate === mv.licensePlate),
-        ),
-      ].filter((v) => !deletedPlates.includes(v.licensePlate));
-
-      setVehicles(merged);
+      // 1. Cargar vehículos aprobados y solicitudes de la base de datos (tabla vehicles)
+      const approvedVehicles = await getOwnerVehicles();
+      setVehicles(approvedVehicles);
 
       // 2. Cargar cooperativa seleccionada localmente si existe
       const coopStr = await AsyncStorage.getItem(
@@ -158,7 +107,10 @@ export default function VehicleOwnerDashboard() {
         });
       }
     } catch (err) {
-      console.warn('[Dashboard] Error al cargar datos simulados:', err);
+      console.warn(
+        '[Dashboard] Error al cargar solicitudes de vehículos:',
+        err,
+      );
     } finally {
       setRefreshing(false);
     }
@@ -224,12 +176,14 @@ export default function VehicleOwnerDashboard() {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Panel de Socio</Text>
+        <Text style={styles.headerTitle}>Panel de Dueño de Vehiculo</Text>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -255,7 +209,7 @@ export default function VehicleOwnerDashboard() {
         </View>
 
         {/* ── RESUMEN DE FLOTA (STATS) ── */}
-        <Text style={styles.sectionTitle}>Resumen de Flota</Text>
+        <Text style={styles.sectionTitle}>Resumen de Buses</Text>
         <View style={styles.statsContainer}>
           {/* Total */}
           <View style={styles.statBox}>
@@ -331,7 +285,7 @@ export default function VehicleOwnerDashboard() {
         {filteredVehicles.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons
-              name="car-sport-outline"
+              name="bus-outline"
               size={64}
               color="#8594AB"
               style={{ marginBottom: 12 }}
@@ -360,7 +314,7 @@ export default function VehicleOwnerDashboard() {
                 <View style={styles.vehicleHeader}>
                   <View style={styles.vehicleTitleRow}>
                     <Ionicons
-                      name="car"
+                      name="bus"
                       size={22}
                       color={tokens.colors.primary}
                       style={{ marginRight: 8 }}
@@ -436,16 +390,24 @@ export default function VehicleOwnerDashboard() {
       </ScrollView>
 
       {/* ── BOTÓN FLOTANTE REGISTRAR VEHÍCULO ── */}
-      <Pressable
-        style={({ pressed }) => [
+      <Animated.View
+        style={[
           styles.fab,
-          pressed && { opacity: 0.9, transform: [{ scale: 0.96 }] },
+          {
+            transform: [{ translateX: slideAnim }],
+          },
         ]}
-        onPress={() => router.push('/register-vehicle' as any)}
       >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
-        <Text style={styles.fabText}>Registrar Unidad</Text>
-      </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.fabPressable,
+            pressed && { opacity: 0.8 },
+          ]}
+          onPress={() => router.push('/register-vehicle' as any)}
+        >
+          <Ionicons name="add" size={30} color="#FFFFFF" />
+        </Pressable>
+      </Animated.View>
 
       {/* ── MODAL MOTIVO DE RECHAZO ── */}
       <Modal
@@ -777,26 +739,25 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: 24,
-    left: 24,
-    right: 24,
-    flexDirection: 'row',
+    bottom: 120,
+    right: 20,
+    backgroundColor: tokens.colors.primary,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    shadowColor: '#1D5BD9',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+    zIndex: 99,
+  },
+  fabPressable: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: tokens.colors.primary,
-    borderRadius: 20,
-    height: 60,
-    shadowColor: '#1D5BD9',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  fabText: {
-    fontSize: 16,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#FFFFFF',
-    marginLeft: 8,
   },
   modalOverlay: {
     flex: 1,
