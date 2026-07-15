@@ -20,6 +20,7 @@
     "release": "standard-version",
     "commitlint": "commitlint --from main --to HEAD --verbose",
     "git:flow": "bash scripts/git-happy-path.sh",
+    "git:smart": "bash scripts/git-smart-flow.sh",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -69,8 +70,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
-    "@commitlint/cli": "^19.6.1",
-    "@commitlint/config-conventional": "^19.6.0",
+    "@commitlint/cli": "^21.0.0",
+    "@commitlint/config-conventional": "^21.0.0",
     "@react-native/metro-config": "0.81.5",
     "@types/react": "~19.1.0",
     "aicommits": "^3.1.1",
