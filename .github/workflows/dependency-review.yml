@@ -1,21 +1,29 @@
-name: Dependency review
+# npm audit substitute: GitHub Dependency Review needs GHAS on private org repos.
+name: Dependency audit
 
 on:
   pull_request:
-    branches: [main, staging, dev]
+    branches: [main, staging, qa, dev]
 
 permissions:
   contents: read
 
 jobs:
-  dependency-review:
+  npm-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Dependency review
-        uses: actions/dependency-review-action@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          fail-on-severity: moderate
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (high or higher)
+        run: npm audit --audit-level=high

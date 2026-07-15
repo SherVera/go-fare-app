@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -90,7 +91,7 @@ export default function OnboardingScreen() {
               resolvedRole,
               '. Omitiendo onboarding.',
             );
-            await AsyncStorage.setItem('user_role', resolvedRole);
+            await SecureStore.setItemAsync('user_role', resolvedRole);
             await refreshAuthSessionPhase();
             return;
           }
@@ -115,7 +116,7 @@ export default function OnboardingScreen() {
                   claimRole,
                   '. Omitiendo onboarding.',
                 );
-                await AsyncStorage.setItem('user_role', claimRole);
+                await SecureStore.setItemAsync('user_role', claimRole);
                 await refreshAuthSessionPhase();
                 return;
               }

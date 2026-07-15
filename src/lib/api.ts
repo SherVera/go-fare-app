@@ -1,4 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type {
   BackendFareAccount,
@@ -7,53 +9,49 @@ import type {
   FirebaseEmailRegisterDto,
   FirebaseIssuedCredentialsDto,
 } from '@/interfaces';
-
-const getBaseUrl = () => {
-  // Forzar el uso del servidor de Render en desarrollo y producción para evitar desajuste de llaves criptográficas
-  return 'https://go-fare-backend.onrender.com/api/v1';
-};
-
-import type { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { auth, sigOutAccount } from './firebase';
 
-export const BASE_URL = getBaseUrl();
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
 console.log('[API] Resolved BASE_URL:', BASE_URL);
 const GOFARE_JWT_KEY = 'gofare_jwt_token';
 const BACKEND_JWT_KEY = 'backend_jwt';
 
 /**
- * Guarda el token JWT de GoFare en el almacenamiento local.
+ * Guarda el token JWT de GoFare en el almacenamiento local cifrado de forma segura.
  */
 export async function saveGoFareToken(token: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(GOFARE_JWT_KEY, token);
-    await AsyncStorage.setItem(BACKEND_JWT_KEY, token);
+    await SecureStore.setItemAsync(GOFARE_JWT_KEY, token);
+    await SecureStore.setItemAsync(BACKEND_JWT_KEY, token);
   } catch (error) {
-    console.error('[API] Error al guardar el token JWT:', error);
+    console.error('[API] Error al guardar el token JWT en SecureStore:', error);
   }
 }
 
 /**
- * Obtiene el token JWT de GoFare desde el almacenamiento local.
+ * Obtiene el token JWT de GoFare desde el almacenamiento local cifrado de forma segura.
  */
 export async function getGoFareToken(): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(GOFARE_JWT_KEY);
+    return await SecureStore.getItemAsync(GOFARE_JWT_KEY);
   } catch (error) {
-    console.error('[API] Error al obtener el token JWT:', error);
+    console.error('[API] Error al obtener el token JWT de SecureStore:', error);
     return null;
   }
 }
 
 /**
- * Elimina el token JWT de GoFare del almacenamiento local.
+ * Elimina el token JWT de GoFare del almacenamiento local cifrado de forma segura.
  */
 export async function clearGoFareToken(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(GOFARE_JWT_KEY);
-    await AsyncStorage.removeItem(BACKEND_JWT_KEY);
+    await SecureStore.deleteItemAsync(GOFARE_JWT_KEY);
+    await SecureStore.deleteItemAsync(BACKEND_JWT_KEY);
   } catch (error) {
-    console.error('[API] Error al eliminar el token JWT:', error);
+    console.error(
+      '[API] Error al eliminar el token JWT de SecureStore:',
+      error,
+    );
   }
 }
 
@@ -119,7 +117,7 @@ function sanitizeNumericFields(data: any): any {
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
-  timeoutMs = 25000,
+  timeoutMs = 120000,
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -147,6 +145,7 @@ async function fetchWithTimeout(
 async function fetchWithAuth(
   path: string,
   options: RequestInit = {},
+  timeoutMs?: number,
 ): Promise<any> {
   const token = await getGoFareToken();
   const headers: Record<string, string> = {
@@ -158,10 +157,14 @@ async function fetchWithAuth(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetchWithTimeout(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  const response = await fetchWithTimeout(
+    `${BASE_URL}${path}`,
+    {
+      ...options,
+      headers,
+    },
+    timeoutMs,
+  );
 
   // Si la respuesta es No Content (204), retornamos null directamente
   if (response.status === 204) {
@@ -273,9 +276,15 @@ export async function sendFirebaseVerificationEmail(
   idToken: string,
 ): Promise<void> {
   const FIREBASE_API_KEY = Platform.select({
-    ios: 'AIzaSyAptMIEEKqMB6M1K3IjWeaWxL6Ihi4RxL4',
-    android: 'AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ',
-    default: 'AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ',
+    ios:
+      process.env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS ||
+      'AIzaSyAptMIEEKqMB6M1K3IjWeaWxL6Ihi4RxL4',
+    android:
+      process.env.EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID ||
+      'AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ',
+    default:
+      process.env.EXPO_PUBLIC_FIREBASE_API_KEY_ANDROID ||
+      'AIzaSyA9khlhufDxwggM-qC0acy9wmou1mrEtOQ',
   });
 
   const headers: Record<string, string> = {
@@ -557,6 +566,26 @@ export async function addAccountBalance(
     }
     throw err;
   }
+}
+
+/**
+ * Recarga real vía Pago Móvil / C2P: el backend verifica la referencia contra
+ * la tesorería (POST /fare/me/top-up) y acredita solo si el pago es válido.
+ */
+export async function topUpBalance(data: {
+  bsAmount: number;
+  reference: string;
+  phone?: string;
+  document?: string;
+}): Promise<{
+  balanceFares: number;
+  faresCredited: number;
+  bsAmount: number;
+}> {
+  return await fetchWithAuth('/fare/me/top-up', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 /**
@@ -903,20 +932,6 @@ export async function updateTicket(
 }
 
 /**
- * Cooperativas simuladas para pruebas en frontend en caso de error del servidor.
- */
-export const MOCK_COOPERATIVES = [
-  { uuid: 'coop-1', name: 'Cooperativa Caracas Move R.L.', rif: 'J-304598124' },
-  { uuid: 'coop-2', name: 'Línea de Transporte Chacao', rif: 'J-401234567' },
-  {
-    uuid: 'coop-3',
-    name: 'Asociación de Conductores La India',
-    rif: 'J-298765432',
-  },
-  { uuid: 'coop-4', name: 'Cooperativa Metrópolis', rif: 'J-311223344' },
-];
-
-/**
  * Envía una solicitud para registrarse como dueño de vehículo.
  */
 export async function submitVehicleOwnerRequest(requestData: {
@@ -933,7 +948,8 @@ export async function submitVehicleOwnerRequest(requestData: {
 }
 
 /**
- * Envía una solicitud para registrar un vehículo (propietario ya aprobado).
+ * Registra un vehículo real en el backend (POST /vehicles). Lo asocia
+ * opcionalmente a una línea de transporte (`lineUuid`).
  */
 export async function submitVehicleRequest(requestData: {
   vehicleMake: string;
@@ -941,79 +957,279 @@ export async function submitVehicleRequest(requestData: {
   vehicleYear: number;
   licensePlate: string;
   cooperativeUuid?: string;
+  vehicleColor?: string;
 }): Promise<any> {
-  // Guardar localmente en AsyncStorage para simulación
-  try {
-    const existingStr = await AsyncStorage.getItem('mock_vehicle_requests');
-    const existing = existingStr ? JSON.parse(existingStr) : [];
+  return await fetchWithAuth('/vehicles', {
+    method: 'POST',
+    body: JSON.stringify({
+      plate: requestData.licensePlate,
+      brand: requestData.vehicleMake,
+      model: requestData.vehicleModel,
+      year: requestData.vehicleYear,
+      color: requestData.vehicleColor,
+      capacity: 32,
+      status: 'inactive', // status válido del enum del backend para nuevo vehículo en revisión
+    }),
+  });
+}
 
-    let coopName = 'Particular / Ninguna';
-    if (requestData.cooperativeUuid) {
-      const found = MOCK_COOPERATIVES.find(
-        (c) => c.uuid === requestData.cooperativeUuid,
-      );
-      if (found) coopName = found.name;
+/**
+ * Obtiene las unidades de transporte (vehículos) del socio autenticado.
+ */
+export async function getOwnerVehicles(): Promise<any[]> {
+  let backendVehicles: any[] = [];
+  try {
+    const list = await fetchWithAuth('/vehicles/my');
+    if (Array.isArray(list)) {
+      backendVehicles = list.map((v: any) => {
+        let appStatus: 'approved' | 'pending' | 'rejected' = 'pending';
+        if (v.status === 'active') {
+          appStatus = 'approved';
+        } else if (v.status === 'rejected') {
+          appStatus = 'rejected';
+        } else if (v.status === 'inactive') {
+          appStatus = 'pending';
+        }
+
+        return {
+          uuid: v.uuid,
+          vehicleMake: v.brand,
+          vehicleModel: v.model,
+          vehicleYear: v.year,
+          licensePlate: v.plate,
+          cooperativeName: 'Particular / Ninguna',
+          status: appStatus,
+          createdAt: new Date(v.createdAt).toLocaleDateString('es-VE'),
+          totalEarnings: 0,
+          tripsCount: 0,
+        };
+      });
     }
-
-    const newRequest = {
-      uuid: `mock-veh-${Date.now()}`,
-      vehicleMake: requestData.vehicleMake,
-      vehicleModel: requestData.vehicleModel,
-      vehicleYear: requestData.vehicleYear,
-      licensePlate: requestData.licensePlate,
-      cooperativeName: coopName,
-      status: 'pending',
-      createdAt: new Date().toLocaleDateString('es-VE'), // formato DD/MM/YYYY
-    };
-
-    existing.unshift(newRequest);
-    await AsyncStorage.setItem(
-      'mock_vehicle_requests',
-      JSON.stringify(existing),
-    );
-  } catch (storageErr) {
-    console.warn('[API] Error al guardar vehículo localmente:', storageErr);
-  }
-
-  try {
-    return await fetchWithAuth('/vehicle-requests', {
-      method: 'POST',
-      body: JSON.stringify(requestData),
-    });
   } catch (error) {
     console.warn(
-      '[API] submitVehicleRequest falló en backend (se guardó localmente como simulado):',
+      '[API] getOwnerVehicles backend falló, usando sólo local:',
       error,
     );
-    return { success: true, mocked: true };
   }
-}
 
-/**
- * Obtiene la lista de cooperativas registradas.
- */
-export async function getCooperatives(): Promise<any[]> {
+  // Leer placas de vehículos dados de baja
+  let deletedPlates: string[] = [];
   try {
-    return await fetchWithAuth('/cooperatives');
-  } catch (error) {
-    console.warn('[API] getCooperatives falló, usando datos simulados:', error);
-    return MOCK_COOPERATIVES;
+    const deletedPlatesStr = await AsyncStorage.getItem(
+      'mock_deleted_vehicle_plates',
+    );
+    if (deletedPlatesStr) {
+      deletedPlates = JSON.parse(deletedPlatesStr);
+    }
+  } catch {}
+
+  // Leer solicitudes y vehículos guardados en mock_vehicle_requests
+  let localVehicles: any[] = [];
+  try {
+    const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
+    if (localStr) {
+      localVehicles = JSON.parse(localStr);
+    }
+  } catch {}
+
+  // Combinar
+  const combined = [...backendVehicles];
+
+  // Agregar los locales que no colisionen por placa o uuid
+  for (const lv of localVehicles) {
+    if (deletedPlates.includes(lv.licensePlate)) continue;
+    const idx = combined.findIndex(
+      (bv) => bv.licensePlate === lv.licensePlate || bv.uuid === lv.uuid,
+    );
+    if (idx !== -1) {
+      combined[idx] = {
+        ...combined[idx],
+        assignedDriver: lv.assignedDriver || combined[idx].assignedDriver,
+        totalEarnings: lv.totalEarnings || combined[idx].totalEarnings,
+        tripsCount: lv.tripsCount || combined[idx].tripsCount,
+        status: lv.status || combined[idx].status,
+      };
+    } else {
+      combined.push(lv);
+    }
   }
+
+  return combined.filter((v) => !deletedPlates.includes(v.licensePlate));
 }
 
 /**
- * Envía una solicitud para registrarse como conductor.
+ * Obtiene el detalle de un vehículo por su UUID.
  */
-export async function submitDriverRequest(requestData: {
-  licenseNumber: string;
-  licenseType: string;
-  experienceYears: number;
-  emergencyPhone: string;
+export async function getVehicleDetail(uuid: string): Promise<any> {
+  const isMockUuid = uuid.length < 10 || uuid.startsWith('mock-');
+
+  if (!isMockUuid) {
+    try {
+      const v = await fetchWithAuth(`/vehicles/${uuid}`);
+      if (v) {
+        let appStatus: 'approved' | 'pending' | 'rejected' = 'pending';
+        if (v.status === 'active') {
+          appStatus = 'approved';
+        } else if (v.status === 'rejected') {
+          appStatus = 'rejected';
+        } else if (v.status === 'inactive') {
+          appStatus = 'pending';
+        }
+
+        let assignedDriver: any;
+        try {
+          const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
+          const localVehicles = localStr ? JSON.parse(localStr) : [];
+          const localMatch = localVehicles.find(
+            (lv: any) => lv.uuid === uuid || lv.licensePlate === v.plate,
+          );
+          if (localMatch) {
+            assignedDriver = localMatch.assignedDriver;
+          }
+        } catch {}
+
+        return {
+          uuid: v.uuid,
+          vehicleMake: v.brand,
+          vehicleModel: v.model,
+          vehicleYear: v.year,
+          licensePlate: v.plate,
+          cooperativeName: 'Particular / Ninguna',
+          status: appStatus,
+          createdAt: new Date(v.createdAt).toLocaleDateString('es-VE'),
+          totalEarnings: 0,
+          tripsCount: 0,
+          assignedDriver,
+          color: v.color,
+          capacity: v.capacity,
+          photoUrl: v.photoUrl,
+          routeNumber: v.routeNumber,
+        };
+      }
+    } catch (err) {
+      console.warn(
+        '[API] Error al obtener detalle de vehículo desde backend:',
+        err,
+      );
+    }
+  }
+
+  const allVehicles = await getOwnerVehicles();
+  const found = allVehicles.find((v) => v.uuid === uuid);
+  return found || null;
+}
+
+/**
+ * Da de baja un vehículo por su UUID.
+ */
+export async function deleteVehicle(uuid: string): Promise<any> {
+  const isMockUuid = uuid.length < 10 || uuid.startsWith('mock-');
+
+  if (!isMockUuid) {
+    try {
+      await fetchWithAuth(`/vehicles/${uuid}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.warn('[API] Error al eliminar vehículo del backend:', err);
+    }
+  }
+
+  try {
+    const list = await getOwnerVehicles();
+    const target = list.find((v) => v.uuid === uuid);
+    if (target?.licensePlate) {
+      const deletedPlatesStr = await AsyncStorage.getItem(
+        'mock_deleted_vehicle_plates',
+      );
+      const deletedPlates = deletedPlatesStr
+        ? JSON.parse(deletedPlatesStr)
+        : [];
+      deletedPlates.push(target.licensePlate);
+      await AsyncStorage.setItem(
+        'mock_deleted_vehicle_plates',
+        JSON.stringify(deletedPlates),
+      );
+    }
+
+    const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
+    if (localStr) {
+      const localVehicles = JSON.parse(localStr);
+      const filtered = localVehicles.filter((v: any) => v.uuid !== uuid);
+      await AsyncStorage.setItem(
+        'mock_vehicle_requests',
+        JSON.stringify(filtered),
+      );
+    }
+  } catch (storageErr) {
+    console.warn(
+      '[API] Error al actualizar baja de vehículo en AsyncStorage:',
+      storageErr,
+    );
+  }
+
+  return { success: true };
+}
+
+/**
+ * Registra un nuevo documento legal de conductor o vehículo.
+ */
+export async function submitLegalDocument(requestData: {
+  type: string;
+  fileUrl: string;
+  vehicleUuid?: string;
+  documentNumber?: string;
+  issuedAt?: string;
+  expiresAt?: string;
 }): Promise<any> {
-  return await fetchWithAuth('/driver-requests', {
+  try {
+    const cached = await AsyncStorage.getItem('mock_admin_documents');
+    const docs = cached ? JSON.parse(cached) : [];
+    const newDoc = {
+      uuid: `mock-doc-${Date.now()}-${Math.random()}`,
+      type: requestData.type,
+      documentNumber: requestData.documentNumber,
+      fileUrl: requestData.fileUrl,
+      issuedAt: requestData.issuedAt,
+      expiresAt: requestData.expiresAt,
+      status: 'pending_review',
+      createdAt: new Date().toISOString(),
+      vehicleUuid: requestData.vehicleUuid,
+      vehicle: {
+        uuid: requestData.vehicleUuid,
+      },
+      owner: {
+        uuid: 'me',
+        displayName: 'Mi Usuario',
+      },
+    };
+    docs.unshift(newDoc);
+    await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(docs));
+  } catch (storageErr) {
+    console.warn('[API] Error al guardar documento localmente:', storageErr);
+  }
+
+  return await fetchWithAuth('/legal-documents', {
     method: 'POST',
-    body: JSON.stringify(requestData),
+    body: JSON.stringify({
+      type: requestData.type,
+      fileUrl: requestData.fileUrl,
+      documentNumber: requestData.documentNumber,
+      vehicleUuid: requestData.vehicleUuid,
+      issuedAt: requestData.issuedAt,
+      expiresAt: requestData.expiresAt,
+    }),
   });
+}
+
+/**
+ * Líneas de transporte activas (GET /transport-lines), para el selector
+ * al registrar un vehículo. Reemplaza a las "cooperativas" simuladas.
+ */
+export async function getCooperatives(): Promise<
+  { uuid: string; name: string; code?: string }[]
+> {
+  return await fetchWithAuth('/transport-lines');
 }
 
 /**
@@ -1388,65 +1604,42 @@ export async function updateCivilAssociationProfile(
  * Intenta consumir del backend, si no existe el endpoint usa datos mock de AsyncStorage.
  */
 export async function getAllDocuments(): Promise<any[]> {
+  // 1. Intentar obtener datos actualizados en tiempo real del backend
   try {
     const docs = await fetchWithAuth('/legal-documents');
-    if (Array.isArray(docs)) return docs;
-  } catch (err) {
+    if (Array.isArray(docs)) {
+      await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(docs));
+      return docs;
+    }
+  } catch (err: any) {
+    // Si falla la red o da 404, usamos el fallback de AsyncStorage
     console.warn(
-      '[API] Error al obtener documentos del backend, usando mock:',
-      err,
+      '[API] Error al consultar documentos del backend, usando caché local:',
+      err.message || err,
     );
   }
 
-  const cached = await AsyncStorage.getItem('mock_admin_documents');
-  if (cached) return JSON.parse(cached);
+  // 2. Fallback de caché local en AsyncStorage
+  try {
+    const cached = await AsyncStorage.getItem('mock_admin_documents');
+    if (cached) {
+      const cachedDocs = JSON.parse(cached);
+      if (Array.isArray(cachedDocs)) {
+        // Filtrar mocks obsoletos
+        return cachedDocs.filter(
+          (d: any) =>
+            d &&
+            d.uuid !== 'doc-1111-2222' &&
+            d.uuid !== 'doc-3333-4444' &&
+            d.uuid !== 'doc-5555-6666',
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('[API] Error al leer caché de documentos:', err);
+  }
 
-  const initialDocs = [
-    {
-      uuid: 'doc-1111-2222',
-      type: 'driver_license',
-      documentNumber: 'V-12345678',
-      fileUrl: 'https://example.com/license.pdf',
-      status: 'pending_review',
-      createdAt: new Date().toISOString(),
-      owner: {
-        uuid: 'user-driver-1',
-        displayName: 'Carlos Pérez',
-        email: 'carlos.perez@example.com',
-      },
-    },
-    {
-      uuid: 'doc-3333-4444',
-      type: 'medical_certificate',
-      documentNumber: 'MED-998877',
-      fileUrl: 'https://example.com/med.pdf',
-      status: 'verified',
-      createdAt: new Date(Date.now() - 86400000).toISOString(),
-      owner: {
-        uuid: 'user-driver-2',
-        displayName: 'María Rodríguez',
-        email: 'maria.rodriguez@example.com',
-      },
-    },
-    {
-      uuid: 'doc-5555-6666',
-      type: 'property_title',
-      documentNumber: 'PROP-112233',
-      fileUrl: 'https://example.com/title.pdf',
-      status: 'pending_review',
-      createdAt: new Date().toISOString(),
-      owner: {
-        uuid: 'user-owner-1',
-        displayName: 'Juan Gómez',
-        email: 'juan.gomez@example.com',
-      },
-    },
-  ];
-  await AsyncStorage.setItem(
-    'mock_admin_documents',
-    JSON.stringify(initialDocs),
-  );
-  return initialDocs;
+  return [];
 }
 
 /**
@@ -1528,57 +1721,44 @@ export async function rejectDocument(
 export async function getAllTransportUnits(): Promise<any[]> {
   try {
     const units = await fetchWithAuth('/vehicles');
-    if (Array.isArray(units)) return units;
+    if (Array.isArray(units)) {
+      return units.map((u: any) => ({
+        uuid: u.uuid,
+        plate: u.plate,
+        brand: u.brand,
+        model: u.model,
+        inviteCode: u.inviteCode || `INV-${u.plate.toUpperCase()}`,
+        isActive: u.status === 'active',
+        owner: u.owner
+          ? {
+              displayName:
+                u.owner.displayName ||
+                `${u.owner.firstName || ''} ${u.owner.lastName || ''}`,
+              email: u.owner.email,
+            }
+          : {
+              displayName: 'Dueño GoFare',
+              email: '',
+            },
+      }));
+    }
   } catch (err) {
-    console.warn(
-      '[API] Error al obtener unidades de transporte, usando mock:',
-      err,
-    );
+    console.error('[API] Error fetching transport units from backend:', err);
   }
+  return [];
+}
 
-  const cached = await AsyncStorage.getItem('mock_admin_units');
-  if (cached) return JSON.parse(cached);
-
-  const initialUnits = [
-    {
-      uuid: 'unit-1111',
-      plate: 'ADF123',
-      brand: 'Encava',
-      model: 'ENT-610',
-      inviteCode: 'ENCAVA1',
-      isActive: true,
-      owner: {
-        displayName: 'Juan Gómez',
-        email: 'juan.gomez@example.com',
-      },
-    },
-    {
-      uuid: 'unit-2222',
-      plate: 'BBX987',
-      brand: 'Toyota',
-      model: 'Coaster',
-      inviteCode: 'TOYOTA2',
-      isActive: true,
-      owner: {
-        displayName: 'Luis Blanco',
-        email: 'luis.blanco@example.com',
-      },
-    },
-    {
-      uuid: 'unit-3333',
-      plate: 'CFG456',
-      brand: 'Iveco',
-      model: 'Daily',
-      inviteCode: 'IVECO3',
-      isActive: false,
-      owner: {
-        displayName: 'Pedro Torres',
-        email: 'pedro.torres@example.com',
-      },
-    },
-  ];
-  await AsyncStorage.setItem('mock_admin_units', JSON.stringify(initialUnits));
-  return initialUnits;
+/**
+ * Modifica el estado de activación de una unidad de transporte (aprobación/desaprobación de admin).
+ */
+export async function toggleTransportUnitStatus(
+  uuid: string,
+  isActive: boolean,
+): Promise<any> {
+  return await fetchWithAuth(`/vehicles/${uuid}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isActive }),
+  });
 }
 
 /**
@@ -1586,148 +1766,100 @@ export async function getAllTransportUnits(): Promise<any[]> {
  * Si está vacío, se auto-inicializa basándose en usuarios reales con rol 'transport_owner' en PostgreSQL.
  */
 export async function getAllOwnerRequests(): Promise<any[]> {
+  let cachedRequests: any[] = [];
   try {
-    // Intentar obtener de los endpoints reales de Render
-    const [pending, approved, rejected] = await Promise.all([
-      fetchWithAuth('/transport-owners?status=pending_review'),
-      fetchWithAuth('/transport-owners?status=approved'),
-      fetchWithAuth('/transport-owners?status=rejected'),
-    ]);
-
-    const mappedPending = pending.map((o: any) => ({
-      uuid: o.uuid,
-      userUuid: o.user?.uuid || o.user?.id,
-      displayName:
-        o.user?.displayName ||
-        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
-      email: o.user?.email,
-      nationalId: o.user?.nationalId,
-      phoneNumber: o.user?.phoneNumber,
-      businessName: o.legalName,
-      idNumber: o.rif,
-      status: 'pending',
-      createdAt: o.submittedAt || o.createdAt,
-      rejectionReason: o.rejectionReason,
-    }));
-
-    const mappedApproved = approved.map((o: any) => ({
-      uuid: o.uuid,
-      userUuid: o.user?.uuid || o.user?.id,
-      displayName:
-        o.user?.displayName ||
-        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
-      email: o.user?.email,
-      nationalId: o.user?.nationalId,
-      phoneNumber: o.user?.phoneNumber,
-      businessName: o.legalName,
-      idNumber: o.rif,
-      status: 'approved',
-      createdAt: o.submittedAt || o.createdAt,
-    }));
-
-    const mappedRejected = rejected.map((o: any) => ({
-      uuid: o.uuid,
-      userUuid: o.user?.uuid || o.user?.id,
-      displayName:
-        o.user?.displayName ||
-        `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
-      email: o.user?.email,
-      nationalId: o.user?.nationalId,
-      phoneNumber: o.user?.phoneNumber,
-      businessName: o.legalName,
-      idNumber: o.rif,
-      status: 'rejected',
-      createdAt: o.submittedAt || o.createdAt,
-      rejectionReason: o.rejectionReason,
-    }));
-
-    return [...mappedPending, ...mappedApproved, ...mappedRejected];
-  } catch (error) {
+    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
+    if (cached) {
+      cachedRequests = JSON.parse(cached);
+    }
+  } catch (err) {
     console.warn(
-      '[API] Falló la obtención de solicitudes desde Render, usando mock local:',
-      error,
+      '[API] Error al leer solicitudes de socio de AsyncStorage:',
+      err,
     );
+  }
 
-    let cachedRequests: any[] = [];
-    try {
-      const cached = await AsyncStorage.getItem('mock_global_owner_requests');
-      if (cached) {
-        cachedRequests = JSON.parse(cached);
+  // Filtrar los mocks por defecto que confunden al usuario
+  cachedRequests = cachedRequests.filter(
+    (r: any) => r && !r.uuid.startsWith('owner-req-'),
+  );
+
+  // Consulta en segundo plano
+  Promise.all([
+    fetchWithAuth('/transport-owners?status=pending_review'),
+    fetchWithAuth('/transport-owners?status=approved'),
+    fetchWithAuth('/transport-owners?status=rejected'),
+  ])
+    .then(async ([pending, approved, rejected]) => {
+      const mappedPending = pending.map((o: any) => ({
+        uuid: o.uuid,
+        userUuid: o.user?.uuid || o.user?.id,
+        displayName:
+          o.user?.displayName ||
+          `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+        email: o.user?.email,
+        nationalId: o.user?.nationalId,
+        phoneNumber: o.user?.phoneNumber,
+        businessName: o.legalName,
+        idNumber: o.rif,
+        status: 'pending',
+        createdAt: o.submittedAt || o.createdAt,
+        rejectionReason: o.rejectionReason,
+      }));
+
+      const mappedApproved = approved.map((o: any) => ({
+        uuid: o.uuid,
+        userUuid: o.user?.uuid || o.user?.id,
+        displayName:
+          o.user?.displayName ||
+          `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+        email: o.user?.email,
+        nationalId: o.user?.nationalId,
+        phoneNumber: o.user?.phoneNumber,
+        businessName: o.legalName,
+        idNumber: o.rif,
+        status: 'approved',
+        createdAt: o.submittedAt || o.createdAt,
+      }));
+
+      const mappedRejected = rejected.map((o: any) => ({
+        uuid: o.uuid,
+        userUuid: o.user?.uuid || o.user?.id,
+        displayName:
+          o.user?.displayName ||
+          `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
+        email: o.user?.email,
+        nationalId: o.user?.nationalId,
+        phoneNumber: o.user?.phoneNumber,
+        businessName: o.legalName,
+        idNumber: o.rif,
+        status: 'rejected',
+        createdAt: o.submittedAt || o.createdAt,
+        rejectionReason: o.rejectionReason,
+      }));
+
+      const merged = [...mappedPending, ...mappedApproved, ...mappedRejected];
+      await AsyncStorage.setItem(
+        'mock_global_owner_requests',
+        JSON.stringify(merged),
+      );
+    })
+    .catch(async (error) => {
+      // Silenciar warnings esperados
+      if (
+        error.message &&
+        !error.message.includes('404') &&
+        !error.message.includes('Cannot GET') &&
+        !error.message.includes('servidor')
+      ) {
+        console.warn(
+          '[API] Error en segundo plano al actualizar solicitudes de socio:',
+          error,
+        );
       }
-    } catch (err) {
-      console.warn(
-        '[API] Error al leer solicitudes de socio de AsyncStorage:',
-        err,
-      );
-    }
-
-    // Cargar usuarios reales de la DB para hacer la simulación coherente
-    let users: any[] = [];
-    try {
-      users = await getAllUsers();
-    } catch (err) {
-      console.warn(
-        '[API] Error al cargar usuarios para solicitudes de socio:',
-        err,
-      );
-    }
-
-    // Filtrar únicamente los usuarios que tienen rol transport_owner
-    const owners = users.filter((u) => {
-      const roles = u.roles || [];
-      return roles.some((r: any) => r.name === 'transport_owner');
     });
 
-    // Mantener en el cache solo los que son dueños reales
-    const ownerUuids = new Set(owners.map((o) => o.uuid || o.id));
-    if (cachedRequests.length > 0) {
-      cachedRequests = cachedRequests.filter((r) => ownerUuids.has(r.userUuid));
-    }
-
-    // Si no hay solicitudes en caché y hay dueños en la DB, inicializamos algunas solicitudes
-    if (cachedRequests.length === 0 && owners.length > 0) {
-      cachedRequests = owners.map((p, index) => {
-        const rifs = [
-          'J-409823124',
-          'J-312984716',
-          'J-481920384',
-          'J-501238472',
-        ];
-        const coops = [
-          'Cooperativa Caracas Move R.L.',
-          'Línea de Transporte Chacao',
-          'Asociación de Conductores La India',
-          'Cooperativa Metrópolis',
-        ];
-        return {
-          uuid: `owner-req-${p.uuid || p.id}`,
-          userUuid: p.uuid || p.id,
-          displayName:
-            p.displayName || `${p.firstName || ''} ${p.lastName || ''}`,
-          email: p.email,
-          nationalId: p.nationalId || `V-${12000000 + index}`,
-          phoneNumber: p.phoneNumber || '04125550000',
-          businessName: coops[index % coops.length],
-          idNumber: rifs[index % rifs.length],
-          status: 'pending',
-          createdAt: new Date(Date.now() - index * 7200000).toISOString(),
-        };
-      });
-      try {
-        await AsyncStorage.setItem(
-          'mock_global_owner_requests',
-          JSON.stringify(cachedRequests),
-        );
-      } catch (storageErr) {
-        console.warn(
-          '[API] Error al guardar solicitudes iniciales:',
-          storageErr,
-        );
-      }
-    }
-
-    return cachedRequests;
-  }
+  return cachedRequests;
 }
 
 /**
@@ -1900,37 +2032,6 @@ export async function updateBcvRate(
 }
 
 /**
- * Consulta la API externa de DolarApi para obtener la tasa BCV oficial más reciente.
- * Retorna la tasa promedio y la fecha de actualización, o null si falla.
- */
-export async function getExternalBcvRate(): Promise<{
-  rate: number;
-  date: string;
-} | null> {
-  try {
-    const apiRes = await fetch('https://ve.dolarapi.com/v1/dolares');
-    if (apiRes.ok) {
-      const list = await apiRes.json();
-      const oficial = list.find((item: any) => item.fuente === 'oficial');
-      if (oficial?.promedio) {
-        const suggestedRateVal = oficial.promedio;
-        const suggestedDateVal = oficial.fechaActualizacion
-          ? oficial.fechaActualizacion.slice(0, 10)
-          : new Date().toISOString().slice(0, 10);
-        return {
-          rate: suggestedRateVal,
-          date: suggestedDateVal,
-        };
-      }
-    }
-    return null;
-  } catch (error) {
-    console.warn('[API] getExternalBcvRate falló:', error);
-    return null;
-  }
-}
-
-/**
  * Obtiene el resumen/preview de un cobro de viaje antes de confirmar decodificando el QR.
  */
 export async function previewRide(qr: string): Promise<{
@@ -2095,5 +2196,23 @@ export async function redeemBackendInviteCode(code: string): Promise<any> {
 export async function getBackendInviteCodes(): Promise<any[]> {
   return await fetchWithAuth('/invite-codes', {
     method: 'GET',
+  });
+}
+
+/**
+ * [Admin] Aprueba una unidad de transporte (inactive -> active).
+ */
+export async function approveVehicle(uuid: string): Promise<any> {
+  return await fetchWithAuth(`/vehicles/${uuid}/approve`, {
+    method: 'PATCH',
+  });
+}
+
+/**
+ * [Admin] Rechaza una unidad de transporte (inactive -> suspended).
+ */
+export async function rejectVehicle(uuid: string): Promise<any> {
+  return await fetchWithAuth(`/vehicles/${uuid}/reject`, {
+    method: 'PATCH',
   });
 }

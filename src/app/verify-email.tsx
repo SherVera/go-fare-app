@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -172,7 +173,7 @@ export default function VerifyEmailScreen() {
                 'gofare_cached_user_profile',
                 JSON.stringify(cachePayload),
               );
-              await AsyncStorage.setItem('user_role', 'passenger');
+              await SecureStore.setItemAsync('user_role', 'passenger');
               // Limpiar perfil pendiente ya que se completó el flujo
               await AsyncStorage.removeItem('gofare_pending_profile');
             } catch (storageErr) {
