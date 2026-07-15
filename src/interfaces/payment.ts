@@ -22,6 +22,8 @@ export interface PaymentMethod {
   iconBgColor: string;
   /** Color del icono */
   iconColor: string;
+  /** Método visible pero no seleccionable (ej. "Próximamente"). */
+  disabled?: boolean;
 }
 
 /** Estado del formulario de recarga de saldo */

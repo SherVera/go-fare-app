@@ -52,10 +52,11 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   {
     id: 'cripto',
     title: 'USDT (Binance Pay)',
-    subtitle: 'Criptomonedas instantáneo',
+    subtitle: 'Próximamente',
     iconName: 'bitcoin',
     iconBgColor: '#FAF5FF',
     iconColor: '#A855F7',
+    disabled: true,
   },
 ];
 
@@ -128,9 +129,6 @@ export default function TopUpBalanceScreen() {
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
 
-  // Campos de Cripto
-  const [cryptoTxHash, setCryptoTxHash] = useState('');
-
   const loadUserData = useCallback(async () => {
     try {
       // Consultar tasas actuales en la base de datos
@@ -193,7 +191,6 @@ export default function TopUpBalanceScreen() {
     setCardNumber('');
     setCardExpiry('');
     setCardCvv('');
-    setCryptoTxHash('');
     setPayStep('details');
     setShowModal(true);
   };
@@ -434,12 +431,15 @@ export default function TopUpBalanceScreen() {
         <Text style={styles.sectionTitle}>MÉTODO DE PAGO</Text>
         {PAYMENT_METHODS.map((method) => {
           const isSelected = selectedMethod === method.id;
+          const isDisabled = method.disabled;
           return (
             <Pressable
               key={method.id}
+              disabled={isDisabled}
               style={[
                 styles.methodCard,
                 isSelected && styles.methodCardSelected,
+                isDisabled && styles.methodCardDisabled,
               ]}
               onPress={() => setSelectedMethod(method.id)}
             >
@@ -459,14 +459,20 @@ export default function TopUpBalanceScreen() {
                 <Text style={styles.methodTitle}>{method.title}</Text>
                 <Text style={styles.methodSubtitle}>{method.subtitle}</Text>
               </View>
-              <View
-                style={[
-                  styles.radioOuter,
-                  isSelected && { borderColor: tokens.colors.primary },
-                ]}
-              >
-                {isSelected && <View style={styles.radioInner} />}
-              </View>
+              {isDisabled ? (
+                <View style={styles.soonBadge}>
+                  <Text style={styles.soonBadgeText}>Próximamente</Text>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.radioOuter,
+                    isSelected && { borderColor: tokens.colors.primary },
+                  ]}
+                >
+                  {isSelected && <View style={styles.radioInner} />}
+                </View>
+              )}
             </Pressable>
           );
         })}
@@ -673,28 +679,6 @@ export default function TopUpBalanceScreen() {
                         />
                       </View>
                     </View>
-                  </View>
-                )}
-
-                {selectedMethod === 'cripto' && (
-                  <View style={styles.formContainer}>
-                    <Text style={styles.infoBox}>
-                      Envía exactamente{' '}
-                      <Text style={{ fontWeight: 'bold' }}>
-                        {(selectedPkg.amount / bcvRate).toFixed(4)} USDT
-                      </Text>{' '}
-                      a la dirección de Binance Pay y pega el hash de la
-                      transacción.
-                    </Text>
-                    <Text style={styles.inputLabel}>HASH DE TRANSACCIÓN</Text>
-                    <TextInput
-                      style={styles.inputField}
-                      placeholder="0x..."
-                      placeholderTextColor="#9CA3AF"
-                      value={cryptoTxHash}
-                      onChangeText={setCryptoTxHash}
-                      autoCapitalize="none"
-                    />
                   </View>
                 )}
 
@@ -985,6 +969,21 @@ const styles = StyleSheet.create({
   methodCardSelected: {
     borderColor: tokens.colors.primary,
     backgroundColor: '#F0F9FF',
+  },
+  methodCardDisabled: {
+    opacity: 0.5,
+  },
+  soonBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  soonBadgeText: {
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#94A3B8',
+    letterSpacing: 0.3,
   },
   methodIconWrapper: {
     width: 44,
