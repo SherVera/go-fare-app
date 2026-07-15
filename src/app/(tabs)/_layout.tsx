@@ -42,7 +42,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'INICIO',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'home' : 'home-outline'}
               size={24}
@@ -55,7 +55,7 @@ export default function TabLayout() {
         name="trips"
         options={{
           title: 'VIAJES',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'bus' : 'bus-outline'}
               size={24}
@@ -81,7 +81,7 @@ export default function TabLayout() {
         name="profile"
         options={{
           title: 'PERFIL',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'person' : 'person-outline'}
               size={24}

@@ -1,7 +1,7 @@
 {
   "name": "gofare",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "scripts": {
     "start": "expo start",
     "reverse": "%LOCALAPPDATA%\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe reverse tcp:3000 tcp:3000",
@@ -20,6 +20,7 @@
     "release": "standard-version",
     "commitlint": "commitlint --from main --to HEAD --verbose",
     "git:flow": "bash scripts/git-happy-path.sh",
+    "git:smart": "bash scripts/git-smart-flow.sh",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -27,6 +28,7 @@
     "@expo-google-fonts/outfit": "^0.4.3",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-firebase/app": "24.0.0",
     "@react-native-firebase/auth": "24.0.0",
     "@react-native-firebase/firestore": "24.0.0",
@@ -41,6 +43,7 @@
     "expo-camera": "~17.0.10",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",
+    "expo-document-picker": "~14.0.8",
     "expo-font": "~14.0.11",
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",
@@ -67,8 +70,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
-    "@commitlint/cli": "^19.6.1",
-    "@commitlint/config-conventional": "^19.6.0",
+    "@commitlint/cli": "^21.0.0",
+    "@commitlint/config-conventional": "^21.0.0",
     "@react-native/metro-config": "0.81.5",
     "@types/react": "~19.1.0",
     "aicommits": "^3.1.1",
@@ -79,7 +82,10 @@
     "patch-package": "^8.0.1",
     "react-dom": "19.1.0",
     "standard-version": "^9.5.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
+    "@emnapi/wasi-threads": "1.2.2"
   },
   "config": {
     "commitizen": {
@@ -90,7 +96,10 @@
     "js-yaml": "^4.2.0",
     "postcss": "^8.5.10",
     "uuid": "^11.1.1",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
+    "@emnapi/wasi-threads": "1.2.2"
   },
   "private": true
 }
