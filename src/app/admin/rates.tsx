@@ -16,12 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import {
-  getCurrentRates,
-  getExternalBcvRate,
-  updateBcvRate,
-  updateFareValue,
-} from '@/lib/api';
+import { getCurrentRates, updateBcvRate, updateFareValue } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 // Obtener fecha local YYYY-MM-DD
@@ -74,11 +69,6 @@ export default function AdminRatesScreen() {
     bcvRateDate: new Date().toISOString().slice(0, 10),
   });
 
-  // Tasa sugerida por la API externa (DolarApi)
-  const [apiSuggestedRate, setApiSuggestedRate] = useState<{
-    rate: number;
-    date: string;
-  } | null>(null);
   // Valores de los formularios
   const [newFareValue, setNewFareValue] = useState('');
   const [newBcvRate, setNewBcvRate] = useState('');
@@ -106,7 +96,6 @@ export default function AdminRatesScreen() {
 
   const fetchRates = useCallback(async () => {
     setLoading(true);
-    setApiSuggestedRate(null);
     try {
       // 1. Obtener tasas del sistema
       const data = await getCurrentRates();
@@ -116,31 +105,6 @@ export default function AdminRatesScreen() {
       setBcvRateDate(
         formatDateToDdMmYyyy(data.bcvRateDate || getLocalDateString()),
       );
-
-      // 2. Consultar la API externa para la tasa oficial del BCV SOLO si no es la de hoy
-      const todayStr = getLocalDateString();
-      const registeredDate = (data.bcvRateDate || '').split('T')[0] || todayStr;
-
-      if (registeredDate !== todayStr) {
-        console.log(
-          '[AdminRates] La tasa registrada es anterior a hoy. Consultando tasa externa...',
-        );
-        const apiData = await getExternalBcvRate();
-        if (apiData) {
-          setApiSuggestedRate(apiData);
-
-          // Si la tasa guardada en el sistema es diferente de la de internet,
-          // autocompletamos el campo de edición para facilitarle el registro al administrador
-          if (data.bcvRate !== apiData.rate) {
-            setNewBcvRate(apiData.rate.toFixed(2));
-            setBcvRateDate(formatDateToDdMmYyyy(apiData.date));
-          }
-        }
-      } else {
-        console.log(
-          '[AdminRates] La tasa registrada ya es la más reciente (hoy). Se omite consulta a la API.',
-        );
-      }
     } catch (err) {
       console.warn('[AdminRates] Error fetching current rates:', err);
       Alert.alert('Error', 'No se pudieron sincronizar las tasas vigentes.');
@@ -215,17 +179,6 @@ export default function AdminRatesScreen() {
       Alert.alert('Error', err.message || 'No se pudo registrar la tasa BCV.');
     } finally {
       setUpdatingBcv(false);
-    }
-  };
-
-  const applySuggestedRateValues = () => {
-    if (apiSuggestedRate) {
-      setNewBcvRate(apiSuggestedRate.rate.toFixed(2));
-      setBcvRateDate(formatDateToDdMmYyyy(apiSuggestedRate.date));
-      Alert.alert(
-        'Aplicado',
-        'Se cargó la tasa oficial sugerida al formulario.',
-      );
     }
   };
 
@@ -461,76 +414,6 @@ export default function AdminRatesScreen() {
                   </View>
                 </View>
               </View>
-
-              {/* Sugerencia de Tasa BCV (DolarApi) */}
-              {apiSuggestedRate && (
-                <View style={styles.suggestionBanner}>
-                  <View style={styles.suggestionHeader}>
-                    <Ionicons
-                      name="cloud-download"
-                      size={20}
-                      color="#065F46"
-                      style={{ marginRight: 8 }}
-                    />
-                    <Text style={styles.suggestionTitle}>
-                      Tasa Oficial Detectada (Internet)
-                    </Text>
-                  </View>
-
-                  <Text style={styles.suggestionBody}>
-                    El valor más reciente publicado por el BCV es de{' '}
-                    <Text style={styles.boldText}>
-                      {apiSuggestedRate.rate.toFixed(2)} Bs/$
-                    </Text>{' '}
-                    (tasa para la fecha{' '}
-                    <Text style={styles.boldText}>
-                      {formatDateToDdMmYyyy(apiSuggestedRate.date)}
-                    </Text>
-                    ).
-                  </Text>
-
-                  {currentRates.bcvRate !== apiSuggestedRate.rate ? (
-                    <View style={styles.suggestionActionBox}>
-                      <Text style={styles.suggestionSubtitle}>
-                        La tasa del sistema difiere de la oficial en internet.
-                      </Text>
-                      <Pressable
-                        style={styles.applySuggestionBtn}
-                        onPress={applySuggestedRateValues}
-                      >
-                        <Ionicons
-                          name="checkmark-done-outline"
-                          size={14}
-                          color="#065F46"
-                        />
-                        <Text style={styles.applySuggestionBtnText}>
-                          Cargar tasa de Internet
-                        </Text>
-                      </Pressable>
-                    </View>
-                  ) : (
-                    <View style={styles.suggestionActionBox}>
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={16}
-                        color="#059669"
-                      />
-                      <Text
-                        style={[
-                          styles.suggestionSubtitle,
-                          {
-                            color: '#059669',
-                            fontFamily: tokens.typography.fontFamily.bold,
-                          },
-                        ]}
-                      >
-                        El sistema ya se encuentra sincronizado con la tasa
-                        oficial.
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
 
               {/* Formulario de ajuste de BCV */}
               <View style={styles.formCard}>

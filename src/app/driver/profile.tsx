@@ -131,7 +131,7 @@ export default function DriverProfileScreen() {
                 await SecureStore.deleteItemAsync('savedPassword');
                 await AsyncStorage.removeItem('gofare_cached_user_profile');
                 await AsyncStorage.removeItem('temp_auth');
-                await AsyncStorage.removeItem('user_role');
+                await SecureStore.deleteItemAsync('user_role');
                 // Mantener limpia la lista local de boletos validados si el chofer lo requiere,
                 // pero la dejamos persistente en AsyncStorage para que no pierda su historial entre cierres de sesión
               } catch (err) {
