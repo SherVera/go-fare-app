@@ -1223,40 +1223,6 @@ export async function submitLegalDocument(requestData: {
 }
 
 /**
- * Obtiene la lista de cooperativas registradas.
- */
-export async function getCooperatives(): Promise<any[]> {
-  try {
-    return await fetchWithAuth('/cooperatives');
-  } catch (error) {
-    console.warn('[API] getCooperatives falló, usando datos simulados:', error);
-    return MOCK_COOPERATIVES;
-  }
-}
-
-/**
- * Envía una solicitud para registrarse como conductor.
- */
-export async function submitDriverRequest(requestData: {
-  licenseNumber: string;
-  licenseType: string;
-  experienceYears: number;
-  emergencyPhone: string;
-}): Promise<any> {
-  return await fetchWithAuth('/driver-requests', {
-    method: 'POST',
-    body: JSON.stringify({
-      brand: requestData.vehicleMake,
-      model: requestData.vehicleModel,
-      year: requestData.vehicleYear,
-      plate: requestData.licensePlate,
-      capacity: requestData.capacity,
-      lineUuid: requestData.lineUuid || undefined,
-    }),
-  });
-}
-
-/**
  * Líneas de transporte activas (GET /transport-lines), para el selector
  * al registrar un vehículo. Reemplaza a las "cooperativas" simuladas.
  */
