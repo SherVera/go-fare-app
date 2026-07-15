@@ -3,6 +3,7 @@ export * from './backend-fare-account';
 export * from './backend-ticket';
 export * from './backend-user';
 export * from './components';
+export * from './driver';
 export * from './payment';
 export * from './profile';
 export * from './route';

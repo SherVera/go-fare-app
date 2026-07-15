@@ -41,7 +41,7 @@ export default function VehicleOwnerLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          title: 'FLOTA',
+          title: 'BUSES',
           tabBarIcon: ({ color, size, focused }) => (
             <Ionicons
               name={focused ? 'bus' : 'bus-outline'}

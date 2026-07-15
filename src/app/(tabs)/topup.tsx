@@ -17,11 +17,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { PaymentMethod } from '@/interfaces';
 import {
-  addAccountBalance,
   createFareAccount,
   getBackendProfile,
   getCurrentRates,
   getFareAccountByUserId,
+  topUpBalance,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
@@ -212,6 +212,13 @@ export default function TopUpBalanceScreen() {
         Alert.alert('Atención', 'Ingresa una cédula válida.');
         return;
       }
+      if (!/^\d{4,20}$/.test(pmReference.trim())) {
+        Alert.alert(
+          'Atención',
+          'Ingresa el número de referencia del Pago Móvil.',
+        );
+        return;
+      }
     } else if (selectedMethod === 'tarjeta') {
       const cleanCard = cardNumber.replace(/\s+/g, '');
       if (
@@ -234,23 +241,34 @@ export default function TopUpBalanceScreen() {
 
     if (!userId || !accountId) return;
 
+    // Por ahora solo Pago Móvil tiene verificación real en el backend.
+    if (selectedMethod !== 'pago_movil') {
+      Alert.alert(
+        'Método no disponible',
+        'Por ahora solo la recarga por Pago Móvil está habilitada.',
+      );
+      return;
+    }
+
     try {
       setPayStep('processing');
-      // Simular procesamiento de la pasarela de pago
-      await new Promise((resolve) => setTimeout(resolve, 2000));
 
-      // Acreditar cantidad de pasajes/boletos en el backend (fare_accounts)
-      const updatedAccount = await addAccountBalance(
-        accountId,
-        selectedPkg.tickets,
-      );
-      setBalance(Number(updatedAccount.balance));
+      // Recarga real: el backend verifica la referencia contra la tesorería
+      // y acredita según el monto confirmado por el banco.
+      const result = await topUpBalance({
+        bsAmount: selectedPkg.amount,
+        reference: pmReference.trim(),
+        phone: pmPhone.trim(),
+        document: pmIdNumber.trim(),
+      });
+      setBalance(Number(result.balanceFares));
       setPayStep('success');
     } catch (error: any) {
       console.error('[TopUp] Purchase error:', error);
       Alert.alert(
         'Error de Recarga',
-        error.message || 'No se pudo procesar la recarga. Intenta nuevamente.',
+        error.message ||
+          'No pudimos verificar tu pago. Revisa la referencia e intenta nuevamente.',
       );
       setPayStep('details');
     }
