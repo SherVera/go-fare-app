@@ -2,7 +2,7 @@
 
 import type { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import type { LocationObject } from 'expo-location';
-import type { TextStyle, ViewStyle } from 'react-native';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import type { Route } from './route';
 import type { UserProfile } from './user';
 
@@ -10,8 +10,8 @@ import type { UserProfile } from './user';
 export interface ButtonProps {
   title: string;
   onPress: () => void;
-  style?: ViewStyle;
-  textStyle?: TextStyle;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
   iconRight?: keyof typeof Ionicons.glyphMap;
   disabled?: boolean;
 }

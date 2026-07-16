@@ -11,7 +11,17 @@ import type {
 } from '@/interfaces';
 import { auth, sigOutAccount } from './firebase';
 
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || '';
+let resolvedBaseUrl = process.env.EXPO_PUBLIC_API_URL;
+
+// Sanitización automática: asegurar que siempre contenga el prefijo /api/v1 requerido por el backend NestJS
+if (resolvedBaseUrl && !resolvedBaseUrl.includes('/api/v1')) {
+  const cleanUrl = resolvedBaseUrl.endsWith('/')
+    ? resolvedBaseUrl.slice(0, -1)
+    : resolvedBaseUrl;
+  resolvedBaseUrl = `${cleanUrl}/api/v1`;
+}
+
+export const BASE_URL = resolvedBaseUrl;
 console.log('[API] Resolved BASE_URL:', BASE_URL);
 const GOFARE_JWT_KEY = 'gofare_jwt_token';
 const BACKEND_JWT_KEY = 'backend_jwt';
