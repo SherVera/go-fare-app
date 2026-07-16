@@ -14,6 +14,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +31,7 @@ import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { height } = useWindowDimensions();
   // Estado del formulario — tipado por LoginFormState
   const [email, setEmail] = useState<LoginFormState['email']>('');
   const [password, setPassword] = useState<LoginFormState['password']>('');
@@ -39,6 +41,29 @@ export default function LoginScreen() {
 
   const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
   const [biometricsType, setBiometricsType] = useState('Biometría');
+
+  // Dimensiones dinámicas responsivas según el alto de pantalla
+  const isSmallScreen = height < 750;
+  const isMediumScreen = height >= 750 && height < 850;
+
+  const iconCardSize = isSmallScreen
+    ? { width: 90, height: 80 }
+    : isMediumScreen
+      ? { width: 120, height: 110 }
+      : { width: 160, height: 148 };
+  const iconCardShadowSize = isSmallScreen
+    ? { width: 80, height: 70 }
+    : isMediumScreen
+      ? { width: 110, height: 100 }
+      : { width: 148, height: 136 };
+  const iconSize = isSmallScreen ? 50 : isMediumScreen ? 72 : 96;
+  const iconMarginBottom = isSmallScreen ? 12 : isMediumScreen ? 28 : 44;
+
+  const titleSize = isSmallScreen ? 28 : isMediumScreen ? 34 : 38;
+  const titleBlockMarginBottom = isSmallScreen ? 12 : isMediumScreen ? 24 : 32;
+  const titleLineHeight = isSmallScreen ? 32 : isMediumScreen ? 40 : 44;
+
+  const minSpacerHeight = isSmallScreen ? 12 : 48;
 
   useEffect(() => {
     const checkSavedCredentials = async () => {
@@ -433,22 +458,56 @@ export default function LoginScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* ── SECCIÓN DEL ÍCONO ── */}
-          <View style={styles.iconSection}>
-            <View style={styles.fakeShadow} />
-            <View style={styles.iconCard}>
+          <View
+            style={[styles.iconSection, { marginBottom: iconMarginBottom }]}
+          >
+            <View
+              style={[
+                styles.fakeShadow,
+                {
+                  width: iconCardShadowSize.width,
+                  height: iconCardShadowSize.height,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.iconCard,
+                { width: iconCardSize.width, height: iconCardSize.height },
+              ]}
+            >
               <View style={styles.topShine} />
               <MaterialCommunityIcons
                 name="shield-account"
-                size={96}
+                size={iconSize}
                 color={tokens.colors.primary}
               />
             </View>
           </View>
 
           {/* ── TÍTULOS ── */}
-          <View style={styles.titleBlock}>
-            <Text style={styles.titleDark}>Bienvenido</Text>
-            <Text style={styles.titleBlue}>de Nuevo</Text>
+          <View
+            style={[
+              styles.titleBlock,
+              { marginBottom: titleBlockMarginBottom },
+            ]}
+          >
+            <Text
+              style={[
+                styles.titleDark,
+                { fontSize: titleSize, lineHeight: titleLineHeight },
+              ]}
+            >
+              Bienvenido
+            </Text>
+            <Text
+              style={[
+                styles.titleBlue,
+                { fontSize: titleSize, lineHeight: titleLineHeight },
+              ]}
+            >
+              de Nuevo
+            </Text>
             <Text style={styles.subtitle}>
               {`Inicia sesión en tu cuenta para\ncontinuar tu viaje.`}
             </Text>
@@ -511,19 +570,6 @@ export default function LoginScreen() {
           </View>
 
           {/* ── NOTA DE SEGURIDAD ── */}
-          <View style={styles.secureRow}>
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={13}
-              color={tokens.colors.primary}
-              style={{ marginTop: 1, marginRight: 6 }}
-            />
-            <Text style={styles.secureText}>
-              Tu cuenta está protegida por Firebase Authentication.
-            </Text>
-          </View>
-
-          <View style={{ flex: 1, minHeight: 48 }} />
 
           {/* ── BOTONES DE ACCESO ── */}
           <View style={hasSavedCredentials ? styles.ctaRow : null}>

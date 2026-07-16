@@ -5,14 +5,19 @@ import { tokens } from '../theme/tokens';
 
 interface ImageHeroProps {
   style?: ViewStyle;
+  size?: number;
 }
 
-export const ImageHero = ({ style }: ImageHeroProps) => {
+export const ImageHero = ({ style, size }: ImageHeroProps) => {
+  const imageStyle = size
+    ? [styles.image, { width: size, height: size }]
+    : styles.image;
+
   return (
     <View style={[styles.container, style]}>
       <Image
         source={require('../../assets/images/fondo-bus.png')}
-        style={styles.image}
+        style={imageStyle}
         contentFit="cover"
         transition={1000}
       />

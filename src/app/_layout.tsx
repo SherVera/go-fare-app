@@ -220,6 +220,22 @@ export default function RootLayout() {
     Outfit_900Black,
   });
 
+  const [fontLoadTimedOut, setFontLoadTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!loaded) {
+        console.warn(
+          '[Layout] Font loading timed out (2s). Falling back to system fonts.',
+        );
+        setFontLoadTimedOut(true);
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [loaded]);
+
+  const fontsReady = loaded || fontLoadTimedOut;
+
   // 1. Firebase Auth + perfil(onboarding) + sincronización de rol
   useEffect(() => {
     let cancelled = false;
@@ -621,7 +637,7 @@ export default function RootLayout() {
 
   // 3. Guardián: signed_in → dashboard según rol; needs_onboarding → /onboarding; signed_out → fuera de tabs
   useEffect(() => {
-    if (!loaded || phase === 'initializing') return;
+    if (!fontsReady || phase === 'initializing') return;
 
     if (phase === 'signed_in' && userRole === null) return; // esperar a tener el rol
 
@@ -687,17 +703,17 @@ export default function RootLayout() {
         router.replace('/landing');
       }
     }
-  }, [phase, loaded, segments, router, userRole]);
+  }, [phase, fontsReady, segments, router, userRole]);
 
   useEffect(() => {
-    console.log('[Layout] Ready state check:', { loaded, phase });
-    if (loaded && phase !== 'initializing') {
+    console.log('[Layout] Ready state check:', { loaded: fontsReady, phase });
+    if (fontsReady && phase !== 'initializing') {
       console.log('[Layout] Hiding splash screen...');
       SplashScreen.hideAsync().catch((err) => {
         console.error('[Layout] Error hiding splash screen:', err);
       });
     }
-  }, [loaded, phase]);
+  }, [fontsReady, phase]);
 
   // Timeout de seguridad para evitar que la app se quede colgada si Firebase/fuentes tardan
   useEffect(() => {
@@ -713,7 +729,7 @@ export default function RootLayout() {
     return () => clearTimeout(timeoutId);
   }, [phase]);
 
-  if (!loaded || phase === 'initializing') {
+  if (!fontsReady || phase === 'initializing') {
     return null;
   }
 
