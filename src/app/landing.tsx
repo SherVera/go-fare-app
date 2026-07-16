@@ -1,8 +1,14 @@
 import { useRouter } from 'expo-router';
-import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '@/components/Button';
-import { FeatureCard } from '@/components/FeatureCard';
 import { HeaderLogo } from '@/components/HeaderLogo';
 import { ImageHero } from '@/components/ImageHero';
 import { tokens } from '@/theme/tokens';
@@ -10,10 +16,27 @@ import { tokens } from '@/theme/tokens';
 export default function LandingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
 
   const handleLogin = () => {
     router.push('/login' as any);
   };
+
+  // Ajustes responsivos dinámicos según el alto de la pantalla del dispositivo
+  const isSmallScreen = height < 720;
+  const isMediumScreen = height >= 720 && height < 820;
+
+  const heroSize = isSmallScreen ? 190 : isMediumScreen ? 240 : 290;
+  const heroPaddingTop = isSmallScreen ? tokens.spacing.md : tokens.spacing.xl;
+  const heroPaddingBottom = isSmallScreen
+    ? tokens.spacing.lg
+    : tokens.spacing.xxl;
+  const subtitleMarginBottom = isSmallScreen
+    ? tokens.spacing.lg
+    : tokens.spacing.xl;
+  const buttonMarginBottom = isSmallScreen
+    ? tokens.spacing.lg
+    : tokens.spacing.xl;
 
   return (
     <View style={styles.container}>
@@ -23,8 +46,13 @@ export default function LandingScreen() {
         <HeaderLogo />
 
         {/* Hero Image */}
-        <View style={styles.heroWrapper}>
-          <ImageHero />
+        <View
+          style={[
+            styles.heroWrapper,
+            { paddingTop: heroPaddingTop, paddingBottom: heroPaddingBottom },
+          ]}
+        >
+          <ImageHero size={heroSize} />
         </View>
 
         {/* Bottom Sheet */}
@@ -41,35 +69,19 @@ export default function LandingScreen() {
               {'\n'}
               <Text style={styles.titleHighlight}>ciudad.</Text>
             </Text>
-            <Text style={styles.subtitle}>
+            <Text
+              style={[styles.subtitle, { marginBottom: subtitleMarginBottom }]}
+            >
               Vive la próxima generación de{'\n'}
               movilidad urbana en Caracas. Rápida,{'\n'}
               sin contacto y estrictamente segura.
             </Text>
 
-            <View style={styles.featuresRow}>
-              <FeatureCard
-                title="Pago Rápido"
-                description="Recargas al instante y pagos vía NFC."
-                iconName="wallet-outline"
-                iconBgColor={tokens.colors.primary}
-                iconColor={tokens.colors.surface}
-                style={{ marginRight: tokens.spacing.md }}
-              />
-              <FeatureCard
-                title="Seguro"
-                description="Rastreo de rutas en vivo y seguridad con IA."
-                iconName="shield-checkmark-outline"
-                iconBgColor={tokens.colors.iconGreen}
-                iconColor={tokens.colors.surface}
-              />
-            </View>
-
             <Button
               title="Iniciar Sesión"
               onPress={handleLogin}
               iconRight="arrow-forward"
-              style={styles.button}
+              style={[styles.button, { marginBottom: buttonMarginBottom }]}
             />
 
             <Text style={styles.footerText}>
