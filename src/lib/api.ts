@@ -579,6 +579,26 @@ export async function addAccountBalance(
 }
 
 /**
+ * Recarga real vía Pago Móvil / C2P: el backend verifica la referencia contra
+ * la tesorería (POST /fare/me/top-up) y acredita solo si el pago es válido.
+ */
+export async function topUpBalance(data: {
+  bsAmount: number;
+  reference: string;
+  phone?: string;
+  document?: string;
+}): Promise<{
+  balanceFares: number;
+  faresCredited: number;
+  bsAmount: number;
+}> {
+  return await fetchWithAuth('/fare/me/top-up', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
  * Deduce saldo de la cuenta de tarifa del usuario.
  */
 export async function deductAccountBalance(
@@ -922,20 +942,6 @@ export async function updateTicket(
 }
 
 /**
- * Cooperativas simuladas para pruebas en frontend en caso de error del servidor.
- */
-export const MOCK_COOPERATIVES = [
-  { uuid: 'coop-1', name: 'Cooperativa Caracas Move R.L.', rif: 'J-304598124' },
-  { uuid: 'coop-2', name: 'Línea de Transporte Chacao', rif: 'J-401234567' },
-  {
-    uuid: 'coop-3',
-    name: 'Asociación de Conductores La India',
-    rif: 'J-298765432',
-  },
-  { uuid: 'coop-4', name: 'Cooperativa Metrópolis', rif: 'J-311223344' },
-];
-
-/**
  * Envía una solicitud para registrarse como dueño de vehículo.
  */
 export async function submitVehicleOwnerRequest(requestData: {
@@ -952,7 +958,8 @@ export async function submitVehicleOwnerRequest(requestData: {
 }
 
 /**
- * Envía una solicitud para registrar un vehículo (propietario ya aprobado).
+ * Registra un vehículo real en el backend (POST /vehicles). Lo asocia
+ * opcionalmente a una línea de transporte (`lineUuid`).
  */
 export async function submitVehicleRequest(requestData: {
   vehicleMake: string;
@@ -1226,30 +1233,13 @@ export async function submitLegalDocument(requestData: {
 }
 
 /**
- * Obtiene la lista de cooperativas registradas.
+ * Líneas de transporte activas (GET /transport-lines), para el selector
+ * al registrar un vehículo. Reemplaza a las "cooperativas" simuladas.
  */
-export async function getCooperatives(): Promise<any[]> {
-  try {
-    return await fetchWithAuth('/cooperatives');
-  } catch (error) {
-    console.warn('[API] getCooperatives falló, usando datos simulados:', error);
-    return MOCK_COOPERATIVES;
-  }
-}
-
-/**
- * Envía una solicitud para registrarse como conductor.
- */
-export async function submitDriverRequest(requestData: {
-  licenseNumber: string;
-  licenseType: string;
-  experienceYears: number;
-  emergencyPhone: string;
-}): Promise<any> {
-  return await fetchWithAuth('/driver-requests', {
-    method: 'POST',
-    body: JSON.stringify(requestData),
-  });
+export async function getCooperatives(): Promise<
+  { uuid: string; name: string; code?: string }[]
+> {
+  return await fetchWithAuth('/transport-lines');
 }
 
 /**

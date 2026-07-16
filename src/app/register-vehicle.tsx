@@ -47,6 +47,7 @@ interface FormFields {
   vehicleColor: string;
   vehicleYear: string;
   licensePlate: string;
+  capacity: string;
   cooperativeUuid: string;
   tituloPropiedadNumber: string;
   tituloPropiedadIssuedAt: string;
@@ -65,6 +66,7 @@ interface FormErrors {
   vehicleColor?: string;
   vehicleYear?: string;
   licensePlate?: string;
+  capacity?: string;
   cooperativeUuid?: string;
   tituloPropiedadNumber?: string;
   tituloPropiedadIssuedAt?: string;
@@ -96,6 +98,7 @@ export default function RegisterVehicleScreen() {
     vehicleColor: '',
     vehicleYear: '',
     licensePlate: '',
+    capacity: '',
     cooperativeUuid: '',
     tituloPropiedadNumber: '',
     tituloPropiedadIssuedAt: '',
@@ -184,6 +187,13 @@ export default function RegisterVehicleScreen() {
 
     if (!form.licensePlate.trim()) {
       newErrors.licensePlate = 'La placa del vehículo es requerida';
+    }
+
+    const capacityNum = parseInt(form.capacity, 10);
+    if (!form.capacity.trim()) {
+      newErrors.capacity = 'La capacidad es requerida';
+    } else if (Number.isNaN(capacityNum) || capacityNum < 1) {
+      newErrors.capacity = 'La capacidad debe ser al menos 1';
     }
 
     setErrors(newErrors);

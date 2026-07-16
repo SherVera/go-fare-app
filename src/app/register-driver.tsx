@@ -16,11 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import {
-  getBackendProfile,
-  redeemBackendInviteCode,
-  submitDriverRequest,
-} from '@/lib/api';
+import { getBackendProfile, redeemBackendInviteCode } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 interface FormFields {
@@ -137,14 +133,8 @@ export default function RegisterDriverScreen() {
         return;
       }
 
-      // 3. Registrar al conductor en el backend
-      await submitDriverRequest({
-        licenseNumber: form.licenseNumber.trim(),
-        licenseType: form.licenseType.trim(),
-        experienceYears: parseInt(form.experienceYears, 10),
-        emergencyPhone: form.emergencyPhone.trim(),
-      });
-
+      // 3. La asociación con el owner ya quedó hecha al canjear el código
+      // (paso 2). Los datos de licencia se cargan luego como documentos legales.
       Alert.alert(
         'Registro Exitoso',
         '¡Tu registro como conductor y la asociación con la flota del socio se han completado con éxito!',
