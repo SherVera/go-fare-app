@@ -39,7 +39,7 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleResetPassword = async () => {
-    const trimmedEmail = email.trim();
+    const trimmedEmail = email.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim().toLowerCase();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       Alert.alert(
@@ -118,22 +118,24 @@ export default function ForgotPasswordScreen() {
             {/* ── TÍTULOS ── */}
             <View style={[styles.titleBlock, { alignItems: 'center' }]}>
               <Text style={[styles.titleDark, { textAlign: 'center' }]}>
-                Correo
+                ¡Mensaje
               </Text>
               <Text style={[styles.titleBlue, { textAlign: 'center' }]}>
-                Enviado
+                Enviado!
               </Text>
-              <Text style={[styles.subtitle, { textAlign: 'center' }]}>
-                {`Hemos enviado un enlace de recuperación a:\n`}
+              <Text
+                style={[styles.subtitle, { textAlign: 'center', fontSize: 16 }]}
+              >
+                {`Enviamos un correo de recuperación a:\n`}
                 <Text
                   style={{
                     fontFamily: tokens.typography.fontFamily.bold,
-                    color: '#18243E',
+                    color: tokens.colors.primary,
                   }}
                 >
                   {sentEmail}
                 </Text>
-                {`\n\nHaz clic en el enlace del correo para restablecer tu contraseña.`}
+                {`\n\nPor favor, abre tu correo y haz clic en el enlace azul para crear tu nueva contraseña.`}
               </Text>
             </View>
 
@@ -141,25 +143,22 @@ export default function ForgotPasswordScreen() {
             <View style={styles.spamCard}>
               <View style={styles.spamRow}>
                 <Ionicons
-                  name="warning-outline"
-                  size={18}
+                  name="help-circle-outline"
+                  size={20}
                   color="#B45309"
                   style={{ marginRight: 10 }}
                 />
-                <Text style={styles.spamTitle}>¿No llega el correo?</Text>
+                <Text style={styles.spamTitle}>¿No encuentras el correo?</Text>
               </View>
               <Text style={styles.spamText}>
-                1. Revisa tu carpeta{' '}
-                <Text style={styles.spamBold}>Spam / Correo no deseado</Text>.
-                {'\n'}
-                2. Busca también en{' '}
-                <Text style={styles.spamBold}>Promociones</Text> (Gmail).{'\n'}
-                3. Agrega{' '}
-                <Text style={styles.spamBold}>
-                  noreply@go-fare-dev-e7501.firebaseapp.com
-                </Text>{' '}
-                a tus contactos.{'\n'}
-                4. Si sigue sin llegar, espera 1 minuto y presiona reenviar.
+                • Revisa tu carpeta de{' '}
+                <Text style={styles.spamBold}>"Correo no deseado"</Text> o{' '}
+                <Text style={styles.spamBold}>"Spam"</Text>.{'\n'}• Si usas
+                Gmail, busca en la pestaña{' '}
+                <Text style={styles.spamBold}>"Promociones"</Text>.{'\n'}• El
+                mensaje llegará bajo el nombre de{' '}
+                <Text style={styles.spamBold}>GoFare</Text>.{'\n'}• Si aún no te
+                llega, puedes pedir que te lo enviemos de nuevo abajo.
               </Text>
             </View>
 
@@ -171,7 +170,7 @@ export default function ForgotPasswordScreen() {
               ]}
               onPress={() => router.replace('/login' as any)}
             >
-              <Text style={styles.ctaText}>Ir al Login</Text>
+              <Text style={styles.ctaText}>Volver a Iniciar Sesión</Text>
               <Ionicons
                 name="arrow-forward-circle-outline"
                 size={20}
@@ -182,10 +181,10 @@ export default function ForgotPasswordScreen() {
 
             {/* ── REENVIAR CORREO ── */}
             <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>¿Aún nada? </Text>
+              <Text style={styles.registerText}>¿Aún no te llega? </Text>
               <Pressable onPress={handleResetPassword} disabled={loading}>
                 <Text style={styles.registerLink}>
-                  {loading ? 'Enviando...' : 'Reenviar correo'}
+                  {loading ? 'Enviando...' : 'Pedir nuevo correo'}
                 </Text>
               </Pressable>
             </View>
@@ -231,10 +230,10 @@ export default function ForgotPasswordScreen() {
 
           {/* ── TÍTULOS ── */}
           <View style={styles.titleBlock}>
-            <Text style={styles.titleDark}>¿Olvidaste tu</Text>
-            <Text style={styles.titleBlue}>Contraseña?</Text>
+            <Text style={styles.titleDark}>Recuperar</Text>
+            <Text style={styles.titleBlue}>Contraseña</Text>
             <Text style={styles.subtitle}>
-              {`No te preocupes. Ingresa tu correo y te enviaremos un enlace para restablecerla.`}
+              {`Escribe tu correo electrónico aquí abajo. Te enviaremos un mensaje muy sencillo para que puedas crear tu nueva contraseña.`}
             </Text>
           </View>
 
@@ -245,7 +244,7 @@ export default function ForgotPasswordScreen() {
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
-              placeholder="email@example.com"
+              placeholder="ejemplo@correo.com"
               placeholderTextColor="#B8C4D4"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -267,7 +266,7 @@ export default function ForgotPasswordScreen() {
               style={{ marginTop: 1, marginRight: 6 }}
             />
             <Text style={styles.secureText}>
-              Te enviaremos un enlace seguro para restablecer tu contraseña.
+              Este proceso es 100% seguro. Tu cuenta y saldo están protegidos.
             </Text>
           </View>
 
@@ -287,9 +286,9 @@ export default function ForgotPasswordScreen() {
               <ActivityIndicator color="#fff" />
             ) : (
               <>
-                <Text style={styles.ctaText}>Enviar Enlace</Text>
+                <Text style={styles.ctaText}>Enviar Instrucciones</Text>
                 <Ionicons
-                  name="send-outline"
+                  name="mail-unread-outline"
                   size={20}
                   color="#fff"
                   style={{ marginLeft: 10 }}
@@ -300,10 +299,15 @@ export default function ForgotPasswordScreen() {
 
           {/* ── LINK A LOGIN ── */}
           <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>¿Recuerdas tu contraseña? </Text>
-            <Pressable onPress={() => router.push('/login' as any)}>
-              <Text style={styles.registerLink}>Inicia sesión</Text>
-            </Pressable>
+            <Text style={styles.registerText}>
+              ¿Recuerdas tu contraseña?{' '}
+              <Text
+                style={styles.registerLink}
+                onPress={() => router.push('/login' as any)}
+              >
+                Inicia sesión
+              </Text>
+            </Text>
           </View>
 
           {/* ── FOOTER ── */}

@@ -140,8 +140,8 @@ export default function PayTripScreen() {
 
         if (!preview.sufficient) {
           Alert.alert(
-            'Fares Insuficientes',
-            `No tienes fares disponibles para este viaje.\nTu Saldo: ${preview.balanceFares.toFixed(2)} fares\n\n¿Deseas comprar más fares ahora?`,
+            'Tickets Insuficientes',
+            `No tienes tickets disponibles para este viaje.\nTu Saldo: ${preview.balanceFares.toFixed(2)} tickets\n\n¿Deseas comprar más tickets ahora?`,
             [
               {
                 text: 'Cancelar',
@@ -149,7 +149,7 @@ export default function PayTripScreen() {
                 style: 'cancel',
               },
               {
-                text: 'Comprar Fares',
+                text: 'Comprar Tickets',
                 onPress: () => {
                   setScanned(false);
                   router.push('/(tabs)/topup');
@@ -430,7 +430,7 @@ export default function PayTripScreen() {
                     <View style={styles.ticketPriceRow}>
                       <Text style={styles.ticketLabel}>TARIFA (COSTO)</Text>
                       <Text style={styles.ticketPriceValue}>
-                        {routeFare.toFixed(2)} fares
+                        {routeFare.toFixed(2)} tickets
                       </Text>
                     </View>
                   </View>
@@ -455,7 +455,7 @@ export default function PayTripScreen() {
 
                     <View style={styles.ticketInfoRow}>
                       <Text style={styles.ticketInfoLabel}>
-                        FARES DISPONIBLES
+                        TICKETS DISPONIBLES
                       </Text>
                       <Text
                         style={[
@@ -463,13 +463,13 @@ export default function PayTripScreen() {
                           balance === 0 && { color: '#EF4444' },
                         ]}
                       >
-                        {balance.toFixed(2)} fares
+                        {balance.toFixed(2)} tickets
                       </Text>
                     </View>
 
                     <View style={styles.ticketInfoRow}>
                       <Text style={styles.ticketInfoLabel}>
-                        FARES RESTANTES
+                        TICKETS RESTANTES
                       </Text>
                       <Text
                         style={[
@@ -480,7 +480,7 @@ export default function PayTripScreen() {
                           },
                         ]}
                       >
-                        {Math.max(0, balance - routeFare).toFixed(2)} fares
+                        {Math.max(0, balance - routeFare).toFixed(2)} tickets
                       </Text>
                     </View>
                   </View>
@@ -576,11 +576,11 @@ export default function PayTripScreen() {
                     </View>
 
                     <View style={styles.ticketPriceRow}>
-                      <Text style={styles.ticketLabel}>FARE USADO</Text>
+                      <Text style={styles.ticketLabel}>TICKET USADO</Text>
                       <Text
                         style={[styles.ticketPriceValue, { color: '#10B981' }]}
                       >
-                        {routeFare.toFixed(2)} fares
+                        {routeFare.toFixed(2)} tickets
                       </Text>
                     </View>
                   </View>

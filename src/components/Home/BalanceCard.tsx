@@ -19,15 +19,14 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
     >
       <View style={styles.topRow}>
         <View>
-          <Text style={styles.label}>FARES DISPONIBLES</Text>
+          <Text style={styles.label}>TICKETS DISPONIBLES</Text>
           <View style={styles.balanceRow}>
             <Text style={styles.balance}>{currentBalance.toFixed(2)}</Text>
             <Text style={styles.currency}>
               {' '}
-              {currentBalance === 1 ? 'fare' : 'fares'}
+              {currentBalance === 1 ? 'ticket' : 'tickets'}
             </Text>
           </View>
-          <Text style={styles.subLabel}>Toca para comprar más →</Text>
         </View>
         <Pressable
           style={styles.buyButton}

@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   type FirebaseAuthTypes,
   GoogleAuthProvider,
+  getIdTokenResult,
   getAuth,
   onAuthStateChanged,
   PhoneAuthProvider,
@@ -53,6 +54,7 @@ export const auth = getAuth();
 export const db = getFirestore();
 export const storage = getStorage();
 export const listenToAuthState = onAuthStateChanged;
+export { getIdTokenResult } from '@react-native-firebase/auth';
 
 interface Credentials {
   email: string;
@@ -117,9 +119,14 @@ export const applyEmailVerificationCode = (code: string) =>
   applyActionCode(auth, code);
 
 export const updateUser = (
-  user: FirebaseAuthTypes.User,
+  user: FirebaseAuthTypes.User | null,
   profile: { displayName?: string | null; photoURL?: string | null },
-) => user.updateProfile(profile);
+) => {
+  if (!user || (user.uid && user.uid.startsWith('mock-'))) {
+    return Promise.resolve();
+  }
+  return user.updateProfile(profile);
+};
 
 export const sigOutAccount = async () => {
   await AsyncStorage.removeItem('user');

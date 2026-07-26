@@ -12,9 +12,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { EditProfileModal } from '@/components/EditProfileModal';
+import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import type {
   ProfileInfoCard,
   ProfileMenuItem,
@@ -30,6 +33,8 @@ import { tokens } from '@/theme/tokens';
 
 export default function ProfileScreen() {
   const [loggingOut, setLoggingOut] = useState(false);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const router = useRouter();
 
@@ -37,10 +42,12 @@ export default function ProfileScreen() {
     const user = auth.currentUser;
     if (user) {
       // 1. Cargar desde la caché local de forma instantánea
+      let cachedData: any = null;
       try {
         const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
         if (cached) {
-          setUserProfile(JSON.parse(cached));
+          cachedData = JSON.parse(cached);
+          setUserProfile(cachedData);
         }
       } catch (cacheErr) {
         console.warn('[Profile] Error al cargar caché del perfil:', cacheErr);
@@ -62,18 +69,28 @@ export default function ProfileScreen() {
           backendUuid: backendUser.id,
           fullName:
             backendUser.displayName ||
+            cachedData?.displayName ||
+            cachedData?.fullName ||
             `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
             'Usuario',
           displayName:
             backendUser.displayName ||
+            cachedData?.displayName ||
             `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
             'Usuario',
-          idNumber: backendUser.nationalId || 'V-00000000',
-          email: backendUser.email,
-          phoneNumber: backendUser.phoneNumber || '',
+          idNumber:
+            backendUser.nationalId ||
+            cachedData?.nationalId ||
+            cachedData?.idNumber ||
+            'V-00000000',
+          email: backendUser.email || cachedData?.email,
+          phoneNumber:
+            backendUser.phoneNumber || cachedData?.phoneNumber || '',
           balance: fareAccountBalance,
           photoURL:
-            backendUser.profilePhoto || 'https://i.pravatar.cc/150?img=11',
+            backendUser.profilePhoto ||
+            cachedData?.photoURL ||
+            'https://i.pravatar.cc/150?img=11',
           city: 'Caracas, Venezuela',
           createdAt: backendUser.createdAt,
         };
@@ -170,6 +187,13 @@ export default function ProfileScreen() {
   // Ítems del menú — tipados con ProfileMenuItem[]
   const menuItems: ProfileMenuItem[] = [
     {
+      id: 'trips',
+      title: 'Actividad de Viajes',
+      subtitle: 'Historial de viajes y boletos',
+      iconName: 'bus',
+      onPress: () => router.push('/(tabs)/trips'),
+    },
+    {
       id: 'payments',
       title: 'Métodos de Pago',
       subtitle: 'Visa, Master y Pago Móvil',
@@ -223,12 +247,14 @@ export default function ProfileScreen() {
               await AsyncStorage.removeItem('gofare_cached_user_profile');
               await AsyncStorage.removeItem('temp_auth');
               await SecureStore.deleteItemAsync('user_role');
+              await AsyncStorage.removeItem('phone_verified_bypass');
             } catch (err) {
               console.warn(
                 '[Profile] Error deleting saved credentials/cache:',
                 err,
               );
             }
+            router.replace('/login');
           } catch (error) {
             console.error('Error al cerrar sesión:', error);
             Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
@@ -259,6 +285,14 @@ export default function ProfileScreen() {
       >
         {/* ── PROFILE CARD ── */}
         <View style={styles.profileCard}>
+          <TouchableOpacity
+            style={styles.editProfileBtn}
+            onPress={() => setShowEditModal(true)}
+          >
+            <Ionicons name="create-outline" size={16} color="#FFFFFF" />
+            <Text style={styles.editProfileBtnText}>Editar</Text>
+          </TouchableOpacity>
+
           <View style={styles.avatarContainer}>
             <Image
               source={{
@@ -290,6 +324,29 @@ export default function ProfileScreen() {
                 />
                 <Text style={styles.infoValueDark}>{card.value}</Text>
               </View>
+            ) : card.type === 'phone' ? (
+              <Pressable
+                style={styles.locationRow}
+                onPress={() => setShowPhoneModal(true)}
+              >
+                <Ionicons
+                  name="call-outline"
+                  size={18}
+                  color={tokens.colors.primary}
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.infoValueBlue}>
+                  {card.value && card.value !== '...'
+                    ? card.value
+                    : 'Toca para vincular número'}
+                </Text>
+                <Ionicons
+                  name="create-outline"
+                  size={16}
+                  color={tokens.colors.primary}
+                  style={{ marginLeft: 8 }}
+                />
+              </Pressable>
             ) : (
               <Text style={styles.infoValueBlue}>{card.value}</Text>
             )}
@@ -348,6 +405,29 @@ export default function ProfileScreen() {
         {/* Space for the absolute tab bar */}
         <View style={{ height: 120 }} />
       </ScrollView>
+
+      {/* ── MODAL PARA VINCULAR Y VERIFICAR TELÉFONO VIA SMS OTP (POST /auth/phone/link) ── */}
+      <PhoneLinkModal
+        visible={showPhoneModal}
+        onClose={() => setShowPhoneModal(false)}
+        onSuccess={() => {
+          setShowPhoneModal(false);
+          fetchUserData();
+        }}
+        initialPhoneNumber={userProfile?.phoneNumber || ''}
+      />
+      {/* ── MODAL PARA EDITAR PERFIL (NOMBRES, APELLIDOS, CÉDULA) ── */}
+      <EditProfileModal
+        visible={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSuccess={() => {
+          setShowEditModal(false);
+          fetchUserData();
+        }}
+        userUuid={userProfile?.backendUuid}
+        currentFullName={userProfile?.fullName}
+        currentNationalId={userProfile?.idNumber}
+      />
     </SafeAreaView>
   );
 }
@@ -385,6 +465,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   profileCard: {
+    position: 'relative',
     backgroundColor: tokens.colors.primary,
     borderRadius: 32,
     alignItems: 'center',
@@ -396,6 +477,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 16,
     elevation: 8,
+  },
+  editProfileBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 4,
+  },
+  editProfileBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
   avatarContainer: {
     padding: 6,

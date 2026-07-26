@@ -40,6 +40,7 @@ export interface FirebaseEmailRegisterDto {
   registrationRole: 'passenger' | 'driver' | 'transport_owner';
   displayName?: string;
   phoneNumber?: string;
+  phone_number?: string;
   nationalId?: string;
 }
 

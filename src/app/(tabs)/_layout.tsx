@@ -54,6 +54,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="trips"
         options={{
+          href: null,
           title: 'VIAJES',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
@@ -67,7 +68,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="topup"
         options={{
-          title: 'FARES',
+          title: 'TICKETS',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'ticket' : 'ticket-outline'}

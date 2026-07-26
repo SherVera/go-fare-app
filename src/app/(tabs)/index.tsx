@@ -16,10 +16,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionCard } from '@/components/Home/ActionCard';
 import { BalanceCard } from '@/components/Home/BalanceCard';
-import { MapCard } from '@/components/Home/MapCard';
-import { RouteItem } from '@/components/Home/RouteItem';
+// import { MapCard } from '@/components/Home/MapCard';
+// import { RouteItem } from '@/components/Home/RouteItem';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
-import type { Route, UserProfile } from '@/interfaces';
+import type { UserProfile } from '@/interfaces';
 import {
   createFareAccount,
   getBackendProfile,
@@ -220,7 +220,7 @@ export default function HomeDashboard() {
     fetchUserData();
   };
 
-  // Rutas cercanas — tipadas con la interface Route
+  /* Rutas cercanas comentadas temporalmente
   const nearbyRoutes: Route[] = [
     {
       number: '201',
@@ -240,6 +240,7 @@ export default function HomeDashboard() {
       icon: 'flash-outline',
     },
   ];
+  */
 
   if (loading && !refreshing) {
     return (
@@ -289,17 +290,11 @@ export default function HomeDashboard() {
           <Text style={styles.greetingSub}>¿A dónde te diriges hoy?</Text>
         </View>
 
-        {/* ── BALANCE CARD ── */}
-        <BalanceCard
-          balance={userProfile?.balance ?? 0}
-          carnetId={userProfile?.carnetId || '0000 • 0000 • 0000'}
-        />
-
         {/* ── QUICK ACTIONS ── */}
         <View style={styles.actionsRow}>
           <ActionCard
-            title="Comprar Fares"
-            subtitle="Adquiere fares vía Pago Móvil o tarjeta"
+            title="Comprar Tickets"
+            subtitle="Adquiere tickets vía Pago Móvil o tarjeta"
             icon="ticket"
             onPress={() => router.push('/topup')}
           />
@@ -312,7 +307,13 @@ export default function HomeDashboard() {
           />
         </View>
 
-        {/* ── ROUTES SECTION ── */}
+        {/* ── BALANCE CARD ── */}
+        <BalanceCard
+          balance={userProfile?.balance ?? 0}
+          carnetId={userProfile?.carnetId || '0000 • 0000 • 0000'}
+        />
+
+        {/* ── ROUTES SECTION (Comentado) ──
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Rutas Cercanas</Text>
           <Pressable>
@@ -333,9 +334,11 @@ export default function HomeDashboard() {
             icon={route.icon}
           />
         ))}
+        */}
 
-        {/* ── MAP SECTION ── */}
+        {/* ── MAP SECTION (Comentado) ──
         <MapCard />
+        */}
 
         {/* Padding for tab bar */}
         <View style={{ height: 100 }} />
@@ -398,6 +401,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 24,
     paddingTop: 24,
+    paddingBottom: 40,
   },
   greetingSection: {
     marginBottom: 24,

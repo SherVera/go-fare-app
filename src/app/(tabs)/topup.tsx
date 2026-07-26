@@ -26,10 +26,10 @@ import {
 import { tokens } from '@/theme/tokens';
 
 const RECHARGE_PACKAGES_BLUEPRINT = [
-  { tickets: 1, discount: 0, tag: null, label: '1 Fare' },
-  { tickets: 2, discount: 0, tag: null, label: '2 Fares' },
-  { tickets: 5, discount: 0, tag: null, label: '5 Fares' },
-  { tickets: 10, discount: 0, tag: 'POPULAR', label: '10 Fares' },
+  { tickets: 1, discount: 0, tag: null, label: '1 Ticket' },
+  { tickets: 2, discount: 0, tag: null, label: '2 Tickets' },
+  { tickets: 5, discount: 0, tag: null, label: '5 Tickets' },
+  { tickets: 10, discount: 0, tag: 'POPULAR', label: '10 Tickets' },
 ];
 
 const PAYMENT_METHODS: PaymentMethod[] = [
@@ -294,7 +294,7 @@ export default function TopUpBalanceScreen() {
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={tokens.colors.primary} />
         </Pressable>
-        <Text style={styles.headerTitle}>Comprar Fares</Text>
+        <Text style={styles.headerTitle}>Comprar Tickets</Text>
       </View>
 
       <ScrollView
@@ -318,7 +318,7 @@ export default function TopUpBalanceScreen() {
         >
           <View style={styles.ticketCardTop}>
             <View>
-              <Text style={styles.ticketCardLabel}>FARES DISPONIBLES</Text>
+              <Text style={styles.ticketCardLabel}>TICKETS DISPONIBLES</Text>
               {loadingBalance ? (
                 <ActivityIndicator
                   size="small"
@@ -331,8 +331,8 @@ export default function TopUpBalanceScreen() {
               <Text style={styles.ticketCardSub}>
                 {balance.toFixed(2)}{' '}
                 {balance === 1
-                  ? 'fare activo listo para usar'
-                  : 'fares activos listos para usar'}
+                  ? 'ticket activo listo para usar'
+                  : 'tickets activos listos para usar'}
               </Text>
             </View>
             <View style={styles.ticketIconWrapper}>
@@ -353,8 +353,8 @@ export default function TopUpBalanceScreen() {
               color="rgba(255,255,255,0.7)"
             />
             <Text style={styles.ticketCardNote}>
-              {'  '}Los fares son divisibles y se descuentan según la tarifa de
-              la ruta.
+              {'  '}Los tickets son divisibles y se descuentan según la tarifa
+              de la ruta.
             </Text>
           </View>
         </LinearGradient>
@@ -505,7 +505,7 @@ export default function TopUpBalanceScreen() {
             style={{ marginRight: 8 }}
           />
           <Text style={styles.mainButtonText}>
-            Comprar Fares — Bs.{' '}
+            Comprar Tickets — Bs.{' '}
             {selectedPkg.amount.toFixed(2).replace('.', ',')}
           </Text>
         </Pressable>
@@ -555,7 +555,7 @@ export default function TopUpBalanceScreen() {
                   />
                   <View style={{ marginLeft: 12 }}>
                     <Text style={styles.purchaseSummaryTitle}>
-                      Compra de Fares
+                      Compra de Tickets
                     </Text>
                     <Text style={styles.purchaseSummaryPrice}>
                       {selectedPkg.label}
