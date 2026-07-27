@@ -62,12 +62,12 @@ export default function HomeDashboard() {
         // Si no existe la cuenta de tarifa, la creamos
         try {
           fareAccount = await createFareAccount(backendUser.id);
-        } catch (createError: any) {
+        } catch (createError: unknown) {
           console.error(
             '[Home] Error al crear la cuenta de tarifa:',
             createError,
           );
-          const errMsg = createError?.message || '';
+          const errMsg = (createError as { message?: string })?.message || '';
           if (
             errMsg.includes('phone/link') ||
             errMsg.includes('phone number') ||

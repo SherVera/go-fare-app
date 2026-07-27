@@ -39,7 +39,10 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleResetPassword = async () => {
-    const trimmedEmail = email.replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim().toLowerCase();
+    const trimmedEmail = email
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+      .trim()
+      .toLowerCase();
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       Alert.alert(

@@ -141,7 +141,10 @@ export function EditProfileModal({
       onClose();
     } catch (error: any) {
       console.error('[EditProfileModal] Error al guardar perfil:', error);
-      Alert.alert('Error', error?.message || 'No se pudo actualizar el perfil.');
+      Alert.alert(
+        'Error',
+        error?.message || 'No se pudo actualizar el perfil.',
+      );
     } finally {
       setLoading(false);
     }

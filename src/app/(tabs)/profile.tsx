@@ -84,8 +84,7 @@ export default function ProfileScreen() {
             cachedData?.idNumber ||
             'V-00000000',
           email: backendUser.email || cachedData?.email,
-          phoneNumber:
-            backendUser.phoneNumber || cachedData?.phoneNumber || '',
+          phoneNumber: backendUser.phoneNumber || cachedData?.phoneNumber || '',
           balance: fareAccountBalance,
           photoURL:
             backendUser.profilePhoto ||

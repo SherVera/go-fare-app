@@ -173,7 +173,9 @@ function buildVerificationEmailHtml(
 /**
  * Obtiene el enlace de recuperación de contraseña de Firebase vía REST.
  */
-async function fetchFirebasePasswordResetLink(email: string): Promise<string | null> {
+async function fetchFirebasePasswordResetLink(
+  email: string,
+): Promise<string | null> {
   try {
     const apiKey =
       process.env.EXPO_PUBLIC_FIREBASE_API_KEY_IOS ||
@@ -254,7 +256,9 @@ async function fetchFirebaseEmailVerificationLink(
 /**
  * Envía el correo de recuperación de contraseña utilizando exclusivamente Resend (api.resend.com).
  */
-export async function sendPasswordResetWithResend(email: string): Promise<void> {
+export async function sendPasswordResetWithResend(
+  email: string,
+): Promise<void> {
   const trimmedEmail = email.trim().toLowerCase();
 
   const apiKeyToUse = RESEND_API_KEY?.trim();
@@ -290,7 +294,10 @@ export async function sendPasswordResetWithResend(email: string): Promise<void> 
 
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({}));
-    console.error('[Resend] Error devuelto por la API de Resend:', errorPayload);
+    console.error(
+      '[Resend] Error devuelto por la API de Resend:',
+      errorPayload,
+    );
     throw new Error(
       errorPayload?.message ||
         errorPayload?.error ||
@@ -318,7 +325,10 @@ export async function sendVerificationEmailWithResend(
   }
 
   const tokenToUse = idToken || (await auth.currentUser?.getIdToken());
-  let actionLink = await fetchFirebaseEmailVerificationLink(tokenToUse, trimmedEmail);
+  let actionLink = await fetchFirebaseEmailVerificationLink(
+    tokenToUse,
+    trimmedEmail,
+  );
 
   if (!actionLink) {
     actionLink = `https://gofare-app.firebaseapp.com/__/auth/action?mode=verifyEmail&email=${encodeURIComponent(trimmedEmail)}`;
@@ -343,7 +353,10 @@ export async function sendVerificationEmailWithResend(
 
   if (!response.ok) {
     const errorPayload = await response.json().catch(() => ({}));
-    console.error('[Resend] Error devuelto por la API de Resend:', errorPayload);
+    console.error(
+      '[Resend] Error devuelto por la API de Resend:',
+      errorPayload,
+    );
     throw new Error(
       errorPayload?.message ||
         errorPayload?.error ||
