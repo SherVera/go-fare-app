@@ -37,6 +37,7 @@
         "noDuplicateJsxProps": "error",
         "noDuplicateObjectKeys": "error",
         "noDuplicateParameters": "error",
+        "noExplicitAny": "warn",
         "noRedeclare": "warn",
         "noUnsafeNegation": "warn",
         "noUnusedExpressions": "warn",

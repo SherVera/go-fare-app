@@ -250,7 +250,7 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
-    const trimmedEmail = email.trim();
+    const trimmedEmail = email.trim().toLowerCase();
     const trimmedPassword = password.trim();
 
     // Validaciones básicas de formato
@@ -271,6 +271,8 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
+      await AsyncStorage.removeItem('phone_verified_bypass');
+      await AsyncStorage.setItem('auth_method', 'email');
 
       // Autenticar con Firebase
       const userCredential = await signIn({
@@ -302,15 +304,22 @@ export default function LoginScreen() {
       try {
         const response = await syncWithBackend(currentUser);
         backendUser = response.user;
-      } catch (backendError) {
+      } catch (backendError: any) {
         console.warn('[backend] sync failed:', backendError);
         // Cerrar sesión localmente en Firebase para mantener consistencia
         try {
           await sigOutAccount();
         } catch {}
+        const rawMsg = backendError?.message || '';
+        const isNetworkErr =
+          rawMsg.includes('red') ||
+          rawMsg.includes('Network') ||
+          rawMsg.includes('Failed to fetch') ||
+          rawMsg.includes('connect');
         Alert.alert(
-          'Error de Conexión',
-          'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.',
+          isNetworkErr ? 'Error de Conexión' : 'Atención',
+          rawMsg ||
+            'No se pudo conectar con el servidor para sincronizar tu cuenta.',
         );
         setLoading(false);
         return; // Detener flujo de inicio de sesión!
@@ -661,39 +670,6 @@ export default function LoginScreen() {
               <Text style={styles.socialBtnText}>Continuar con Google</Text>
             </Pressable>
           )}
-
-          {/* ── LINK A REGISTRO ── */}
-          <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>¿No tienes una cuenta? </Text>
-            <Pressable onPress={() => router.push('/register' as any)}>
-              <Text style={styles.registerLink}>Regístrate</Text>
-            </Pressable>
-          </View>
-
-          {/* ── LINK REGISTRO DUEÑO VEHÍCULO ── */}
-          <View
-            style={[
-              styles.registerContainer,
-              { marginTop: -20, marginBottom: 28 },
-            ]}
-          >
-            <Text style={styles.registerText}>¿Eres dueño de vehículo? </Text>
-            <Pressable
-              onPress={() => router.push('/register-vehicle-owner' as any)}
-            >
-              <Text style={styles.registerLink}>Envía tu solicitud aquí</Text>
-            </Pressable>
-          </View>
-
-          {/* ── FOOTER ── */}
-          <View style={styles.footerRow}>
-            <Text style={styles.footerHelp}>¿Necesitas ayuda?</Text>
-            <Text style={styles.footerBullet}> • </Text>
-            <Text style={styles.footerSupport}>Soporte Técnico</Text>
-          </View>
-          <Text style={styles.footerLegal}>
-            CARACAS MOVE • VERIFICACIÓN SEGURA
-          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -1,6 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -25,15 +26,18 @@ import {
   resolveRoleUuid,
   sendFirebaseVerificationEmail,
   updateBackendProfile,
+  updateOwnNationalId,
 } from '@/lib/api';
 import { auth, signIn } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  // Estado del formulario — tipado por RegisterFormState
-  const [fullName, setFullName] = useState<RegisterFormState['fullName']>('');
+  // Estado del formulario
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const registrationRole = 'passenger';
+  const [nationality, setNationality] = useState<'V' | 'E'>('V');
   const [idNumber, setIdNumber] = useState<RegisterFormState['idNumber']>('');
   const [email, setEmail] = useState<RegisterFormState['email']>('');
   const [password, setPassword] = useState<RegisterFormState['password']>('');
@@ -46,7 +50,8 @@ export default function RegisterScreen() {
 
   // Estado para los errores de validación de campos
   const [errors, setErrors] = useState<{
-    fullName?: string;
+    firstName?: string;
+    lastName?: string;
     idNumber?: string;
     phoneNumber?: string;
     email?: string;
@@ -64,17 +69,36 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     if (registerInFlightRef.current) return;
 
-    const trimmedFullName = fullName.trim();
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
     const trimmedIdNumber = idNumber.trim();
-    const trimmedEmail = email.trim();
+    const trimmedEmail = email
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+      .trim()
+      .toLowerCase();
     const trimmedPassword = password.trim();
     const trimmedPhoneNumber = phoneNumber.trim();
+
+    // Sanitización y armado de datos
+    const finalIdNumber = `${nationality}-${trimmedIdNumber}`;
+    const cleanedPhone = trimmedPhoneNumber.replace(/[^0-9]/g, '');
+    const finalPhoneDigits = cleanedPhone.startsWith('0')
+      ? cleanedPhone.slice(1)
+      : cleanedPhone;
+
+    // Calcular el displayName (primer nombre + primer apellido)
+    const getFirstWord = (str: string) => str.split(/\s+/)[0] || '';
+    const calculatedDisplayName =
+      `${getFirstWord(trimmedFirstName)} ${getFirstWord(trimmedLastName)}`.trim();
 
     // Validaciones básicas de frontend
     const newErrors: typeof errors = {};
 
-    if (trimmedFullName.length < 3) {
-      newErrors.fullName = 'El nombre debe tener al menos 3 caracteres.';
+    if (trimmedFirstName.length < 2) {
+      newErrors.firstName = 'El nombre debe tener al menos 2 caracteres.';
+    }
+    if (trimmedLastName.length < 2) {
+      newErrors.lastName = 'El apellido debe tener al menos 2 caracteres.';
     }
     if (!/^\d{5,10}$/.test(trimmedIdNumber)) {
       newErrors.idNumber = 'La cédula debe contener entre 5 y 10 dígitos.';
@@ -82,9 +106,9 @@ export default function RegisterScreen() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       newErrors.email = 'Por favor, ingresa un correo electrónico válido.';
     }
-    if (!/^((04|02)\d{9}|\+\d{10,15})$/.test(trimmedPhoneNumber)) {
+    if (!/^\d{9,10}$/.test(finalPhoneDigits)) {
       newErrors.phoneNumber =
-        'Por favor, ingresa un número de teléfono válido (ej. 04120000000).';
+        'Por favor, ingresa un número de teléfono de 10 dígitos (ej. 412 000 0000).';
     }
     if (trimmedPassword.length < 6) {
       newErrors.password = 'La contraseña debe tener al menos 6 caracteres.';
@@ -100,131 +124,108 @@ export default function RegisterScreen() {
     setLoading(true);
 
     try {
-      const formattedPhoneNumber = trimmedPhoneNumber.startsWith('+')
-        ? trimmedPhoneNumber
-        : trimmedPhoneNumber.startsWith('0')
-          ? `+58${trimmedPhoneNumber.slice(1)}`
-          : `+58${trimmedPhoneNumber}`;
+      const formattedPhoneNumber = `+58${finalPhoneDigits}`;
 
-      // 1. Registrar usuario en Firebase Auth via el backend.
-      // El backend crea el usuario, asigna el rol solicitado y devuelve idToken + refreshToken.
-      // Omitimos displayName y phoneNumber ya que no son permitidos en el DTO de registro inicial del servidor.
+      // 1. Registrar usuario en Firebase Auth via el backend (asigna claims gf_registration_role y gf_national_id)
       const credentials = await registerWithEmail({
         email: trimmedEmail,
         password: trimmedPassword,
         registrationRole,
-        nationalId: trimmedIdNumber,
+        nationalId: finalIdNumber,
       });
 
-      // 2. Guardar perfil pendiente en AsyncStorage de forma asíncrona pero sin bloquear la redirección
-      try {
-        const pendingProfile = {
-          fullName: trimmedFullName,
-          phoneNumber: formattedPhoneNumber,
-          idNumber: trimmedIdNumber,
-        };
-        await AsyncStorage.setItem(
-          'gofare_pending_profile',
-          JSON.stringify(pendingProfile),
-        );
-      } catch (storageErr) {
-        console.warn('[Register] Error saving pending profile:', storageErr);
-      }
-
-      // 3. Firmar sesión local para que el SDK nativo tenga la sesión activa de cara al polling y verificación
+      // 2. Firmar sesión local de Firebase Auth nativo para inicializar currentUser
       await signIn({
         email: trimmedEmail,
         password: trimmedPassword,
       });
 
-      // 4. Sincronizar en segundo plano la base de datos de inmediato (sin bloquear la interfaz del usuario)
-      (async () => {
-        try {
-          const parts = trimmedFullName.split(/\s+/);
-          const firstName = parts[0] || '';
-          const lastName = parts.slice(1).join(' ') || '';
-
-          // Intentar crear el usuario directamente en PostgreSQL primero para persistir el número de teléfono
-          try {
-            const roleUuid = await resolveRoleUuid(registrationRole);
-            await createBackendUser({
-              provider: 'local',
-              providerId: credentials.localId || auth.currentUser?.uid || '',
-              email: trimmedEmail,
-              phoneNumber: formattedPhoneNumber || undefined,
-              firstName,
-              lastName,
-              displayName: trimmedFullName,
-              roleIds: roleUuid ? [roleUuid] : [],
-            });
-            console.log(
-              '[Register Background Sync] Usuario creado en PostgreSQL con teléfono exitosamente.',
-            );
-          } catch (createErr) {
-            console.log(
-              '[Register Background Sync] createBackendUser omitido o ya creado:',
-              createErr,
-            );
-          }
-
-          // Intercambiar el token para iniciar sesión en el backend y obtener el backendUser
-          const { user: backendUser } = await loginWithFirebaseToken(
-            credentials.idToken,
-          );
-
-          // Guardar los datos en PostgreSQL de inmediato
-          await updateBackendProfile(backendUser.id, {
-            displayName: trimmedFullName,
-            firstName,
-            lastName,
-            phoneNumber: formattedPhoneNumber,
-            nationalId: trimmedIdNumber,
-          });
-
-          // Crear la billetera del usuario
-          await createFareAccount(backendUser.id);
-          console.log(
-            '[Register Background Sync] Perfil y cuenta de tarifa guardados en base de datos con éxito.',
-          );
-        } catch (bgErr) {
-          console.warn(
-            '[Register Background Sync] Error al sincronizar datos en base de datos:',
-            bgErr,
-          );
-        }
-      })();
-
-      // 5. Enviar el correo de verificación via el backend (usa el idToken ya obtenido).
-      try {
-        await sendFirebaseVerificationEmail(credentials.idToken);
-      } catch (emailError: any) {
-        console.warn('Verification email error:', emailError);
+      const loggedUser = auth.currentUser;
+      if (!loggedUser) {
+        throw new Error('No se pudo establecer la sesión en el dispositivo.');
       }
 
-      // 5. Redirigir de inmediato a la pantalla dedicada de verificación
-      router.replace({
-        pathname: '/verify-email',
-        params: {
-          email: trimmedEmail,
-          fullName: trimmedFullName,
+      // 3. Intercambiar token de Firebase por JWT de GoFare (el backend crea/recupera el usuario en PostgreSQL)
+      const idToken = await loggedUser.getIdToken();
+      const { user: backendUser } = await loginWithFirebaseToken(idToken);
+
+      // 5. Guardar/actualizar la cédula (nationalId) explícitamente via PATCH /auth/me/national-id
+      try {
+        await updateOwnNationalId(finalIdNumber);
+        console.log(
+          '[Register] Cédula guardada exitosamente con PATCH /auth/me/national-id',
+        );
+      } catch (natErr) {
+        console.warn('[Register] Error al actualizar nationalId:', natErr);
+      }
+
+      // 6. Actualizar perfil en el backend (nombres y apellidos)
+      try {
+        await updateBackendProfile(backendUser.id, {
+          displayName: calculatedDisplayName,
+          firstName: trimmedFirstName,
+          lastName: trimmedLastName,
           phoneNumber: formattedPhoneNumber,
-          idNumber: trimmedIdNumber,
-        },
-      } as any);
+          nationalId: finalIdNumber,
+        });
+      } catch (profErr) {
+        console.warn('[Register] Error al actualizar perfil:', profErr);
+      }
+
+      // 7. Crear la cuenta de tarifa/billetera
+      try {
+        await createFareAccount(backendUser.id);
+        console.log('[Register] Cuenta de tarifa creada con éxito.');
+      } catch (bgErr) {
+        console.warn('[Register] Error al crear la cuenta de tarifa:', bgErr);
+      }
+
+      // 8. Guardar perfil completo en el caché local
+      try {
+        const profileCache = {
+          displayName: calculatedDisplayName,
+          fullName: calculatedDisplayName,
+          firstName: trimmedFirstName,
+          lastName: trimmedLastName,
+          idNumber: finalIdNumber,
+          nationalId: finalIdNumber,
+          phoneNumber: formattedPhoneNumber,
+          email: trimmedEmail,
+          onboardingCompleted: true,
+        };
+        await AsyncStorage.setItem(
+          'gofare_cached_user_profile',
+          JSON.stringify(profileCache),
+        );
+        await SecureStore.setItemAsync('user_role', 'passenger');
+        await AsyncStorage.setItem('phone_verified_bypass', 'true');
+      } catch (storageErr) {
+        console.warn('[Register] Error saving profile cache:', storageErr);
+      }
+
+      // 9. Redirigir de inmediato al Home (tabs)
+      router.replace('/(tabs)' as any);
     } catch (error: any) {
       console.warn('Registration error:', error);
       const serverErrors: typeof errors = {};
       const errorMsg = error.message || '';
 
       if (
-        error.code === 'auth/email-already-in-use' ||
-        errorMsg.toLowerCase().includes('email') ||
-        errorMsg.toLowerCase().includes('correo')
+        error.code === 'auth/invalid-email' ||
+        errorMsg.toLowerCase().includes('email must be an email') ||
+        errorMsg.toLowerCase().includes('invalid email')
       ) {
-        serverErrors.email = 'El correo electrónico ya está registrado.';
-      } else if (error.code === 'auth/invalid-email') {
         serverErrors.email =
           'El correo electrónico tiene un formato incorrecto.';
+      } else if (
+        error.code === 'auth/email-already-in-use' ||
+        errorMsg.toLowerCase().includes('already-in-use') ||
+        errorMsg.toLowerCase().includes('already exists') ||
+        errorMsg.toLowerCase().includes('ya existe') ||
+        errorMsg.toLowerCase().includes('correo ya esta registrado') ||
+        errorMsg.toLowerCase().includes('correo ya está registrado')
+      ) {
+        serverErrors.email = 'El correo electrónico ya está registrado.';
       } else if (error.code === 'auth/weak-password') {
         serverErrors.password =
           'La contraseña es muy débil (mínimo 6 caracteres).';
@@ -311,44 +312,92 @@ export default function RegisterScreen() {
             </Text>
           </View>
 
-          <Text style={styles.inputLabel}>NOMBRE COMPLETO</Text>
+          <Text style={styles.inputLabel}>NOMBRES</Text>
           <View
-            style={[styles.inputCard, errors.fullName && styles.inputCardError]}
+            style={[
+              styles.inputCard,
+              errors.firstName && styles.inputCardError,
+            ]}
           >
             <Ionicons
               name="person-outline"
               size={20}
-              color={errors.fullName ? '#EF4444' : '#3072ffe7'}
+              color={errors.firstName ? '#EF4444' : '#3072ffe7'}
             />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
-              placeholder="ej. Carlos Pérez"
+              placeholder="ej. Carlos"
               placeholderTextColor="#B8C4D4"
-              value={fullName}
+              value={firstName}
               onChangeText={(text) => {
-                setFullName(text);
-                if (errors.fullName) {
-                  setErrors((prev) => ({ ...prev, fullName: undefined }));
+                setFirstName(text);
+                if (errors.firstName) {
+                  setErrors((prev) => ({ ...prev, firstName: undefined }));
                 }
               }}
               selectionColor={tokens.colors.primary}
               editable={!loading}
             />
           </View>
-          {errors.fullName && (
-            <Text style={styles.errorText}>{errors.fullName}</Text>
+          {errors.firstName && (
+            <Text style={styles.errorText}>{errors.firstName}</Text>
+          )}
+
+          <Text style={styles.inputLabel}>APELLIDOS</Text>
+          <View
+            style={[styles.inputCard, errors.lastName && styles.inputCardError]}
+          >
+            <Ionicons
+              name="person-outline"
+              size={20}
+              color={errors.lastName ? '#EF4444' : '#3072ffe7'}
+            />
+            <View style={styles.divider} />
+            <TextInput
+              style={styles.input}
+              placeholder="ej. Pérez"
+              placeholderTextColor="#B8C4D4"
+              value={lastName}
+              onChangeText={(text) => {
+                setLastName(text);
+                if (errors.lastName) {
+                  setErrors((prev) => ({ ...prev, lastName: undefined }));
+                }
+              }}
+              selectionColor={tokens.colors.primary}
+              editable={!loading}
+            />
+          </View>
+          {errors.lastName && (
+            <Text style={styles.errorText}>{errors.lastName}</Text>
           )}
 
           <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
           <View
             style={[styles.inputCard, errors.idNumber && styles.inputCardError]}
           >
-            <Text
-              style={[styles.prefix, errors.idNumber && { color: '#EF4444' }]}
+            <Pressable
+              onPress={() => {
+                if (!loading) {
+                  setNationality((prev) => (prev === 'V' ? 'E' : 'V'));
+                }
+              }}
+              style={styles.nationalitySelector}
+              hitSlop={10}
             >
-              V-
-            </Text>
+              <Text
+                style={[styles.prefix, errors.idNumber && { color: '#EF4444' }]}
+              >
+                {nationality}-
+              </Text>
+              <Ionicons
+                name="chevron-down"
+                size={10}
+                color="#8594AB"
+                style={{ marginLeft: 2, marginTop: 1 }}
+              />
+            </Pressable>
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -378,25 +427,28 @@ export default function RegisterScreen() {
               errors.phoneNumber && styles.inputCardError,
             ]}
           >
-            <Ionicons
-              name="call-outline"
-              size={20}
-              color={errors.phoneNumber ? '#EF4444' : '#3072ffe7'}
-            />
+            <View style={styles.countryPicker}>
+              <Text style={styles.flagText}>🇻🇪</Text>
+              <Text style={styles.countryCodeText}>+58</Text>
+            </View>
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
-              placeholder="04120000000"
+              placeholder="412 000 0000"
               placeholderTextColor="#B8C4D4"
               keyboardType="phone-pad"
               value={phoneNumber}
               onChangeText={(text) => {
-                setPhoneNumber(text);
+                const cleaned = text.replace(/[^0-9]/g, '');
+                const finalDigits = cleaned.startsWith('0')
+                  ? cleaned.slice(1)
+                  : cleaned;
+                setPhoneNumber(finalDigits);
                 if (errors.phoneNumber) {
                   setErrors((prev) => ({ ...prev, phoneNumber: undefined }));
                 }
               }}
-              maxLength={11}
+              maxLength={10}
               selectionColor={tokens.colors.primary}
               editable={!loading}
             />
@@ -515,10 +567,15 @@ export default function RegisterScreen() {
 
           {/* ── LINK A LOGIN ── */}
           <View style={styles.registerContainer}>
-            <Text style={styles.registerText}>¿Ya tienes una cuenta? </Text>
-            <Pressable onPress={() => router.push('/login' as any)}>
-              <Text style={styles.registerLink}>Inicia sesión</Text>
-            </Pressable>
+            <Text style={styles.registerText}>
+              ¿Ya tienes una cuenta?{' '}
+              <Text
+                style={styles.registerLink}
+                onPress={() => router.push('/login' as any)}
+              >
+                Inicia sesión
+              </Text>
+            </Text>
           </View>
 
           {/* ── FOOTER ── */}
@@ -779,5 +836,25 @@ const styles = StyleSheet.create({
   },
   roleButtonTextActive: {
     color: '#FFFFFF',
+  },
+  nationalitySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 4,
+  },
+  countryPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 4,
+  },
+  flagText: {
+    fontSize: 20,
+    marginRight: 6,
+    lineHeight: 24,
+  },
+  countryCodeText: {
+    fontSize: 16,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#18243E',
   },
 });

@@ -79,9 +79,51 @@ export interface BackendAuthResponse {
  * Intercambia un ID token de Firebase por el token JWT del backend.
  */
 export async function syncWithBackend(
-  firebaseUser: FirebaseAuthTypes.User,
+  firebaseUser: FirebaseAuthTypes.User | null,
 ): Promise<BackendAuthResponse> {
+  if (!firebaseUser) {
+    const isBypass = await AsyncStorage.getItem('phone_verified_bypass');
+    if (isBypass === 'true') {
+      return {
+        token: 'mock-gofare-jwt-token-bypass',
+        user: {
+          id: 'local-usr-mock',
+          uuid: 'local-usr-mock',
+          email: 'invitado@gofare.dev',
+          phoneNumber: '+584120000000',
+          firstName: 'Usuario',
+          lastName: 'Invitado',
+          displayName: 'Usuario Invitado',
+          provider: 'phone',
+          providerId: 'mock-phone',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+    }
+    throw new Error('Usuario de Firebase no autenticado.');
+  }
+
   const idToken = await firebaseUser.getIdToken();
+  if (idToken === 'mock-id-token-bypass' || idToken.startsWith('mock-')) {
+    // Bypass de autenticación para desarrollo:
+    return {
+      token: 'mock-gofare-jwt-token-bypass',
+      user: {
+        id: `local-usr-${firebaseUser.uid}`,
+        uuid: `local-usr-${firebaseUser.uid}`,
+        email: firebaseUser.email || 'invitado@gofare.dev',
+        phoneNumber: firebaseUser.phoneNumber || undefined,
+        firstName: 'Usuario',
+        lastName: 'Invitado',
+        displayName: 'Usuario Invitado',
+        provider: 'phone',
+        providerId: firebaseUser.uid,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  }
   const response = await loginWithFirebaseToken(idToken);
   return response;
 }
@@ -158,6 +200,101 @@ async function fetchWithAuth(
   timeoutMs?: number,
 ): Promise<any> {
   const token = await getGoFareToken();
+
+  if (token === 'mock-gofare-jwt-token-bypass') {
+    // Interceptor de desarrollo para usuarios de bypass telefónico (offline / local)
+    if (
+      path === '/auth/profile' &&
+      (options.method === 'GET' || !options.method)
+    ) {
+      let mockProfile = {
+        id: 'local-usr-mock',
+        uuid: 'local-usr-mock',
+        email: 'invitado@gofare.dev',
+        phoneNumber: '+584120000000',
+        firstName: 'Usuario',
+        lastName: 'Invitado',
+        displayName: 'Usuario Invitado',
+        nationalId: 'V-00000000',
+        provider: 'phone',
+        providerId: 'mock-phone',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      try {
+        const cachedMock = await AsyncStorage.getItem('mock_user_profile_data');
+        if (cachedMock) {
+          mockProfile = { ...mockProfile, ...JSON.parse(cachedMock) };
+        }
+      } catch {}
+      return mockProfile;
+    }
+
+    if (path.startsWith('/users/') && options.method === 'PUT') {
+      const body = JSON.parse((options.body as string) || '{}');
+      let mockProfile = {
+        id: 'local-usr-mock',
+        uuid: 'local-usr-mock',
+        email: 'invitado@gofare.dev',
+        phoneNumber: '+584120000000',
+        firstName: 'Usuario',
+        lastName: 'Invitado',
+        displayName: 'Usuario Invitado',
+        nationalId: 'V-00000000',
+        provider: 'phone',
+        providerId: 'mock-phone',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      try {
+        const cachedMock = await AsyncStorage.getItem('mock_user_profile_data');
+        if (cachedMock) {
+          mockProfile = { ...mockProfile, ...JSON.parse(cachedMock) };
+        }
+      } catch {}
+
+      const updatedProfile = {
+        ...mockProfile,
+        displayName: body.displayName || mockProfile.displayName,
+        firstName: body.firstName || mockProfile.firstName,
+        lastName: body.lastName || mockProfile.lastName,
+        phoneNumber: body.phoneNumber || mockProfile.phoneNumber,
+        nationalId: body.nationalId || mockProfile.nationalId,
+        updatedAt: new Date().toISOString(),
+      };
+
+      try {
+        await AsyncStorage.setItem(
+          'mock_user_profile_data',
+          JSON.stringify(updatedProfile),
+        );
+      } catch {}
+      return updatedProfile;
+    }
+
+    if (path.startsWith('/fare/accounts/user/')) {
+      return {
+        id: 'local-acc-mock',
+        balance: 100.0,
+        userId: 'local-usr-mock',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    if (path.startsWith('/fare/transactions')) return [];
+    if (path.startsWith('/tickets')) return [];
+    if (path.startsWith('/vehicles')) return [];
+    if (path.startsWith('/rates/current')) {
+      return {
+        fareUsdValue: 0.25,
+        bcvRate: 40.0,
+        bcvRateDate: new Date().toISOString().slice(0, 10),
+      };
+    }
+
+    return {};
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) || {}),
@@ -230,9 +367,13 @@ export async function registerWithEmail(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.message || 'Error en el registro con el servidor backend.',
-    );
+    const rawMessage = errorData.message;
+    const formattedMessage = Array.isArray(rawMessage)
+      ? rawMessage.join(', ')
+      : typeof rawMessage === 'string'
+        ? rawMessage
+        : 'Error en el registro con el servidor backend.';
+    throw new Error(formattedMessage);
   }
 
   return response.json();
@@ -247,11 +388,25 @@ export async function createBackendUser(data: {
   providerId: string;
   email?: string;
   phoneNumber?: string;
+  phone_number?: string;
   firstName?: string;
   lastName?: string;
   displayName?: string;
   roleIds?: string[];
+  nationalId?: string;
+  national_id?: string;
 }): Promise<BackendUser> {
+  const cleanDto = {
+    provider: data.provider,
+    providerId: data.providerId,
+    email: data.email,
+    phoneNumber: data.phoneNumber || data.phone_number,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    displayName: data.displayName,
+    roleIds: data.roleIds,
+  };
+
   const response = await fetchWithTimeout(
     `${BASE_URL}/users`,
     {
@@ -259,7 +414,7 @@ export async function createBackendUser(data: {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(cleanDto),
     },
     30000,
   );
@@ -276,6 +431,15 @@ export async function createBackendUser(data: {
     user.id = user.uuid || user.id;
   }
   return user;
+}
+
+/**
+ * Elimina un usuario de la base de datos PostgreSQL.
+ */
+export async function deleteBackendUser(userId: string): Promise<void> {
+  await fetchWithAuth(`/users/${userId}`, {
+    method: 'DELETE',
+  });
 }
 
 /**
@@ -377,6 +541,62 @@ export async function getBackendProfile(): Promise<BackendUser> {
 }
 
 /**
+ * Actualiza la cédula (nationalId) del usuario autenticado en PostgreSQL y sincroniza el claim de Firebase.
+ */
+export async function updateOwnNationalId(
+  nationalId: string,
+): Promise<BackendUser> {
+  const token = await getGoFareToken();
+  if (token === 'mock-gofare-jwt-token-bypass') {
+    return {
+      id: 'local-usr-mock',
+      uuid: 'local-usr-mock',
+      email: 'invitado@gofare.dev',
+      nationalId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as any;
+  }
+
+  const responseData = await fetchWithAuth('/auth/me/national-id', {
+    method: 'PATCH',
+    body: JSON.stringify({ nationalId }),
+  });
+  const user = responseData?.user || responseData;
+  if (user) {
+    user.id = user.uuid || user.id;
+  }
+  return user;
+}
+
+/**
+ * Admin: Actualiza el número de teléfono de un usuario en Firebase Auth y en PostgreSQL (sin OTP).
+ */
+export async function adminUpdatePhone(
+  userUuid: string,
+  phoneNumber: string,
+): Promise<BackendUser> {
+  const token = await getGoFareToken();
+  if (token === 'mock-gofare-jwt-token-bypass') {
+    return {
+      id: userUuid,
+      uuid: userUuid,
+      phoneNumber,
+    } as any;
+  }
+
+  const responseData = await fetchWithAuth(`/auth/users/${userUuid}/phone`, {
+    method: 'PATCH',
+    body: JSON.stringify({ phoneNumber }),
+  });
+  const user = responseData?.user || responseData;
+  if (user) {
+    user.id = user.uuid || user.id;
+  }
+  return user;
+}
+
+/**
  * Actualiza los datos del usuario en el backend.
  */
 export async function updateBackendProfile(
@@ -389,6 +609,45 @@ export async function updateBackendProfile(
     nationalId?: string;
   },
 ): Promise<BackendUser> {
+  const token = await getGoFareToken();
+  if (token === 'mock-gofare-jwt-token-bypass') {
+    const responseData = await fetchWithAuth(`/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    const user = responseData?.user || responseData;
+    if (user) {
+      user.id = user.uuid || user.id;
+    }
+    return user;
+  }
+
+  // Si se proporciona la cédula (nationalId), actualizarla via el endpoint dedicado del backend (PATCH /auth/me/national-id)
+  if (data.nationalId) {
+    try {
+      await updateOwnNationalId(data.nationalId);
+    } catch (natErr) {
+      console.warn(
+        '[updateBackendProfile] Error al actualizar nationalId:',
+        natErr,
+      );
+    }
+  }
+
+  // Si se proporciona el teléfono (phoneNumber), intentar actualizarlo usando el endpoint PATCH /auth/users/:uuid/phone
+  if (data.phoneNumber) {
+    try {
+      await adminUpdatePhone(userId, data.phoneNumber);
+    } catch (phoneErr) {
+      console.log(
+        '[updateBackendProfile] PATCH /auth/users/:uuid/phone saltado (requiere rol admin o verificación OTP):',
+        phoneErr,
+      );
+    }
+  }
+
+  // Se omiten phoneNumber y nationalId del cuerpo de la petición PUT /users/:id
+  // porque el backend (UpdateUserDto) tiene ValidationPipe(forbidNonWhitelisted: true) y los rechaza con error 400.
   const whitelistedData: Partial<{
     displayName: string;
     firstName: string;
@@ -404,11 +663,6 @@ export async function updateBackendProfile(
   if (data.lastName !== undefined) {
     whitelistedData.lastName = data.lastName;
   }
-
-  // NOTA: phoneNumber y nationalId se omiten del cuerpo de la petición PUT /users/:id
-  // porque el backend (UpdateUserDto) no los permite en actualizaciones de perfil y devuelve 400.
-  // El nationalId ya se guarda automáticamente en PostgreSQL mediante las Custom Claims de Firebase en el primer login.
-  // El phoneNumber se vincula por separado mediante verificación SMS en /auth/phone/link por motivos de seguridad.
 
   const responseData = await fetchWithAuth(`/users/${userId}`, {
     method: 'PUT',

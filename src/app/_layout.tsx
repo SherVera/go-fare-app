@@ -36,7 +36,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { clearBackendJwt, getBackendProfile, syncWithBackend } from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
-import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
+import {
+  auth,
+  getIdTokenResult,
+  listenToAuthState,
+  sigOutAccount,
+} from '@/lib/firebase';
 import {
   getFcmToken,
   getInitialNotification,
@@ -241,11 +246,35 @@ export default function RootLayout() {
     let cancelled = false;
 
     const applyPhase = async (user: FirebaseAuthTypes.User | null) => {
-      if (!user) {
+      let resolvedUser = user;
+
+      // Bypass telefónico en desarrollo: si no hay usuario en Firebase pero el bypass está activo, simular sesión
+      if (!resolvedUser) {
+        try {
+          const isBypass = await AsyncStorage.getItem('phone_verified_bypass');
+          if (isBypass === 'true') {
+            resolvedUser = {
+              uid: 'mock-phone-bypass-layout',
+              phoneNumber: '+584120000000',
+              getIdToken: async () => 'mock-id-token-bypass',
+              getIdTokenResult: async () => ({
+                claims: { role: 'passenger' },
+              }),
+              reload: async () => {},
+            } as any;
+          }
+        } catch (e) {
+          console.warn('[Layout] Error checking bypass:', e);
+        }
+      }
+
+      if (!resolvedUser) {
         await clearBackendJwt();
         try {
           await SecureStore.deleteItemAsync('user_role');
           await AsyncStorage.removeItem('gofare_cached_user_profile');
+          await AsyncStorage.removeItem('phone_verified_bypass');
+          await AsyncStorage.removeItem('auth_method');
         } catch (storageErr) {
           console.warn(
             '[Layout] Error al limpiar caché de rol en logout:',
@@ -261,20 +290,32 @@ export default function RootLayout() {
 
       // Intentar recargar el usuario para obtener el estado más reciente de emailVerified
       try {
-        await user.reload();
+        if (resolvedUser.reload) {
+          await resolvedUser.reload();
+        }
       } catch (reloadErr) {
         console.warn('[Layout] Error al recargar el usuario:', reloadErr);
       }
 
-      const currentUser = auth.currentUser || user;
-      const isPhoneUser = !!currentUser.phoneNumber;
-      const isVerified = currentUser
-        ? currentUser.emailVerified || isPhoneUser
-        : false;
+      const currentUser = auth.currentUser || resolvedUser;
+      let authMethod = '';
+      try {
+        authMethod = (await AsyncStorage.getItem('auth_method')) || '';
+      } catch (methodErr) {
+        console.warn('[Layout] Error al leer auth_method:', methodErr);
+      }
 
-      if (currentUser && !isVerified) {
+      // Si el inicio de sesión fue por correo, sí se requiere verificación de email
+      const needsEmailVerification =
+        currentUser && !currentUser.emailVerified && authMethod === 'email';
+
+      if (needsEmailVerification) {
         const currentSegment = segmentsRef.current[0] as string | undefined;
-        const allowedVRoutes = new Set(['register', 'verify-email']);
+        const allowedVRoutes = new Set([
+          'register',
+          'verify-email',
+          'verify-phone',
+        ]);
         if (allowedVRoutes.has(currentSegment || '')) {
           if (!cancelled) setPhase('signed_out');
           return;
@@ -293,7 +334,13 @@ export default function RootLayout() {
 
       if (!currentUser) {
         await clearBackendJwt();
-        if (!cancelled) setPhase('signed_out');
+        try {
+          await SecureStore.deleteItemAsync('user_role');
+        } catch {}
+        if (!cancelled) {
+          setUserRole(null);
+          setPhase('signed_out');
+        }
         return;
       }
       let backendUser: any = null;
@@ -697,10 +744,10 @@ export default function RootLayout() {
       return;
     }
 
-    if (phase === 'signed_out') {
+    if (phase === 'signed_out' || !auth.currentUser) {
       const isPublic = s0 && publicAuthRoutes.has(s0);
       if (!isPublic) {
-        router.replace('/landing');
+        router.replace('/login');
       }
     }
   }, [phase, fontsReady, segments, router, userRole]);

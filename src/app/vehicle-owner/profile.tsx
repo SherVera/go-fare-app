@@ -148,6 +148,7 @@ export default function VehicleOwnerProfile() {
                 await AsyncStorage.removeItem('gofare_cached_user_profile');
                 await AsyncStorage.removeItem('temp_auth');
                 await SecureStore.deleteItemAsync('user_role');
+                await AsyncStorage.removeItem('phone_verified_bypass');
               } catch (err) {
                 console.warn(
                   '[Profile] Error deleting credentials/cache:',

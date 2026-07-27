@@ -72,20 +72,21 @@
     "@biomejs/biome": "^2.5.1",
     "@commitlint/cli": "^21.0.0",
     "@commitlint/config-conventional": "^21.0.0",
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
+    "@emnapi/wasi-threads": "1.2.2",
     "@react-native/metro-config": "0.81.5",
     "@types/react": "~19.1.0",
     "aicommits": "^3.1.1",
     "commitizen": "^4.3.1",
+    "conventional-commits-filter": "^6.0.1",
     "cz-conventional-changelog": "^3.3.0",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
     "patch-package": "^8.0.1",
     "react-dom": "19.1.0",
     "standard-version": "^9.5.0",
-    "typescript": "~5.9.2",
-    "@emnapi/core": "1.11.2",
-    "@emnapi/runtime": "1.11.2",
-    "@emnapi/wasi-threads": "1.2.2"
+    "typescript": "~5.9.2"
   },
   "config": {
     "commitizen": {
@@ -93,8 +94,12 @@
     }
   },
   "overrides": {
+    "brace-expansion": "^5.0.8",
+    "fast-uri": "^3.0.1",
     "js-yaml": "^4.2.0",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.18",
+    "protobufjs": "^7.6.5",
+    "tar": "^7.5.21",
     "uuid": "^11.1.1",
     "react-dom": "19.1.0",
     "@emnapi/core": "1.11.2",

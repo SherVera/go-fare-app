@@ -69,10 +69,6 @@ export default function HomeScreen() {
               iconRight="arrow-forward"
               style={styles.button}
             />
-
-            <Text style={styles.footerText}>
-              IMPULSADO POR CARACAS MOBILITY TRUST © 2024
-            </Text>
           </View>
         </View>
       </ScrollView>

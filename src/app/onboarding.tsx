@@ -28,7 +28,10 @@ import { tokens } from '@/theme/tokens';
 function vePhoneFromE164(phone: string | null | undefined): string {
   if (!phone) return '';
   if (phone.startsWith('+58') && phone.length >= 12) {
-    return `0${phone.slice(3)}`;
+    return phone.slice(3);
+  }
+  if (phone.startsWith('0') && phone.length === 11) {
+    return phone.slice(1);
   }
   return phone;
 }
@@ -40,6 +43,7 @@ export default function OnboardingScreen() {
     () => user?.displayName?.trim() ?? '',
   );
   const [idNumber, setIdNumber] = useState('');
+  const [nationality, setNationality] = useState<'V' | 'E'>('V');
   const [phoneNumber, setPhoneNumber] = useState(() =>
     vePhoneFromE164(user?.phoneNumber ?? undefined),
   );
@@ -58,10 +62,14 @@ export default function OnboardingScreen() {
           const parsed = JSON.parse(cached);
           if (parsed.displayName) setFullName(parsed.displayName);
           if (parsed.nationalId || parsed.idNumber) {
-            const rawId = parsed.nationalId || parsed.idNumber || '';
-            setIdNumber(
-              typeof rawId === 'string' ? rawId.replace('V-', '').trim() : '',
-            );
+            const rawId = (parsed.nationalId || parsed.idNumber || '').trim();
+            if (rawId.startsWith('E-') || rawId.startsWith('e-')) {
+              setNationality('E');
+              setIdNumber(rawId.substring(2).trim());
+            } else {
+              setNationality('V');
+              setIdNumber(rawId.replace(/^[Vv]-/, '').trim());
+            }
           }
           if (parsed.phoneNumber) {
             setPhoneNumber(parsed.phoneNumber);
@@ -134,10 +142,14 @@ export default function OnboardingScreen() {
           }
 
           if (freshProfile.nationalId) {
-            const rawId = freshProfile.nationalId;
-            setIdNumber(
-              typeof rawId === 'string' ? rawId.replace('V-', '').trim() : '',
-            );
+            const rawId = freshProfile.nationalId.trim();
+            if (rawId.startsWith('E-') || rawId.startsWith('e-')) {
+              setNationality('E');
+              setIdNumber(rawId.substring(2).trim());
+            } else {
+              setNationality('V');
+              setIdNumber(rawId.replace(/^[Vv]-/, '').trim());
+            }
           }
           if (freshProfile.phoneNumber) {
             setPhoneNumber(freshProfile.phoneNumber);
@@ -195,10 +207,12 @@ export default function OnboardingScreen() {
       return false;
     }
     if (!hasPhone) {
-      if (!/^((04|02)\d{9}|\+\d{10,15})$/.test(phoneNumber.trim())) {
+      const digits = phoneNumber.trim().replace(/[^0-9]/g, '');
+      const finalDigits = digits.startsWith('0') ? digits.slice(1) : digits;
+      if (!/^\d{9,10}$/.test(finalDigits)) {
         Alert.alert(
           'Atención',
-          'Por favor, ingresa un número de teléfono válido (ej. 04120000000).',
+          'Por favor, ingresa un número de teléfono válido de 10 dígitos (ej. 412 000 0000).',
         );
         return false;
       }
@@ -225,17 +239,19 @@ export default function OnboardingScreen() {
       const firstName = parts[0];
       const lastName = parts.slice(1).join(' ') || undefined;
 
-      const formattedPhoneNumber = phoneNumber.trim().startsWith('+')
-        ? phoneNumber.trim()
-        : phoneNumber.trim().startsWith('0')
-          ? `+58${phoneNumber.trim().slice(1)}`
-          : `+58${phoneNumber.trim()}`;
+      const cleanedPhone = phoneNumber.trim().replace(/[^0-9]/g, '');
+      const finalPhoneDigits = cleanedPhone.startsWith('0')
+        ? cleanedPhone.slice(1)
+        : cleanedPhone;
+      const formattedPhoneNumber = `+58${finalPhoneDigits}`;
+
+      const finalIdNumber = `${nationality}-${idNumber.trim().replace(/^(V-|E-)/i, '')}`;
 
       const updatePayload: any = {
         displayName: fullName.trim(),
         firstName,
         lastName,
-        nationalId: idNumber.trim(),
+        nationalId: finalIdNumber,
         phoneNumber: formattedPhoneNumber,
       };
 
@@ -248,8 +264,8 @@ export default function OnboardingScreen() {
         displayName: fullName.trim(),
         firstName,
         lastName,
-        idNumber: idNumber.trim(),
-        nationalId: idNumber.trim(),
+        idNumber: finalIdNumber,
+        nationalId: finalIdNumber,
         phoneNumber: formattedPhoneNumber,
         email: email || undefined,
         onboardingCompleted: true,
@@ -336,7 +352,23 @@ export default function OnboardingScreen() {
 
           <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
           <View style={styles.inputCard}>
-            <Text style={styles.prefix}>V-</Text>
+            <Pressable
+              onPress={() => {
+                if (!loading) {
+                  setNationality((prev) => (prev === 'V' ? 'E' : 'V'));
+                }
+              }}
+              style={styles.nationalitySelector}
+              hitSlop={10}
+            >
+              <Text style={styles.prefix}>{nationality}-</Text>
+              <Ionicons
+                name="chevron-down"
+                size={10}
+                color="#8594AB"
+                style={{ marginLeft: 2, marginTop: 1 }}
+              />
+            </Pressable>
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -344,7 +376,10 @@ export default function OnboardingScreen() {
               placeholderTextColor="#B8C4D4"
               keyboardType="number-pad"
               value={idNumber}
-              onChangeText={setIdNumber}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/[^0-9]/g, '');
+                setIdNumber(cleaned);
+              }}
               maxLength={10}
               selectionColor={tokens.colors.primary}
               editable={!loading}
@@ -355,20 +390,25 @@ export default function OnboardingScreen() {
           <View
             style={[styles.inputCard, hasPhone && styles.disabledInputCard]}
           >
-            <Ionicons
-              name={hasPhone ? 'lock-closed-outline' : 'call-outline'}
-              size={20}
-              color={hasPhone ? '#8594AB' : '#3072ffe7'}
-            />
+            <View style={styles.countryPicker}>
+              <Text style={styles.flagText}>🇻🇪</Text>
+              <Text style={styles.countryCodeText}>+58</Text>
+            </View>
             <View style={styles.divider} />
             <TextInput
               style={[styles.input, hasPhone && { color: '#8594AB' }]}
-              placeholder="04120000000"
+              placeholder="412 000 0000"
               placeholderTextColor="#B8C4D4"
               keyboardType="phone-pad"
               value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              maxLength={11}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/[^0-9]/g, '');
+                const finalDigits = cleaned.startsWith('0')
+                  ? cleaned.slice(1)
+                  : cleaned;
+                setPhoneNumber(finalDigits);
+              }}
+              maxLength={10}
               selectionColor={tokens.colors.primary}
               editable={!loading && !hasPhone}
             />
@@ -570,5 +610,24 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.black,
     color: '#B0BCCC',
     letterSpacing: 1.1,
+  },
+  countryPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 2,
+  },
+  flagText: {
+    fontSize: 20,
+    marginRight: 6,
+  },
+  countryCodeText: {
+    fontSize: 16,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#18243E',
+  },
+  nationalitySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 4,
   },
 });

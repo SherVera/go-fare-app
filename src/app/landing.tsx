@@ -19,7 +19,7 @@ export default function LandingScreen() {
   const { height } = useWindowDimensions();
 
   const handleLogin = () => {
-    router.push('/login' as any);
+    router.push('/phone-login' as any);
   };
 
   // Ajustes responsivos dinámicos según el alto de la pantalla del dispositivo
@@ -32,9 +32,6 @@ export default function LandingScreen() {
     ? tokens.spacing.lg
     : tokens.spacing.xxl;
   const subtitleMarginBottom = isSmallScreen
-    ? tokens.spacing.lg
-    : tokens.spacing.xl;
-  const buttonMarginBottom = isSmallScreen
     ? tokens.spacing.lg
     : tokens.spacing.xl;
 
@@ -81,12 +78,39 @@ export default function LandingScreen() {
               title="Iniciar Sesión"
               onPress={handleLogin}
               iconRight="arrow-forward"
-              style={[styles.button, { marginBottom: buttonMarginBottom }]}
+              style={[styles.button, { marginBottom: tokens.spacing.sm }]}
             />
 
-            <Text style={styles.footerText}>
-              IMPULSADO POR CARACAS MOBILITY TRUST © 2024
-            </Text>
+            {/* Fila de registro para usuarios sin cuenta */}
+            <View style={styles.registerContainer}>
+              <Text style={styles.registerText}>
+                ¿No tienes una cuenta?{' '}
+                <Text
+                  style={styles.registerLink}
+                  onPress={() => router.push('/register' as any)}
+                >
+                  Regístrate
+                </Text>
+              </Text>
+            </View>
+
+            {/* Fila de registro para dueños de vehículo */}
+            <View
+              style={[
+                styles.registerContainer,
+                { marginTop: 0, marginBottom: tokens.spacing.sm },
+              ]}
+            >
+              <Text style={[styles.registerText, { textAlign: 'center' }]}>
+                ¿Eres dueño de vehículo?{' '}
+                <Text
+                  style={styles.registerLink}
+                  onPress={() => router.push('/register-vehicle-owner' as any)}
+                >
+                  Envía tu solicitud aquí
+                </Text>
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -146,6 +170,23 @@ const styles = StyleSheet.create({
   },
   button: {
     marginBottom: tokens.spacing.xl,
+  },
+  registerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: tokens.spacing.xs,
+    marginBottom: tokens.spacing.md,
+  },
+  registerText: {
+    fontSize: tokens.typography.sizes.sm,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: tokens.colors.textGray,
+  },
+  registerLink: {
+    fontSize: tokens.typography.sizes.sm,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
   },
   footerText: {
     textAlign: 'center',

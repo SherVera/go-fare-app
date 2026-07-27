@@ -1,5 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
@@ -23,6 +23,7 @@ import {
 import { tokens } from '@/theme/tokens';
 
 export default function TripsScreen() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'trips' | 'transactions'>('trips');
   const [activeFilter, setActiveFilter] = useState<TripFilter['value']>('all');
   const [tickets, setTickets] = useState<BackendTicket[]>([]);
@@ -148,6 +149,12 @@ export default function TripsScreen() {
 
       {/* ── HEADER ── */}
       <View style={styles.header}>
+        <Pressable
+          onPress={() => router.back()}
+          style={{ marginRight: 16, paddingVertical: 4 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={tokens.colors.primary} />
+        </Pressable>
         <Text style={styles.headerTitle}>GoFare</Text>
         <Image
           source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
@@ -272,7 +279,8 @@ export default function TripsScreen() {
               <View style={styles.noTripsContainer}>
                 <Ionicons name="bus-outline" size={48} color="#9CA3AF" />
                 <Text style={styles.noTripsText}>
-                  No se encontraron fares ni viajes registrados en este período.
+                  No se encontraron tickets ni viajes registrados en este
+                  período.
                 </Text>
               </View>
             ) : (
