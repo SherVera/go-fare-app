@@ -134,7 +134,10 @@ export default function RegisterScreen() {
         if (fbCreateErr?.code === 'auth/email-already-in-use') {
           throw new Error('El correo electrónico ya está registrado.');
         }
-        console.warn('[Register] createUser nativo falló, probando con registerWithEmail backend:', fbCreateErr);
+        console.warn(
+          '[Register] createUser nativo falló, probando con registerWithEmail backend:',
+          fbCreateErr,
+        );
         await registerWithEmail({
           email: trimmedEmail,
           password: trimmedPassword,
@@ -158,7 +161,9 @@ export default function RegisterScreen() {
       // Obtener el usuario autenticado o generar objeto local en caso de fallo de red de Google
       let loggedUser: any = auth.currentUser;
       if (!loggedUser) {
-        console.warn('[Register] auth.currentUser es nulo (falla de red con googleapis), utilizando usuario local resiliente');
+        console.warn(
+          '[Register] auth.currentUser es nulo (falla de red con googleapis), utilizando usuario local resiliente',
+        );
         loggedUser = {
           uid: `local-usr-${Date.now()}`,
           email: trimmedEmail,
@@ -175,13 +180,18 @@ export default function RegisterScreen() {
           });
         }
       } catch (updateProfErr) {
-        console.warn('[Register] Error al actualizar perfil en Firebase:', updateProfErr);
+        console.warn(
+          '[Register] Error al actualizar perfil en Firebase:',
+          updateProfErr,
+        );
       }
 
       // 3. Crear el usuario en PostgreSQL con su número de teléfono (+58...) mediante POST /users
       let backendUser: any = null;
       try {
-        const roleUuid = await resolveRoleUuid('passenger').catch(() => undefined);
+        const roleUuid = await resolveRoleUuid('passenger').catch(
+          () => undefined,
+        );
         backendUser = await createBackendUser({
           provider: 'local',
           providerId: loggedUser.uid,
@@ -192,9 +202,15 @@ export default function RegisterScreen() {
           displayName: calculatedDisplayName,
           roleIds: roleUuid ? [roleUuid] : [],
         });
-        console.log('[Register] Usuario registrado en PostgreSQL exitosamente con número de teléfono:', formattedPhoneNumber);
+        console.log(
+          '[Register] Usuario registrado en PostgreSQL exitosamente con número de teléfono:',
+          formattedPhoneNumber,
+        );
       } catch (createErr) {
-        console.log('[Register] createBackendUser ya existente o saltado, sincronizando:', createErr);
+        console.log(
+          '[Register] createBackendUser ya existente o saltado, sincronizando:',
+          createErr,
+        );
         const syncRes = await syncWithBackend(loggedUser);
         backendUser = syncRes.user;
       }

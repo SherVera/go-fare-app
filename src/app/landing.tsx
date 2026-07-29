@@ -73,7 +73,9 @@ export default function LandingScreen() {
             { paddingBottom: insets.bottom + tokens.spacing.xl },
           ]}
         >
-          <View style={[styles.sheetContent, isTablet && styles.sheetContentTablet]}>
+          <View
+            style={[styles.sheetContent, isTablet && styles.sheetContentTablet]}
+          >
             <View style={styles.textContainer}>
               <Text style={[styles.title, isTablet && styles.titleTablet]}>
                 Muévete{'\n'}
@@ -168,7 +170,9 @@ export default function LandingScreen() {
                       styles.registerLink,
                       isTablet && styles.registerLinkTablet,
                     ]}
-                    onPress={() => router.push('/register-vehicle-owner' as any)}
+                    onPress={() =>
+                      router.push('/register-vehicle-owner' as any)
+                    }
                   >
                     Envía tu solicitud aquí
                   </Text>

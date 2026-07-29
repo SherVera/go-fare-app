@@ -535,7 +535,9 @@ export default function LoginScreen() {
                 color={isLiteMode ? tokens.colors.primary : '#8594AB'}
               />
               <View style={{ marginLeft: 10, flex: 1 }}>
-                <Text style={styles.liteModeTitle}>Modo Lite (Alto Rendimiento)</Text>
+                <Text style={styles.liteModeTitle}>
+                  Modo Lite (Alto Rendimiento)
+                </Text>
                 <Text style={styles.liteModeSubtitle}>
                   {isLiteMode
                     ? 'Activado: Ahorro de datos y batería'

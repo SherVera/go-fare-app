@@ -97,13 +97,14 @@ export default function PhoneLoginScreen() {
 
         const roles = (backendUser as any)?.roles || [];
         const isAdmin = roles.some(
-          (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+          (role: any) =>
+            role.name === 'platform_admin' || role.name === 'admin',
         );
         const isOwner = roles.some(
           (role: any) => role.name === 'transport_owner',
         );
         const isDriver = roles.some((role: any) => role.name === 'driver');
-        let userRole = isAdmin
+        const userRole = isAdmin
           ? 'platform_admin'
           : isOwner
             ? 'transport_owner'
@@ -186,7 +187,8 @@ export default function PhoneLoginScreen() {
             <Text style={styles.titleDark}>Tu</Text>
             <Text style={styles.titleBlue}>Número</Text>
             <Text style={styles.subtitle}>
-              Ingresa tu número de teléfono y contraseña para acceder a tu cuenta.
+              Ingresa tu número de teléfono y contraseña para acceder a tu
+              cuenta.
             </Text>
           </View>
 
@@ -199,7 +201,9 @@ export default function PhoneLoginScreen() {
                 color={isLiteMode ? tokens.colors.primary : '#8594AB'}
               />
               <View style={{ marginLeft: 10, flex: 1 }}>
-                <Text style={styles.liteModeTitle}>Modo Lite (Alto Rendimiento)</Text>
+                <Text style={styles.liteModeTitle}>
+                  Modo Lite (Alto Rendimiento)
+                </Text>
                 <Text style={styles.liteModeSubtitle}>
                   {isLiteMode
                     ? 'Activado: Ahorro de datos y batería'
@@ -284,7 +288,8 @@ export default function PhoneLoginScreen() {
               style={{ marginTop: 1, marginRight: 6 }}
             />
             <Text style={styles.secureText}>
-              Tu número de teléfono se utilizará para localizar tu cuenta e iniciar sesión de forma segura.
+              Tu número de teléfono se utilizará para localizar tu cuenta e
+              iniciar sesión de forma segura.
             </Text>
           </View>
 
@@ -327,9 +332,7 @@ export default function PhoneLoginScreen() {
             </Text>
           </View>
 
-          <Text style={styles.footerLegal}>
-            CARACAS MOVE • ACCESO SEGURO
-          </Text>
+          <Text style={styles.footerLegal}>CARACAS MOVE • ACCESO SEGURO</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

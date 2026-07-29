@@ -112,7 +112,11 @@ export async function syncWithBackend(
     idToken = 'mock-id-token-bypass';
   }
 
-  if (!idToken || idToken === 'mock-id-token-bypass' || idToken.startsWith('mock-')) {
+  if (
+    !idToken ||
+    idToken === 'mock-id-token-bypass' ||
+    idToken.startsWith('mock-')
+  ) {
     // Bypass de autenticación para desarrollo:
     await saveGoFareToken('mock-gofare-jwt-token-bypass');
     return {
@@ -433,7 +437,9 @@ export async function registerWithEmail(
  * Busca un usuario en la base de datos PostgreSQL por su número de teléfono
  * y retorna el correo electrónico asociado para permitir inicio de sesión por teléfono + contraseña.
  */
-export async function findEmailByPhone(phoneInput: string): Promise<string | null> {
+export async function findEmailByPhone(
+  phoneInput: string,
+): Promise<string | null> {
   const cleaned = phoneInput.trim().replace(/[^0-9]/g, '');
   if (!cleaned || cleaned.length < 7) return null;
 
@@ -442,7 +448,11 @@ export async function findEmailByPhone(phoneInput: string): Promise<string | nul
   const localWithZero = `0${phoneDigits}`;
 
   try {
-    const response = await fetchWithTimeout(`${BASE_URL}/users`, { method: 'GET' }, 10000);
+    const response = await fetchWithTimeout(
+      `${BASE_URL}/users`,
+      { method: 'GET' },
+      10000,
+    );
     if (!response.ok) return null;
     const users: BackendUser[] = await response.json();
     if (!Array.isArray(users)) return null;
@@ -461,7 +471,10 @@ export async function findEmailByPhone(phoneInput: string): Promise<string | nul
 
     return matchedUser?.email || null;
   } catch (err) {
-    console.warn('[findEmailByPhone] Error al buscar correo por teléfono:', err);
+    console.warn(
+      '[findEmailByPhone] Error al buscar correo por teléfono:',
+      err,
+    );
     return null;
   }
 }

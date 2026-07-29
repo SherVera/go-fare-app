@@ -17,7 +17,9 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
       <View style={[styles.card, styles.liteCard]}>
         <View style={styles.topRow}>
           <View>
-            <Text style={[styles.label, styles.liteLabel]}>TICKETS DISPONIBLES</Text>
+            <Text style={[styles.label, styles.liteLabel]}>
+              TICKETS DISPONIBLES
+            </Text>
             <View style={styles.balanceRow}>
               <Text style={[styles.balance, styles.liteBalance]}>
                 {currentBalance.toFixed(2)}
@@ -43,7 +45,9 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
 
         <View style={styles.bottomRow}>
           <View>
-            <Text style={[styles.labelSmall, styles.liteLabel]}>CARACAS MOVE ID</Text>
+            <Text style={[styles.labelSmall, styles.liteLabel]}>
+              CARACAS MOVE ID
+            </Text>
             <Text style={[styles.idNumber, styles.liteId]}>
               {carnetId || '0000 • 0000 • 0000'}
             </Text>
