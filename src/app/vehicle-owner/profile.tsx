@@ -20,7 +20,8 @@ import {
   getBackendProfile,
   getOwnerVehicles,
 } from '@/lib/api';
-import { auth, sigOutAccount } from '@/lib/firebase';
+import { purgeUserSessionAndLogout } from '@/lib/auth-session';
+import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function VehicleOwnerProfile() {
@@ -32,8 +33,8 @@ export default function VehicleOwnerProfile() {
   const [name, setName] = useState('Socio');
   const [email, setEmail] = useState('socio@example.com');
   const [phone, setPhone] = useState('...');
-  const [coopName, setCoopName] = useState('Cooperativa Caracas Move R.L.');
-  const [coopRif, setCoopRif] = useState('J-304598124');
+  const [coopName, setCoopName] = useState('Particular / Sin Asociación');
+  const [coopRif, setCoopRif] = useState('');
 
   // Stats
   const [unitsCount, setUnitsCount] = useState(0);
@@ -54,6 +55,14 @@ export default function VehicleOwnerProfile() {
           );
           setEmail(backendUser.email);
           setPhone(backendUser.phoneNumber || 'No registrado');
+
+          const civil =
+            (backendUser as any)?.transportOwner?.civilAssociation ||
+            (backendUser as any)?.civilAssociation;
+          if (civil?.name) {
+            setCoopName(civil.name);
+            setCoopRif(civil.rif ? `RIF: ${civil.rif}` : '');
+          }
         } catch (apiErr) {
           console.warn(
             '[Profile] API error, falling back to local cache:',
@@ -133,28 +142,7 @@ export default function VehicleOwnerProfile() {
           onPress: async () => {
             try {
               setLoggingOut(true);
-              try {
-                await sigOutAccount();
-              } catch (authError) {
-                console.warn(
-                  '[Profile] Error al cerrar sesión de Firebase (offline):',
-                  authError,
-                );
-              }
-              await clearGoFareToken();
-              try {
-                await SecureStore.deleteItemAsync('savedEmail');
-                await SecureStore.deleteItemAsync('savedPassword');
-                await AsyncStorage.removeItem('gofare_cached_user_profile');
-                await AsyncStorage.removeItem('temp_auth');
-                await SecureStore.deleteItemAsync('user_role');
-                await AsyncStorage.removeItem('phone_verified_bypass');
-              } catch (err) {
-                console.warn(
-                  '[Profile] Error deleting credentials/cache:',
-                  err,
-                );
-              }
+              await purgeUserSessionAndLogout();
               router.replace('/login');
             } catch (error) {
               console.error('Error al cerrar sesión:', error);

@@ -146,10 +146,36 @@ export const sentResetEmail = (email: string) =>
 export const sendPhoneVerificationCode = (phoneNumber: string) =>
   signInWithPhoneNumber(auth, phoneNumber);
 
-export const confirmPhoneCode = (
+export const confirmPhoneCode = async (
   confirmation: FirebaseAuthTypes.ConfirmationResult,
   verificationCode: string,
-) => confirmation.confirm(verificationCode);
+) => {
+  const currentUser = auth.currentUser;
+  if (
+    currentUser &&
+    currentUser.uid &&
+    !currentUser.uid.startsWith('mock-') &&
+    (confirmation as any)?.verificationId
+  ) {
+    try {
+      const phoneCredential = PhoneAuthProvider.credential(
+        (confirmation as any).verificationId,
+        verificationCode,
+      );
+      const linkedCred = await currentUser.linkWithCredential(phoneCredential);
+      console.log(
+        '[Firebase] Teléfono vinculado exitosamente a la cuenta de usuario existente.',
+      );
+      return linkedCred;
+    } catch (linkError: any) {
+      console.warn(
+        '[Firebase] No se pudo vincular credencial de teléfono (ejecutando confirm por defecto):',
+        linkError?.message || linkError,
+      );
+    }
+  }
+  return confirmation.confirm(verificationCode);
+};
 
 // ── Google Sign-In ───────────────────────────────────────────────────────────
 // Requires enabling Google Sign-In in Firebase Console and re-downloading

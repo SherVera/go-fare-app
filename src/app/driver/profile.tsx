@@ -14,8 +14,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { clearGoFareToken, getBackendProfile } from '@/lib/api';
-import { auth, sigOutAccount } from '@/lib/firebase';
+import { getBackendProfile } from '@/lib/api';
+import { purgeUserSessionAndLogout } from '@/lib/auth-session';
+import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function DriverProfileScreen() {
@@ -28,10 +29,8 @@ export default function DriverProfileScreen() {
   const [license, setLicense] = useState('V-12345678');
 
   // Coop / Vehicle info
-  const [cooperative, setCooperative] = useState(
-    'Cooperativa Caracas Move R.L.',
-  );
-  const [vehicle, _setVehicle] = useState('Encava ENT-610 - XY987ZT');
+  const [cooperative, setCooperative] = useState('Línea Particular');
+  const [vehicle, _setVehicle] = useState('Sin Unidad Asignada');
 
   const loadProfileData = useCallback(async () => {
     try {
@@ -111,36 +110,8 @@ export default function DriverProfileScreen() {
           onPress: async () => {
             try {
               setLoggingOut(true);
-
-              // Apagar servicio del chofer primero
               await AsyncStorage.setItem('driver_service_status', 'inactive');
-
-              try {
-                await sigOutAccount();
-              } catch (authError) {
-                console.warn(
-                  '[DriverProfile] Firebase signOut error (using offline cleanup):',
-                  authError,
-                );
-              }
-
-              await clearGoFareToken();
-
-              try {
-                await SecureStore.deleteItemAsync('savedEmail');
-                await SecureStore.deleteItemAsync('savedPassword');
-                await AsyncStorage.removeItem('gofare_cached_user_profile');
-                await AsyncStorage.removeItem('temp_auth');
-                await SecureStore.deleteItemAsync('user_role');
-                // Mantener limpia la lista local de boletos validados si el chofer lo requiere,
-                // pero la dejamos persistente en AsyncStorage para que no pierda su historial entre cierres de sesión
-              } catch (err) {
-                console.warn(
-                  '[DriverProfile] Error clearing local caches:',
-                  err,
-                );
-              }
-
+              await purgeUserSessionAndLogout();
               router.replace('/login');
             } catch (error) {
               console.error('[DriverProfile] Error logging out:', error);

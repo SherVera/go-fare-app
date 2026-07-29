@@ -12,6 +12,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   useWindowDimensions,
@@ -19,9 +20,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { useLiteMode } from '@/context/LiteModeContext';
 import type { LoginFormState } from '@/interfaces';
 import {
   createFareAccount,
+  findEmailByPhone,
   getFareAccountByUserId,
   loginWithFirebaseToken,
   syncWithBackend,
@@ -31,6 +34,7 @@ import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { isLiteMode, setLiteMode } = useLiteMode();
   const { height } = useWindowDimensions();
   // Estado del formulario — tipado por LoginFormState
   const [email, setEmail] = useState<LoginFormState['email']>('');
@@ -522,14 +526,41 @@ export default function LoginScreen() {
             </Text>
           </View>
 
+          {/* ── CARD MODO LITE ── */}
+          <View style={styles.liteModeCard}>
+            <View style={styles.liteModeInfo}>
+              <Ionicons
+                name="flash"
+                size={20}
+                color={isLiteMode ? tokens.colors.primary : '#8594AB'}
+              />
+              <View style={{ marginLeft: 10, flex: 1 }}>
+                <Text style={styles.liteModeTitle}>
+                  Modo Lite (Alto Rendimiento)
+                </Text>
+                <Text style={styles.liteModeSubtitle}>
+                  {isLiteMode
+                    ? 'Activado: Ahorro de datos y batería'
+                    : 'Modo estándar'}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={isLiteMode}
+              onValueChange={(val) => setLiteMode(val)}
+              trackColor={{ false: '#D4DEEC', true: tokens.colors.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
           {/* ── INPUT EMAIL ── */}
-          <Text style={styles.inputLabel}>CORREO ELECTRÓNICO</Text>
+          <Text style={styles.inputLabel}>CORREO ELECTRÓNICO O TELÉFONO</Text>
           <View style={styles.inputCard}>
-            <Ionicons name="mail-outline" size={20} color="#3072ffe7" />
+            <Ionicons name="person-outline" size={20} color="#3072ffe7" />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
-              placeholder="email@example.com"
+              placeholder="correo@ejemplo.com o 04120000000"
               placeholderTextColor="#B8C4D4"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -677,6 +708,40 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  liteModeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#D4DEEC',
+    shadowColor: '#8594AB',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  liteModeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  liteModeTitle: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#18243E',
+  },
+  liteModeSubtitle: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#6B7A93',
+    marginTop: 2,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: '#ECF1F9',

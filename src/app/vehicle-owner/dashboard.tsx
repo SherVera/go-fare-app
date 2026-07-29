@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { MockVehicle } from '@/interfaces';
-import { getOwnerVehicles } from '@/lib/api';
+import { getBackendProfile, getOwnerVehicles } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 type FilterType = 'all' | 'approved' | 'pending' | 'rejected';
@@ -45,8 +45,8 @@ export default function VehicleOwnerDashboard() {
   const [vehicles, setVehicles] = useState<MockVehicle[]>([]);
   const [cooperative, setCooperative] = useState<{ name: string; rif: string }>(
     {
-      name: 'Cooperativa Caracas Move R.L.',
-      rif: 'RIF: J-304598124',
+      name: 'Línea / Cooperativa',
+      rif: '',
     },
   );
   const [refreshing, setRefreshing] = useState(false);
@@ -89,26 +89,47 @@ export default function VehicleOwnerDashboard() {
 
   const loadData = useCallback(async () => {
     try {
-      // 1. Cargar vehículos aprobados y solicitudes de la base de datos (tabla vehicles)
-      const approvedVehicles = await getOwnerVehicles();
-      setVehicles(approvedVehicles);
+      // 1. Cargar vehículos reales del dueño desde PostgreSQL (GET /vehicles/my)
+      const realVehicles = await getOwnerVehicles();
+      setVehicles(realVehicles);
 
-      // 2. Cargar cooperativa seleccionada localmente si existe
-      const coopStr = await AsyncStorage.getItem(
-        'mock_vehicle_owner_cooperative',
-      );
-      if (coopStr) {
-        const coopData = JSON.parse(coopStr);
-        setCooperative({
-          name: coopData.businessName,
-          rif: coopData.idNumber.startsWith('RIF:')
-            ? coopData.idNumber
-            : `RIF: ${coopData.idNumber}`,
-        });
+      // 2. Cargar perfil real del backend para obtener el nombre de la cooperativa/asociación
+      try {
+        const profile = await getBackendProfile();
+        const civil =
+          (profile as any)?.transportOwner?.civilAssociation ||
+          (profile as any)?.civilAssociation;
+
+        if (civil?.name) {
+          setCooperative({
+            name: civil.name,
+            rif: civil.rif
+              ? `RIF: ${civil.rif}`
+              : profile.nationalId
+                ? `RIF: ${profile.nationalId}`
+                : '',
+          });
+        } else {
+          // Si el dueño no está asociado a ninguna asociación civil en PostgreSQL
+          const ownerName =
+            profile.displayName ||
+            `${profile.firstName || ''} ${profile.lastName || ''}`.trim();
+          setCooperative({
+            name: ownerName
+              ? `Socio: ${ownerName}`
+              : 'Particular / Sin Asociación',
+            rif: profile.nationalId ? `Cédula: ${profile.nationalId}` : '',
+          });
+        }
+      } catch (profErr) {
+        console.warn(
+          '[Dashboard] Error al consultar perfil para asociación:',
+          profErr,
+        );
       }
     } catch (err) {
       console.warn(
-        '[Dashboard] Error al cargar solicitudes de vehículos:',
+        '[Dashboard] Error al cargar lista de vehículos reales:',
         err,
       );
     } finally {

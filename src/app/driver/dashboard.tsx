@@ -539,7 +539,8 @@ export default function DriverDashboard() {
               <View style={styles.vehicleInfo}>
                 <Text style={styles.vehicleNameText}>{displayVehicle}</Text>
                 <Text style={styles.vehicleCoopText}>
-                  Cooperativa Caracas Move R.L.
+                  {(activeSession as any)?.vehicle?.cooperativeName ||
+                    'Línea Particular'}
                 </Text>
               </View>
             ) : (

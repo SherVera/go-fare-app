@@ -34,6 +34,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LiteModeProvider } from '@/context/LiteModeContext';
 import { clearBackendJwt, getBackendProfile, syncWithBackend } from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
 import {
@@ -827,10 +828,12 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <LiteModeProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }} />
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </LiteModeProvider>
   );
 }
 

@@ -201,8 +201,8 @@ export default function VehicleOwnerDrivers() {
       }
 
       // 3. Construir mensaje de WhatsApp
-      const redirectUrl = `https://www.swiftfare.app/invite-codes/redirect/${code}`;
-      const message = `¡Hola! El socio ${ownerName} te invita a registrarte como conductor en su flota de GoFare.
+      const redirectUrl = `https://www.swiftfare.app/auth/register?inviteCode=${code}`;
+      const message = `¡Hola! El dueño de vehículo ${ownerName} te invita a registrarte como conductor en su flota de GoFare.
 
 1. Registrate e inicia sesión en la aplicación.
 2. Ingresa a este enlace para registrarte como conductor de mi flota:

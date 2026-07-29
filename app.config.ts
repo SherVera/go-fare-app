@@ -44,7 +44,7 @@ const config: ExpoConfig = {
   name: 'GoFare',
   slug: 'GoFare',
   version: '1.0.0',
-  orientation: 'portrait',
+  orientation: 'default',
   icon: './assets/images/icon.png',
   scheme: 'gofare',
   userInterfaceStyle: 'automatic',
