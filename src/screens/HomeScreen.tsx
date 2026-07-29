@@ -100,6 +100,9 @@ const styles = StyleSheet.create({
   },
   sheetContent: {
     flex: 1,
+    width: '100%',
+    maxWidth: 600,
+    alignSelf: 'center',
   },
   title: {
     fontSize: tokens.typography.sizes.xl,

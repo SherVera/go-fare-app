@@ -42,6 +42,7 @@ import {
   listenToAuthState,
   sigOutAccount,
 } from '@/lib/firebase';
+import { LiteModeProvider } from '@/context/LiteModeContext';
 import {
   getFcmToken,
   getInitialNotification,
@@ -827,10 +828,12 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }} />
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <LiteModeProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack screenOptions={{ headerShown: false }} />
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </LiteModeProvider>
   );
 }
 

@@ -60,25 +60,29 @@ export default function OnboardingScreen() {
         const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
         if (cached && active) {
           const parsed = JSON.parse(cached);
-          if (parsed.displayName) setFullName(parsed.displayName);
+          if (parsed.displayName && parsed.displayName !== 'Usuario Invitado') {
+            setFullName(parsed.displayName);
+          }
           if (parsed.nationalId || parsed.idNumber) {
             const rawId = (parsed.nationalId || parsed.idNumber || '').trim();
-            if (rawId.startsWith('E-') || rawId.startsWith('e-')) {
-              setNationality('E');
-              setIdNumber(rawId.substring(2).trim());
-            } else {
-              setNationality('V');
-              setIdNumber(rawId.replace(/^[Vv]-/, '').trim());
+            if (rawId !== 'V-00000000' && rawId !== '00000000') {
+              if (rawId.startsWith('E-') || rawId.startsWith('e-')) {
+                setNationality('E');
+                setIdNumber(rawId.substring(2).trim());
+              } else {
+                setNationality('V');
+                setIdNumber(rawId.replace(/^[Vv]-/, '').trim());
+              }
             }
           }
-          if (parsed.phoneNumber) {
+          if (parsed.phoneNumber && parsed.phoneNumber !== '+584120000000') {
             setPhoneNumber(parsed.phoneNumber);
             setHasPhone(true);
           }
         }
 
         // Luego intentar del backend para frescura
-        const freshProfile = await getBackendProfile();
+        const freshProfile = await getBackendProfile().catch(() => null);
         if (freshProfile && active) {
           // Si el usuario es administrador, socio o conductor, no requiere onboarding de pasajero
           const roles = (freshProfile as any).roles || [];
@@ -133,25 +137,30 @@ export default function OnboardingScreen() {
             console.warn('[Onboarding] Error leyendo custom claims:', claimErr);
           }
 
-          if (freshProfile.displayName) {
-            setFullName(freshProfile.displayName);
-          } else if (freshProfile.firstName || freshProfile.lastName) {
-            setFullName(
-              `${freshProfile.firstName || ''} ${freshProfile.lastName || ''}`.trim(),
-            );
+          const backendName =
+            freshProfile.displayName ||
+            `${freshProfile.firstName || ''} ${freshProfile.lastName || ''}`.trim();
+
+          if (backendName && backendName !== 'Usuario Invitado') {
+            setFullName(backendName);
           }
 
           if (freshProfile.nationalId) {
             const rawId = freshProfile.nationalId.trim();
-            if (rawId.startsWith('E-') || rawId.startsWith('e-')) {
-              setNationality('E');
-              setIdNumber(rawId.substring(2).trim());
-            } else {
-              setNationality('V');
-              setIdNumber(rawId.replace(/^[Vv]-/, '').trim());
+            if (rawId !== 'V-00000000' && rawId !== '00000000') {
+              if (rawId.startsWith('E-') || rawId.startsWith('e-')) {
+                setNationality('E');
+                setIdNumber(rawId.substring(2).trim());
+              } else {
+                setNationality('V');
+                setIdNumber(rawId.replace(/^[Vv]-/, '').trim());
+              }
             }
           }
-          if (freshProfile.phoneNumber) {
+          if (
+            freshProfile.phoneNumber &&
+            freshProfile.phoneNumber !== '+584120000000'
+          ) {
             setPhoneNumber(freshProfile.phoneNumber);
             setHasPhone(true);
           }

@@ -2,13 +2,59 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLiteMode } from '@/context/LiteModeContext';
 import type { BalanceCardProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
 export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
   const router = useRouter();
+  const { isLiteMode } = useLiteMode();
   const currentBalance =
     typeof balance === 'number' ? balance : parseFloat(balance as any) || 0;
+
+  if (isLiteMode) {
+    return (
+      <View style={[styles.card, styles.liteCard]}>
+        <View style={styles.topRow}>
+          <View>
+            <Text style={[styles.label, styles.liteLabel]}>TICKETS DISPONIBLES</Text>
+            <View style={styles.balanceRow}>
+              <Text style={[styles.balance, styles.liteBalance]}>
+                {currentBalance.toFixed(2)}
+              </Text>
+              <Text style={[styles.currency, styles.liteCurrency]}>
+                {' '}
+                {currentBalance === 1 ? 'ticket' : 'tickets'}
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            style={styles.liteBuyButton}
+            onPress={() => router.push('/(tabs)/topup')}
+          >
+            <MaterialCommunityIcons
+              name="ticket-confirmation"
+              size={20}
+              color="#0EA5E9"
+            />
+            <Text style={styles.liteBuyText}>Comprar</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.bottomRow}>
+          <View>
+            <Text style={[styles.labelSmall, styles.liteLabel]}>CARACAS MOVE ID</Text>
+            <Text style={[styles.idNumber, styles.liteId]}>
+              {carnetId || '0000 • 0000 • 0000'}
+            </Text>
+          </View>
+          <View style={styles.liteBadge}>
+            <Text style={styles.liteBadgeText}>⚡ LITE</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <LinearGradient
@@ -66,6 +112,53 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
 };
 
 const styles = StyleSheet.create({
+  liteCard: {
+    backgroundColor: '#0F172A',
+    borderWidth: 1,
+    borderColor: '#334155',
+    elevation: 2,
+    shadowOpacity: 0.1,
+  },
+  liteLabel: {
+    color: '#94A3B8',
+  },
+  liteBalance: {
+    color: '#38BDF8',
+  },
+  liteCurrency: {
+    color: '#94A3B8',
+  },
+  liteBuyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
+  },
+  liteBuyText: {
+    color: '#38BDF8',
+    fontFamily: tokens.typography.fontFamily.bold,
+    fontSize: 13,
+    marginLeft: 6,
+  },
+  liteId: {
+    color: '#F8FAFC',
+  },
+  liteBadge: {
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  liteBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.black,
+    letterSpacing: 0.8,
+  },
   card: {
     borderRadius: 30,
     padding: 24,

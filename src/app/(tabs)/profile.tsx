@@ -11,6 +11,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -18,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EditProfileModal } from '@/components/EditProfileModal';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
+import { useLiteMode } from '@/context/LiteModeContext';
 import type {
   ProfileInfoCard,
   ProfileMenuItem,
@@ -28,10 +30,12 @@ import {
   getBackendProfile,
   getFareAccountByUserId,
 } from '@/lib/api';
-import { auth, sigOutAccount } from '@/lib/firebase';
+import { purgeUserSessionAndLogout } from '@/lib/auth-session';
+import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ProfileScreen() {
+  const { isLiteMode, setLiteMode } = useLiteMode();
   const [loggingOut, setLoggingOut] = useState(false);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -231,28 +235,8 @@ export default function ProfileScreen() {
         onPress: async () => {
           try {
             setLoggingOut(true);
-            try {
-              await sigOutAccount();
-            } catch (authError) {
-              console.warn(
-                '[Profile] Error al cerrar sesión de Firebase (offline):',
-                authError,
-              );
-            }
-            await clearGoFareToken();
-            try {
-              await SecureStore.deleteItemAsync('savedEmail');
-              await SecureStore.deleteItemAsync('savedPassword');
-              await AsyncStorage.removeItem('gofare_cached_user_profile');
-              await AsyncStorage.removeItem('temp_auth');
-              await SecureStore.deleteItemAsync('user_role');
-              await AsyncStorage.removeItem('phone_verified_bypass');
-            } catch (err) {
-              console.warn(
-                '[Profile] Error deleting saved credentials/cache:',
-                err,
-              );
-            }
+            await purgeUserSessionAndLogout();
+            setUserProfile(null);
             router.replace('/login');
           } catch (error) {
             console.error('Error al cerrar sesión:', error);
@@ -354,6 +338,30 @@ export default function ProfileScreen() {
 
         {/* ── CONFIGURATION SECTION ── */}
         <Text style={styles.sectionTitle}>Configuración de la Cuenta</Text>
+
+        <View style={styles.menuItem}>
+          <View style={styles.menuIconWrapper}>
+            <Ionicons
+              name="flash"
+              size={22}
+              color={isLiteMode ? tokens.colors.primary : '#9CA3AF'}
+            />
+          </View>
+          <View style={styles.menuInfo}>
+            <Text style={styles.menuTitle}>Modo Lite (Alto Rendimiento)</Text>
+            <Text style={styles.menuSubtitle}>
+              {isLiteMode
+                ? 'Activado: Interfaz ultraligera sin sombras'
+                : 'Desactivado: Interfaz completa'}
+            </Text>
+          </View>
+          <Switch
+            value={isLiteMode}
+            onValueChange={(val) => setLiteMode(val)}
+            trackColor={{ false: '#D1D5DB', true: tokens.colors.primary }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
 
         {menuItems.map((item) => (
           <Pressable
