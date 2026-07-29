@@ -116,7 +116,7 @@ export default function PhoneLoginScreen() {
         await refreshAuthSessionPhase();
         setLoading(false);
 
-        if (userRole === 'platform_admin' || userRole === 'admin') {
+        if (userRole === 'platform_admin') {
           router.replace('/admin/dashboard' as any);
         } else if (userRole === 'transport_owner') {
           router.replace('/vehicle-owner/dashboard' as any);
