@@ -37,12 +37,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LiteModeProvider } from '@/context/LiteModeContext';
 import { clearBackendJwt, getBackendProfile, syncWithBackend } from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
-import {
-  auth,
-  getIdTokenResult,
-  listenToAuthState,
-  sigOutAccount,
-} from '@/lib/firebase';
+import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
 import {
   getFcmToken,
   getInitialNotification,

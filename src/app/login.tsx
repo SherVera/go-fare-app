@@ -24,7 +24,6 @@ import { useLiteMode } from '@/context/LiteModeContext';
 import type { LoginFormState } from '@/interfaces';
 import {
   createFareAccount,
-  findEmailByPhone,
   getFareAccountByUserId,
   loginWithFirebaseToken,
   syncWithBackend,
@@ -67,7 +66,7 @@ export default function LoginScreen() {
   const titleBlockMarginBottom = isSmallScreen ? 12 : isMediumScreen ? 24 : 32;
   const titleLineHeight = isSmallScreen ? 32 : isMediumScreen ? 40 : 44;
 
-  const minSpacerHeight = isSmallScreen ? 12 : 48;
+  const _minSpacerHeight = isSmallScreen ? 12 : 48;
 
   useEffect(() => {
     const checkSavedCredentials = async () => {

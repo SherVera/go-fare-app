@@ -69,7 +69,7 @@ export default function AdminRatesScreen() {
     setFetchingExternal(true);
     try {
       const result = await getExternalBcvRate();
-      if (result && result.rate) {
+      if (result?.rate) {
         setNewBcvRate(result.rate.toFixed(2));
         setBcvRateDate(formatDateToDdMmYyyy(getLocalDateString()));
       }
@@ -493,8 +493,18 @@ export default function AdminRatesScreen() {
                       <ActivityIndicator size="small" color="#059669" />
                     ) : (
                       <>
-                        <Ionicons name="refresh-outline" size={14} color="#059669" />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#059669' }}>
+                        <Ionicons
+                          name="refresh-outline"
+                          size={14}
+                          color="#059669"
+                        />
+                        <Text
+                          style={{
+                            fontSize: 12,
+                            fontWeight: '600',
+                            color: '#059669',
+                          }}
+                        >
                           Obtener tasa oficial de DolarAPI (Backend)
                         </Text>
                       </>

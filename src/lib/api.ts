@@ -310,7 +310,10 @@ async function fetchWithAuth(
       const fareUsd = 0.25;
       const bcvRate = 40.0;
       const baseFareBs = fareUsd * bcvRate;
-      const faresCredited = Math.max(1, Math.round((body.bsAmount || 10) / baseFareBs));
+      const faresCredited = Math.max(
+        1,
+        Math.round((body.bsAmount || 10) / baseFareBs),
+      );
 
       // Simulación probabilística del 70% de aprobación (según especificación de Sherman)
       const isApproved = Math.random() < 0.7;

@@ -26,11 +26,7 @@ import type {
   ProfileMenuItem,
   UserProfile,
 } from '@/interfaces';
-import {
-  clearGoFareToken,
-  getBackendProfile,
-  getFareAccountByUserId,
-} from '@/lib/api';
+import { getBackendProfile, getFareAccountByUserId } from '@/lib/api';
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -58,7 +54,10 @@ export default function ProfileScreen() {
       const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
       if (cached) {
         cachedData = JSON.parse(cached);
-        if (cachedData.email === 'invitado@gofare.dev' || (cachedData.uid && cachedData.uid !== user.uid)) {
+        if (
+          cachedData.email === 'invitado@gofare.dev' ||
+          (cachedData.uid && cachedData.uid !== user.uid)
+        ) {
           await AsyncStorage.removeItem('gofare_cached_user_profile');
           cachedData = null;
         } else {
@@ -69,110 +68,107 @@ export default function ProfileScreen() {
       console.warn('[Profile] Error al cargar caché del perfil:', cacheErr);
     }
 
-      // 2. Consultar servidor en segundo plano
+    // 2. Consultar servidor en segundo plano
+    try {
+      const backendUser = await getBackendProfile();
+      let fareAccountBalance = 0;
       try {
-        const backendUser = await getBackendProfile();
-        let fareAccountBalance = 0;
-        try {
-          const account = await getFareAccountByUserId(backendUser.id);
-          fareAccountBalance = account.balance;
-        } catch (accountErr) {
-          console.warn('[Profile] Error loading fare account:', accountErr);
-        }
-
-        const updatedProfile: UserProfile = {
-          uid: user.uid,
-          backendUuid: backendUser.id,
-          fullName:
-            backendUser.displayName ||
-            cachedData?.displayName ||
-            cachedData?.fullName ||
-            `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-            'Usuario',
-          displayName:
-            backendUser.displayName ||
-            cachedData?.displayName ||
-            `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-            'Usuario',
-          idNumber:
-            backendUser.nationalId ||
-            cachedData?.nationalId ||
-            cachedData?.idNumber ||
-            'V-00000000',
-          email: backendUser.email || cachedData?.email,
-          phoneNumber: backendUser.phoneNumber || cachedData?.phoneNumber || '',
-          balance: fareAccountBalance,
-          photoURL:
-            backendUser.profilePhoto ||
-            cachedData?.photoURL ||
-            'https://i.pravatar.cc/150?img=11',
-          city: 'Caracas, Venezuela',
-          createdAt: backendUser.createdAt,
-        };
-
-        setUserProfile(updatedProfile);
-
-        // Guardar en la caché local y sincronizar rol
-        await AsyncStorage.setItem(
-          'gofare_cached_user_profile',
-          JSON.stringify(updatedProfile),
-        );
-
-        const isAdmin = (backendUser as any).roles?.some(
-          (role: any) =>
-            role.name === 'platform_admin' || role.name === 'admin',
-        );
-        const isOwner = (backendUser as any).roles?.some(
-          (role: any) => role.name === 'transport_owner',
-        );
-        const isDriver = (backendUser as any).roles?.some(
-          (role: any) => role.name === 'driver',
-        );
-        const newRole = isAdmin
-          ? 'platform_admin'
-          : isOwner
-            ? 'transport_owner'
-            : isDriver
-              ? 'driver'
-              : 'passenger';
-        await SecureStore.setItemAsync('user_role', newRole);
-
-        if (isAdmin) {
-          console.log('[Profile] User is platform admin, redirecting...');
-          router.replace('/admin/dashboard' as any);
-        } else if (isOwner) {
-          console.log('[Profile] User is transport owner, redirecting...');
-          router.replace('/vehicle-owner/dashboard' as any);
-        } else if (isDriver) {
-          console.log('[Profile] User is driver, redirecting...');
-          router.replace('/driver/dashboard' as any);
-        }
-      } catch (error: any) {
-        console.log(
-          '[Profile] Error al obtener datos del backend:',
-          error.message || error,
-        );
-        if (error?.message === 'Unauthorized') {
-          return;
-        }
-        // Fallback a caché local en caso de error
-        try {
-          const cached = await AsyncStorage.getItem(
-            'gofare_cached_user_profile',
-          );
-          if (cached) {
-            const fbProfile = JSON.parse(cached);
-            setUserProfile(fbProfile);
-          }
-        } catch (cacheErr: any) {
-          console.log(
-            '[Profile] Error en fallback de caché local:',
-            cacheErr.message || cacheErr,
-          );
-        }
-      } finally {
-        setLoading(false);
+        const account = await getFareAccountByUserId(backendUser.id);
+        fareAccountBalance = account.balance;
+      } catch (accountErr) {
+        console.warn('[Profile] Error loading fare account:', accountErr);
       }
+
+      const updatedProfile: UserProfile = {
+        uid: user.uid,
+        backendUuid: backendUser.id,
+        fullName:
+          backendUser.displayName ||
+          cachedData?.displayName ||
+          cachedData?.fullName ||
+          `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+          'Usuario',
+        displayName:
+          backendUser.displayName ||
+          cachedData?.displayName ||
+          `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+          'Usuario',
+        idNumber:
+          backendUser.nationalId ||
+          cachedData?.nationalId ||
+          cachedData?.idNumber ||
+          'V-00000000',
+        email: backendUser.email || cachedData?.email,
+        phoneNumber: backendUser.phoneNumber || cachedData?.phoneNumber || '',
+        balance: fareAccountBalance,
+        photoURL:
+          backendUser.profilePhoto ||
+          cachedData?.photoURL ||
+          'https://i.pravatar.cc/150?img=11',
+        city: 'Caracas, Venezuela',
+        createdAt: backendUser.createdAt,
+      };
+
+      setUserProfile(updatedProfile);
+
+      // Guardar en la caché local y sincronizar rol
+      await AsyncStorage.setItem(
+        'gofare_cached_user_profile',
+        JSON.stringify(updatedProfile),
+      );
+
+      const isAdmin = (backendUser as any).roles?.some(
+        (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+      );
+      const isOwner = (backendUser as any).roles?.some(
+        (role: any) => role.name === 'transport_owner',
+      );
+      const isDriver = (backendUser as any).roles?.some(
+        (role: any) => role.name === 'driver',
+      );
+      const newRole = isAdmin
+        ? 'platform_admin'
+        : isOwner
+          ? 'transport_owner'
+          : isDriver
+            ? 'driver'
+            : 'passenger';
+      await SecureStore.setItemAsync('user_role', newRole);
+
+      if (isAdmin) {
+        console.log('[Profile] User is platform admin, redirecting...');
+        router.replace('/admin/dashboard' as any);
+      } else if (isOwner) {
+        console.log('[Profile] User is transport owner, redirecting...');
+        router.replace('/vehicle-owner/dashboard' as any);
+      } else if (isDriver) {
+        console.log('[Profile] User is driver, redirecting...');
+        router.replace('/driver/dashboard' as any);
+      }
+    } catch (error: any) {
+      console.log(
+        '[Profile] Error al obtener datos del backend:',
+        error.message || error,
+      );
+      if (error?.message === 'Unauthorized') {
+        return;
+      }
+      // Fallback a caché local en caso de error
+      try {
+        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+        if (cached) {
+          const fbProfile = JSON.parse(cached);
+          setUserProfile(fbProfile);
+        }
+      } catch (cacheErr: any) {
+        console.log(
+          '[Profile] Error en fallback de caché local:',
+          cacheErr.message || cacheErr,
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
   }, [router.replace]);
 
   useFocusEffect(

@@ -4,7 +4,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,9 +13,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { ActionCard } from '@/components/Home/ActionCard';
 import { BalanceCard } from '@/components/Home/BalanceCard';
-import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import { useLiteMode } from '@/context/LiteModeContext';
 import type { UserProfile } from '@/interfaces';
@@ -50,7 +49,10 @@ export default function HomeDashboard() {
       const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
       if (cached) {
         const parsed = JSON.parse(cached);
-        if (parsed.email === 'invitado@gofare.dev' || (parsed.uid && parsed.uid !== user.uid)) {
+        if (
+          parsed.email === 'invitado@gofare.dev' ||
+          (parsed.uid && parsed.uid !== user.uid)
+        ) {
           await AsyncStorage.removeItem('gofare_cached_user_profile');
         } else {
           setUserProfile(parsed);
@@ -255,7 +257,9 @@ export default function HomeDashboard() {
   */
 
   if (loading && !refreshing) {
-    return <AppLoadingScreen message="Sincronizando información de tu cuenta..." />;
+    return (
+      <AppLoadingScreen message="Sincronizando información de tu cuenta..." />
+    );
   }
 
   return (
