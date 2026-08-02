@@ -16,9 +16,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ActionCard } from '@/components/Home/ActionCard';
 import { BalanceCard } from '@/components/Home/BalanceCard';
-// import { MapCard } from '@/components/Home/MapCard';
-// import { RouteItem } from '@/components/Home/RouteItem';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
+import { useLiteMode } from '@/context/LiteModeContext';
 import type { UserProfile } from '@/interfaces';
 import {
   createFareAccount,
@@ -30,26 +30,38 @@ import { tokens } from '@/theme/tokens';
 
 export default function HomeDashboard() {
   const router = useRouter();
+  const { isLiteMode } = useLiteMode();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showPhoneLink, setShowPhoneLink] = useState(false);
 
   const fetchUserData = useCallback(async () => {
-    // 1. Cargar desde la caché local de forma instantánea
-    try {
-      const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
-      if (cached) {
-        setUserProfile(JSON.parse(cached));
-      }
-    } catch (cacheErr) {
-      console.warn('[Home] Error al cargar caché del perfil:', cacheErr);
-    }
     const user = auth.currentUser;
     if (!user) {
+      setUserProfile(null);
       setLoading(false);
       setRefreshing(false);
       return;
+    }
+
+    // 1. Cargar desde la caché local solo si pertenece al usuario autenticado actual
+    try {
+      const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed.email === 'invitado@gofare.dev' || (parsed.uid && parsed.uid !== user.uid)) {
+          await AsyncStorage.removeItem('gofare_cached_user_profile');
+        } else {
+          setUserProfile(parsed);
+          if (isLiteMode && !refreshing) {
+            setLoading(false);
+            return;
+          }
+        }
+      }
+    } catch (cacheErr) {
+      console.warn('[Home] Error al cargar caché del perfil:', cacheErr);
     }
 
     try {
@@ -207,7 +219,7 @@ export default function HomeDashboard() {
     }
     setLoading(false);
     setRefreshing(false);
-  }, [router.replace]);
+  }, [router.replace, isLiteMode, refreshing]);
 
   useFocusEffect(
     useCallback(() => {
@@ -243,12 +255,7 @@ export default function HomeDashboard() {
   */
 
   if (loading && !refreshing) {
-    return (
-      <View style={[styles.container, styles.loadingCenter]}>
-        <StatusBar barStyle="dark-content" />
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
-    );
+    return <AppLoadingScreen message="Sincronizando información de tu cuenta..." />;
   }
 
   return (
@@ -310,7 +317,7 @@ export default function HomeDashboard() {
         {/* ── BALANCE CARD ── */}
         <BalanceCard
           balance={userProfile?.balance ?? 0}
-          carnetId={userProfile?.carnetId || '0000 • 0000 • 0000'}
+          carnetId={userProfile?.idNumber || 'V-00000000'}
         />
 
         {/* ── ROUTES SECTION (Comentado) ──

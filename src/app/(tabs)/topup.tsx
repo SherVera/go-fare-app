@@ -15,6 +15,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BankSelectModal } from '@/components/BankSelectModal';
+import { useLiteMode } from '@/context/LiteModeContext';
 import type { PaymentMethod } from '@/interfaces';
 import {
   createFareAccount,
@@ -23,6 +25,13 @@ import {
   getFareAccountByUserId,
   topUpBalance,
 } from '@/lib/api';
+import {
+  CACHE_KEYS,
+  getLiteCache,
+  invalidateLiteCache,
+  setLiteCache,
+} from '@/lib/api-cache';
+import { setClipboardText } from '@/lib/clipboard';
 import { tokens } from '@/theme/tokens';
 
 const RECHARGE_PACKAGES_BLUEPRINT = [
@@ -62,6 +71,7 @@ const PAYMENT_METHODS: PaymentMethod[] = [
 
 export default function TopUpBalanceScreen() {
   const router = useRouter();
+  const { isLiteMode } = useLiteMode();
 
   // Estado de tasas de cambio dinámicas (valores por defecto iniciales)
   const [fareUsd, setFareUsd] = useState(0.25);
@@ -75,7 +85,8 @@ export default function TopUpBalanceScreen() {
     const baseFareBs = fareUsd * bcvRate;
     return RECHARGE_PACKAGES_BLUEPRINT.map((pkg) => {
       const grossAmount = pkg.tickets * baseFareBs;
-      const netAmount = grossAmount * (1 - pkg.discount);
+      const rawNetAmount = grossAmount * (1 - pkg.discount);
+      const netAmount = Math.round(rawNetAmount * 100) / 100;
       const savings = grossAmount - netAmount;
 
       let tagText = pkg.tag;
@@ -118,7 +129,8 @@ export default function TopUpBalanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Campos de Pago Móvil
-  const [pmBank, setPmBank] = useState('Banesco');
+  const [pmBank, setPmBank] = useState('Banesco Banco Universal');
+  const [showBankModal, setShowBankModal] = useState(false);
   const [pmPhone, setPmPhone] = useState('');
   const [pmIdNumber, setPmIdNumber] = useState('');
   const [pmReference, setPmReference] = useState('');
@@ -129,46 +141,62 @@ export default function TopUpBalanceScreen() {
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
 
-  const loadUserData = useCallback(async () => {
-    try {
-      // Consultar tasas actuales en la base de datos
-      try {
-        const rates = await getCurrentRates();
-        if (rates) {
-          setFareUsd(rates.fareUsdValue);
-          setBcvRate(rates.bcvRate);
+  const loadUserData = useCallback(
+    async (isManualRefresh = false) => {
+      // 1. En Modo Lite: consultar tasas guardadas en caché si no es actualización manual
+      if (isLiteMode && !isManualRefresh) {
+        const cachedRates = await getLiteCache<{
+          fareUsdValue: number;
+          bcvRate: number;
+        }>(CACHE_KEYS.EXCHANGE_RATES, 24 * 60 * 60 * 1000); // 24 Horas para tasas
+        if (cachedRates) {
+          setFareUsd(cachedRates.fareUsdValue);
+          setBcvRate(cachedRates.bcvRate);
         }
-      } catch (rateErr) {
-        console.warn('[TopUp] Error fetching rates:', rateErr);
       }
 
-      const backendUser = await getBackendProfile();
-      if (backendUser) {
-        setUserId(backendUser.id);
-        setPmPhone(backendUser.phoneNumber || '');
-
-        let account = null;
+      try {
+        // Consultar tasas actuales en la base de datos
         try {
-          account = await getFareAccountByUserId(backendUser.id);
-        } catch (_) {
+          const rates = await getCurrentRates();
+          if (rates) {
+            setFareUsd(rates.fareUsdValue);
+            setBcvRate(rates.bcvRate);
+            await setLiteCache(CACHE_KEYS.EXCHANGE_RATES, rates);
+          }
+        } catch (rateErr) {
+          console.warn('[TopUp] Error fetching rates:', rateErr);
+        }
+
+        const backendUser = await getBackendProfile();
+        if (backendUser) {
+          setUserId(backendUser.id);
+          setPmPhone(backendUser.phoneNumber || '');
+
+          let account = null;
           try {
-            account = await createFareAccount(backendUser.id);
-          } catch (createErr) {
-            console.warn('[TopUp] Error creating fare account:', createErr);
+            account = await getFareAccountByUserId(backendUser.id);
+          } catch (_) {
+            try {
+              account = await createFareAccount(backendUser.id);
+            } catch (createErr) {
+              console.warn('[TopUp] Error creating fare account:', createErr);
+            }
+          }
+
+          if (account) {
+            setAccountId(account.id);
+            setBalance(Number(account.balance));
           }
         }
-
-        if (account) {
-          setAccountId(account.id);
-          setBalance(Number(account.balance));
-        }
+      } catch (err) {
+        console.warn('[TopUp] Error loading user data:', err);
+      } finally {
+        setLoadingBalance(false);
       }
-    } catch (err) {
-      console.warn('[TopUp] Error loading user data:', err);
-    } finally {
-      setLoadingBalance(false);
-    }
-  }, []);
+    },
+    [isLiteMode],
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -271,9 +299,11 @@ export default function TopUpBalanceScreen() {
     }
   };
 
-  const handleCloseSuccess = () => {
+  const handleCloseSuccess = async () => {
     setShowModal(false);
-    loadUserData();
+    await invalidateLiteCache(CACHE_KEYS.USER_PROFILE);
+    await invalidateLiteCache(CACHE_KEYS.TRANSACTIONS);
+    loadUserData(true);
   };
 
   const handleCardNumberChange = (text: string) => {
@@ -285,6 +315,15 @@ export default function TopUpBalanceScreen() {
     let clean = text.replace(/\D/g, '');
     if (clean.length > 2) clean = `${clean.slice(0, 2)}/${clean.slice(2, 4)}`;
     setCardExpiry(clean);
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    await setClipboardText(text, label);
+  };
+
+  const copyAllPagoMovil = async () => {
+    const text = `Pago Móvil GoFare:\nBanco: Banesco (0134)\nRIF: J-48291048\nTeléfono: 0412-5551234\nMonto: Bs. ${selectedPkg.amount.toFixed(2).replace('.', ',')}`;
+    await setClipboardText(text, 'Datos de Pago Móvil');
   };
 
   return (
@@ -566,38 +605,137 @@ export default function TopUpBalanceScreen() {
                 {/* Formulario según método */}
                 {selectedMethod === 'pago_movil' && (
                   <View style={styles.formContainer}>
-                    <Text style={styles.infoBox}>
-                      Realiza el Pago Móvil a los datos y luego ingresa la
-                      referencia:{'\n'}
-                      <Text style={{ fontWeight: 'bold' }}>
-                        Banco: Banesco • RIF: J-48291048 • Tel: 0412-5551234
+                    <View style={styles.targetBankCard}>
+                      <Text style={styles.targetBankTitle}>
+                        DATOS DESTINO DE PAGO MÓVIL
                       </Text>
-                    </Text>
+
+                      <View style={styles.targetItemRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.targetItemLabel}>
+                            Banco Destino:
+                          </Text>
+                          <Text style={styles.targetItemValue}>
+                            Banesco (0134)
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={styles.copyChip}
+                          onPress={() =>
+                            copyToClipboard('Banesco', 'Banco Destino')
+                          }
+                        >
+                          <Ionicons
+                            name="copy-outline"
+                            size={14}
+                            color={tokens.colors.primary}
+                          />
+                          <Text style={styles.copyChipText}>Copiar</Text>
+                        </Pressable>
+                      </View>
+
+                      <View style={styles.targetItemRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.targetItemLabel}>
+                            RIF Destino:
+                          </Text>
+                          <Text style={styles.targetItemValue}>J-48291048</Text>
+                        </View>
+                        <Pressable
+                          style={styles.copyChip}
+                          onPress={() =>
+                            copyToClipboard('J48291048', 'RIF Destino')
+                          }
+                        >
+                          <Ionicons
+                            name="copy-outline"
+                            size={14}
+                            color={tokens.colors.primary}
+                          />
+                          <Text style={styles.copyChipText}>Copiar</Text>
+                        </Pressable>
+                      </View>
+
+                      <View style={styles.targetItemRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.targetItemLabel}>
+                            Teléfono Destino:
+                          </Text>
+                          <Text style={styles.targetItemValue}>
+                            0412-5551234
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={styles.copyChip}
+                          onPress={() =>
+                            copyToClipboard('04125551234', 'Teléfono Destino')
+                          }
+                        >
+                          <Ionicons
+                            name="copy-outline"
+                            size={14}
+                            color={tokens.colors.primary}
+                          />
+                          <Text style={styles.copyChipText}>Copiar</Text>
+                        </Pressable>
+                      </View>
+
+                      <View
+                        style={[styles.targetItemRow, { borderBottomWidth: 0 }]}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.targetItemLabel}>
+                            Monto exacto:
+                          </Text>
+                          <Text
+                            style={[
+                              styles.targetItemValue,
+                              { color: tokens.colors.primary },
+                            ]}
+                          >
+                            Bs.{' '}
+                            {selectedPkg.amount.toFixed(2).replace('.', ',')}
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={styles.copyChip}
+                          onPress={() =>
+                            copyToClipboard(
+                              selectedPkg.amount.toFixed(2).replace('.', ','),
+                              'Monto exacto',
+                            )
+                          }
+                        >
+                          <Ionicons
+                            name="copy-outline"
+                            size={14}
+                            color={tokens.colors.primary}
+                          />
+                          <Text style={styles.copyChipText}>Copiar</Text>
+                        </Pressable>
+                      </View>
+
+                      <Pressable
+                        style={styles.copyAllBtn}
+                        onPress={copyAllPagoMovil}
+                      >
+                        <Ionicons name="copy" size={16} color="#FFFFFF" />
+                        <Text style={styles.copyAllBtnText}>
+                          Copiar Todos los Datos
+                        </Text>
+                      </Pressable>
+                    </View>
 
                     <Text style={styles.inputLabel}>BANCO EMISOR</Text>
-                    <View style={styles.bankPickerRow}>
-                      {['Banesco', 'Mercantil', 'Provincial', 'Venezuela'].map(
-                        (b) => (
-                          <Pressable
-                            key={b}
-                            style={[
-                              styles.bankBubble,
-                              pmBank === b && styles.bankBubbleActive,
-                            ]}
-                            onPress={() => setPmBank(b)}
-                          >
-                            <Text
-                              style={[
-                                styles.bankBubbleText,
-                                pmBank === b && styles.bankBubbleTextActive,
-                              ]}
-                            >
-                              {b}
-                            </Text>
-                          </Pressable>
-                        ),
-                      )}
-                    </View>
+                    <Pressable
+                      style={styles.bankSelectBox}
+                      onPress={() => setShowBankModal(true)}
+                    >
+                      <Text style={styles.bankSelectText}>
+                        {pmBank || 'Seleccionar Banco...'}
+                      </Text>
+                      <Ionicons name="chevron-down" size={20} color="#64748B" />
+                    </Pressable>
 
                     <Text style={styles.inputLabel}>TELÉFONO</Text>
                     <TextInput
@@ -772,11 +910,30 @@ export default function TopUpBalanceScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de selección de banco emisor */}
+      <BankSelectModal
+        visible={showBankModal}
+        selectedBankName={pmBank}
+        onSelectBank={(b) => setPmBank(b.name)}
+        onClose={() => setShowBankModal(false)}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  liteContainer: {
+    backgroundColor: '#0F172A',
+  },
+  liteText: {
+    color: '#F8FAFC',
+  },
+  liteTicketCard: {
+    borderWidth: 1,
+    borderColor: '#334155',
+    elevation: 2,
+  },
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
     flexDirection: 'row',
@@ -1133,15 +1290,70 @@ const styles = StyleSheet.create({
 
   // Formulario
   formContainer: { marginBottom: 8 },
-  infoBox: {
+  targetBankCard: {
     backgroundColor: '#F0F9FF',
-    borderRadius: 12,
-    padding: 14,
-    fontSize: 12,
-    fontFamily: tokens.typography.fontFamily.regular,
-    color: '#1E293B',
-    lineHeight: 18,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
     marginBottom: 16,
+  },
+  targetBankTitle: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#0284C7',
+    letterSpacing: 0.8,
+    marginBottom: 12,
+  },
+  targetItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0F2FE',
+  },
+  targetItemLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontFamily: tokens.typography.fontFamily.medium,
+  },
+  targetItemValue: {
+    fontSize: 14,
+    color: '#0F172A',
+    fontFamily: tokens.typography.fontFamily.bold,
+    marginTop: 1,
+  },
+  copyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  copyChipText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+    marginLeft: 4,
+  },
+  copyAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: tokens.colors.primary,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 14,
+  },
+  copyAllBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    marginLeft: 6,
   },
   inputLabel: {
     fontSize: 10,
@@ -1161,6 +1373,25 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  bankSelectBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginBottom: 4,
+  },
+  bankSelectText: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#0F172A',
+    flex: 1,
+    marginRight: 8,
   },
   bankPickerRow: {
     flexDirection: 'row',

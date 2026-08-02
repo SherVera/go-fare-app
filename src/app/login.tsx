@@ -560,7 +560,7 @@ export default function LoginScreen() {
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
-              placeholder="correo@ejemplo.com o 04120000000"
+              placeholder="correo@ejemplo.com"
               placeholderTextColor="#B8C4D4"
               keyboardType="email-address"
               autoCapitalize="none"

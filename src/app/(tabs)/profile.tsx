@@ -17,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { EditProfileModal } from '@/components/EditProfileModal';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import { useLiteMode } from '@/context/LiteModeContext';
@@ -37,6 +38,7 @@ import { tokens } from '@/theme/tokens';
 export default function ProfileScreen() {
   const { isLiteMode, setLiteMode } = useLiteMode();
   const [loggingOut, setLoggingOut] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -44,18 +46,28 @@ export default function ProfileScreen() {
 
   const fetchUserData = useCallback(async () => {
     const user = auth.currentUser;
-    if (user) {
-      // 1. Cargar desde la caché local de forma instantánea
-      let cachedData: any = null;
-      try {
-        const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
-        if (cached) {
-          cachedData = JSON.parse(cached);
+    if (!user) {
+      setUserProfile(null);
+      setLoading(false);
+      return;
+    }
+
+    // 1. Cargar desde la caché local solo si pertenece al usuario actual
+    let cachedData: any = null;
+    try {
+      const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+      if (cached) {
+        cachedData = JSON.parse(cached);
+        if (cachedData.email === 'invitado@gofare.dev' || (cachedData.uid && cachedData.uid !== user.uid)) {
+          await AsyncStorage.removeItem('gofare_cached_user_profile');
+          cachedData = null;
+        } else {
           setUserProfile(cachedData);
         }
-      } catch (cacheErr) {
-        console.warn('[Profile] Error al cargar caché del perfil:', cacheErr);
       }
+    } catch (cacheErr) {
+      console.warn('[Profile] Error al cargar caché del perfil:', cacheErr);
+    }
 
       // 2. Consultar servidor en segundo plano
       try {
@@ -158,8 +170,9 @@ export default function ProfileScreen() {
             cacheErr.message || cacheErr,
           );
         }
+      } finally {
+        setLoading(false);
       }
-    }
   }, [router.replace]);
 
   useFocusEffect(
@@ -248,6 +261,10 @@ export default function ProfileScreen() {
       },
     ]);
   };
+
+  if (loading) {
+    return <AppLoadingScreen message="Cargando datos del perfil..." />;
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

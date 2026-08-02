@@ -82,25 +82,6 @@ export async function syncWithBackend(
   firebaseUser: FirebaseAuthTypes.User | null,
 ): Promise<BackendAuthResponse> {
   if (!firebaseUser) {
-    const isBypass = await AsyncStorage.getItem('phone_verified_bypass');
-    if (isBypass === 'true') {
-      return {
-        token: 'mock-gofare-jwt-token-bypass',
-        user: {
-          id: 'local-usr-mock',
-          uuid: 'local-usr-mock',
-          email: 'invitado@gofare.dev',
-          phoneNumber: '+584120000000',
-          firstName: 'Usuario',
-          lastName: 'Invitado',
-          displayName: 'Usuario Invitado',
-          provider: 'phone',
-          providerId: 'mock-phone',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      };
-    }
     throw new Error('Usuario de Firebase no autenticado.');
   }
 
@@ -323,14 +304,106 @@ async function fetchWithAuth(
       };
     }
 
+    if (path === '/fare/me/top-up') {
+      const body = JSON.parse((options.body as string) || '{}');
+      const account = await getLocalFareAccount('local-usr-mock');
+      const fareUsd = 0.25;
+      const bcvRate = 40.0;
+      const baseFareBs = fareUsd * bcvRate;
+      const faresCredited = Math.max(1, Math.round((body.bsAmount || 10) / baseFareBs));
+
+      // Simulación probabilística del 70% de aprobación (según especificación de Sherman)
+      const isApproved = Math.random() < 0.7;
+      if (!isApproved) {
+        throw new Error(
+          'Rechazo bancario (simulado): La referencia no pudo ser verificada por la tesorería o ya fue utilizada.',
+        );
+      }
+
+      account.balance += faresCredited;
+      account.updatedAt = new Date().toISOString();
+      await saveLocalFareAccount(account);
+
+      const transactions = await getLocalTransactions(account.id);
+      transactions.unshift({
+        id: `tx-${Date.now()}`,
+        accountId: account.id,
+        amount: faresCredited,
+        type: 'credit',
+        description: `Recarga Pago Móvil Ref: ${body.reference || 'N/A'}`,
+        createdAt: new Date().toISOString(),
+      });
+      await saveLocalTransactions(account.id, transactions);
+
+      return {
+        balanceFares: account.balance,
+        faresCredited,
+        bsAmount: body.bsAmount || 0,
+      };
+    }
+
     if (path.startsWith('/fare/transactions')) return [];
     if (path.startsWith('/tickets')) return [];
     if (path.startsWith('/vehicles')) return [];
     if (path.startsWith('/rates/current')) {
+      try {
+        const cached = await AsyncStorage.getItem('gofare_rates_cache');
+        if (cached) return JSON.parse(cached);
+      } catch {}
       return {
         fareUsdValue: 0.25,
-        bcvRate: 40.0,
+        bcvRate: 721.35,
         bcvRateDate: new Date().toISOString().slice(0, 10),
+      };
+    }
+
+    if (path.startsWith('/rates/bcv') && options.method === 'POST') {
+      const body = JSON.parse((options.body as string) || '{}');
+      const targetDate = body.rateDate || new Date().toISOString().slice(0, 10);
+      let current = {
+        fareUsdValue: 0.25,
+        bcvRate: Number(body.rate) || 40.0,
+        bcvRateDate: targetDate,
+      };
+      try {
+        const cached = await AsyncStorage.getItem('gofare_rates_cache');
+        if (cached) {
+          current = {
+            ...JSON.parse(cached),
+            bcvRate: Number(body.rate) || 40.0,
+            bcvRateDate: targetDate,
+          };
+        }
+      } catch {}
+      await AsyncStorage.setItem('gofare_rates_cache', JSON.stringify(current));
+      return current;
+    }
+
+    if (path.startsWith('/rates/fare-value') && options.method === 'POST') {
+      const body = JSON.parse((options.body as string) || '{}');
+      let current = {
+        fareUsdValue: Number(body.usdValue) || 0.25,
+        bcvRate: 721.35,
+        bcvRateDate: new Date().toISOString().slice(0, 10),
+      };
+      try {
+        const cached = await AsyncStorage.getItem('gofare_rates_cache');
+        if (cached) {
+          current = {
+            ...JSON.parse(cached),
+            fareUsdValue: Number(body.usdValue) || 0.25,
+          };
+        }
+      } catch {}
+      await AsyncStorage.setItem('gofare_rates_cache', JSON.stringify(current));
+      return current;
+    }
+
+    if (path.startsWith('/rates/bcv/external')) {
+      return {
+        rate: 721.35,
+        source: 'dolarapi',
+        fetchedAt: new Date().toISOString(),
       };
     }
 
@@ -946,9 +1019,13 @@ export async function topUpBalance(data: {
   faresCredited: number;
   bsAmount: number;
 }> {
+  const cleanBsAmount = Math.round((Number(data.bsAmount) || 0) * 100) / 100;
   return await fetchWithAuth('/fare/me/top-up', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      ...data,
+      bsAmount: cleanBsAmount,
+    }),
   });
 }
 
@@ -2320,7 +2397,7 @@ export async function getCurrentRates(): Promise<{
     } catch {}
     return {
       fareUsdValue: 0.25,
-      bcvRate: 40.0,
+      bcvRate: 721.35,
       bcvRateDate: new Date().toISOString().slice(0, 10),
     };
   }
@@ -2373,6 +2450,17 @@ export async function updateBcvRate(
   }
 
   return result;
+}
+
+/**
+ * Consulta la tasa BCV oficial sugerida desde la fuente externa (DolarAPI) a través del backend (GET /rates/bcv/external).
+ */
+export async function getExternalBcvRate(): Promise<{
+  rate: number;
+  source: string;
+  fetchedAt: string;
+}> {
+  return await fetchWithAuth('/rates/bcv/external');
 }
 
 /**

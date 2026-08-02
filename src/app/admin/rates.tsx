@@ -16,7 +16,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { getCurrentRates, updateBcvRate, updateFareValue } from '@/lib/api';
+import {
+  getCurrentRates,
+  getExternalBcvRate,
+  updateBcvRate,
+  updateFareValue,
+} from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 // Obtener fecha local YYYY-MM-DD
@@ -58,6 +63,26 @@ export default function AdminRatesScreen() {
   const [loading, setLoading] = useState(true);
   const [updatingFare, setUpdatingFare] = useState(false);
   const [updatingBcv, setUpdatingBcv] = useState(false);
+  const [fetchingExternal, setFetchingExternal] = useState(false);
+
+  const handleFetchExternalBcv = async () => {
+    setFetchingExternal(true);
+    try {
+      const result = await getExternalBcvRate();
+      if (result && result.rate) {
+        setNewBcvRate(result.rate.toFixed(2));
+        setBcvRateDate(formatDateToDdMmYyyy(getLocalDateString()));
+      }
+    } catch (err: any) {
+      console.warn('[AdminRates] Error fetching external BCV:', err);
+      Alert.alert(
+        'Error de Conexión',
+        err.message || 'No se pudo consultar la fuente externa del BCV.',
+      );
+    } finally {
+      setFetchingExternal(false);
+    }
+  };
 
   // Pestaña activa: 'fare' (Precio del Fare) o 'bcv' (Tasa BCV)
   const [activeTab, setActiveTab] = useState<'fare' | 'bcv'>('fare');
@@ -101,10 +126,8 @@ export default function AdminRatesScreen() {
       const data = await getCurrentRates();
       setCurrentRates(data);
       setNewFareValue(data.fareUsdValue.toFixed(2));
-      setNewBcvRate(data.bcvRate.toFixed(2));
-      setBcvRateDate(
-        formatDateToDdMmYyyy(data.bcvRateDate || getLocalDateString()),
-      );
+      setNewBcvRate('');
+      setBcvRateDate(formatDateToDdMmYyyy(getLocalDateString()));
     } catch (err) {
       console.warn('[AdminRates] Error fetching current rates:', err);
       Alert.alert('Error', 'No se pudieron sincronizar las tasas vigentes.');
@@ -156,12 +179,11 @@ export default function AdminRatesScreen() {
       return;
     }
 
-    // Validar formato de fecha DD/MM/AAAA
-    const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
-    if (!dateRegex.test(bcvRateDate)) {
+    // Validar si la misma tasa ya está registrada para la misma fecha
+    if (isDuplicateRate) {
       Alert.alert(
-        'Fecha inválida',
-        'La fecha debe estar en formato DD/MM/AAAA.',
+        'Tasa Ya Registrada',
+        `La tasa de ${currentRates.bcvRate.toFixed(2)} Bs/$ ya se encuentra registrada para la fecha ${bcvRateDate}. Ingresa un valor diferente para actualizarla.`,
       );
       return;
     }
@@ -189,13 +211,13 @@ export default function AdminRatesScreen() {
   const newFareInBs = enteredFare * (enteredBcv || currentRates.bcvRate);
 
   // Validaciones del botón registrar BCV
-  const isBcvAlreadyRegistered =
-    currentRates.bcvRateDate === getLocalDateString();
-  const inputMatchesSystem =
-    enteredBcv === currentRates.bcvRate &&
+  const isDuplicateRate =
+    enteredBcv > 0 &&
+    Math.abs(enteredBcv - currentRates.bcvRate) < 0.001 &&
     formatDateToYyyyMmDd(bcvRateDate) === currentRates.bcvRateDate;
+
   const isBcvButtonDisabled =
-    updatingBcv || (isBcvAlreadyRegistered && inputMatchesSystem);
+    updatingBcv || !newBcvRate.trim() || isDuplicateRate;
 
   if (loading) {
     return (
@@ -444,11 +466,40 @@ export default function AdminRatesScreen() {
                       keyboardType="numeric"
                       value={newBcvRate}
                       onChangeText={setNewBcvRate}
-                      placeholder="40.00"
+                      placeholder="Ej: 746.63"
                       placeholderTextColor="#94A3B8"
                     />
                     <Text style={styles.currencySuffix}>Bs / $</Text>
                   </View>
+
+                  <Pressable
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      alignSelf: 'flex-start',
+                      marginTop: 8,
+                      backgroundColor: '#ECFDF5',
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: '#A7F3D0',
+                      gap: 6,
+                    }}
+                    onPress={handleFetchExternalBcv}
+                    disabled={fetchingExternal}
+                  >
+                    {fetchingExternal ? (
+                      <ActivityIndicator size="small" color="#059669" />
+                    ) : (
+                      <>
+                        <Ionicons name="refresh-outline" size={14} color="#059669" />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#059669' }}>
+                          Obtener tasa oficial de DolarAPI (Backend)
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -501,8 +552,8 @@ export default function AdminRatesScreen() {
                           isBcvButtonDisabled && { color: '#94A3B8' },
                         ]}
                       >
-                        {isBcvAlreadyRegistered && inputMatchesSystem
-                          ? 'Tasa Registrada al Día'
+                        {isDuplicateRate
+                          ? 'Tasa Ya Registrada para esta Fecha'
                           : 'Registrar Tasa'}
                       </Text>
                     </>
