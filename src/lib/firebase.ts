@@ -5,7 +5,6 @@ import {
   type FirebaseAuthTypes,
   GoogleAuthProvider,
   getAuth,
-  getIdTokenResult,
   onAuthStateChanged,
   PhoneAuthProvider,
   sendEmailVerification,
@@ -122,7 +121,7 @@ export const updateUser = (
   user: FirebaseAuthTypes.User | null,
   profile: { displayName?: string | null; photoURL?: string | null },
 ) => {
-  if (!user || (user.uid && user.uid.startsWith('mock-'))) {
+  if (!user || user.uid?.startsWith('mock-')) {
     return Promise.resolve();
   }
   return user.updateProfile(profile);
@@ -152,8 +151,7 @@ export const confirmPhoneCode = async (
 ) => {
   const currentUser = auth.currentUser;
   if (
-    currentUser &&
-    currentUser.uid &&
+    currentUser?.uid &&
     !currentUser.uid.startsWith('mock-') &&
     (confirmation as any)?.verificationId
   ) {

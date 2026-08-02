@@ -37,12 +37,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LiteModeProvider } from '@/context/LiteModeContext';
 import { clearBackendJwt, getBackendProfile, syncWithBackend } from '@/lib/api';
 import { registerAuthSessionResolver } from '@/lib/auth-session';
-import {
-  auth,
-  getIdTokenResult,
-  listenToAuthState,
-  sigOutAccount,
-} from '@/lib/firebase';
+import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
 import {
   getFcmToken,
   getInitialNotification,
@@ -247,27 +242,7 @@ export default function RootLayout() {
     let cancelled = false;
 
     const applyPhase = async (user: FirebaseAuthTypes.User | null) => {
-      let resolvedUser = user;
-
-      // Bypass telefónico en desarrollo: si no hay usuario en Firebase pero el bypass está activo, simular sesión
-      if (!resolvedUser) {
-        try {
-          const isBypass = await AsyncStorage.getItem('phone_verified_bypass');
-          if (isBypass === 'true') {
-            resolvedUser = {
-              uid: 'mock-phone-bypass-layout',
-              phoneNumber: '+584120000000',
-              getIdToken: async () => 'mock-id-token-bypass',
-              getIdTokenResult: async () => ({
-                claims: { role: 'passenger' },
-              }),
-              reload: async () => {},
-            } as any;
-          }
-        } catch (e) {
-          console.warn('[Layout] Error checking bypass:', e);
-        }
-      }
+      const resolvedUser = user;
 
       if (!resolvedUser) {
         await clearBackendJwt();

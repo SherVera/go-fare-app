@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLiteMode } from '@/context/LiteModeContext';
 import type { BackendTicket, TripFilter, TripSummary } from '@/interfaces';
 import {
   getAccountTransactions,
@@ -20,10 +21,12 @@ import {
   getFareAccountByUserId,
   getUserTickets,
 } from '@/lib/api';
+import { CACHE_KEYS, getLiteCache, setLiteCache } from '@/lib/api-cache';
 import { tokens } from '@/theme/tokens';
 
 export default function TripsScreen() {
   const router = useRouter();
+  const { isLiteMode } = useLiteMode();
   const [activeTab, setActiveTab] = useState<'trips' | 'transactions'>('trips');
   const [activeFilter, setActiveFilter] = useState<TripFilter['value']>('all');
   const [tickets, setTickets] = useState<BackendTicket[]>([]);
@@ -38,51 +41,72 @@ export default function TripsScreen() {
     { label: 'Este año', value: 'year' },
   ];
 
-  const fetchTicketsData = useCallback(async () => {
-    try {
-      const backendUser = await getBackendProfile();
-      if (backendUser) {
-        // 1. Obtener viajes / boletos
-        const userTickets = await getUserTickets(backendUser.id);
-        userTickets.sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  const fetchTicketsData = useCallback(
+    async (isManualRefresh = false) => {
+      // 1. En Modo Lite: si tenemos datos en caché y no es actualización manual, usar caché instantáneo
+      if (isLiteMode && !isManualRefresh) {
+        const cachedTickets = await getLiteCache<BackendTicket[]>(
+          CACHE_KEYS.TICKETS,
         );
-        setTickets(userTickets);
+        const cachedTxs = await getLiteCache<any[]>(CACHE_KEYS.TRANSACTIONS);
 
-        // 2. Obtener cuenta de tarifa e historial de transacciones de recarga/débito
-        try {
-          const account = await getFareAccountByUserId(backendUser.id);
-          if (account) {
-            const userTxs = await getAccountTransactions(account.id);
-            userTxs.sort(
-              (a, b) =>
-                new Date(b.createdAt).getTime() -
-                new Date(a.createdAt).getTime(),
-            );
-            setTransactions(userTxs);
-          }
-        } catch (txErr) {
-          console.warn('[Trips] Error fetching transactions:', txErr);
+        if (cachedTickets && cachedTxs) {
+          setTickets(cachedTickets);
+          setTransactions(cachedTxs);
+          setLoading(false);
+          setRefreshing(false);
+          return;
         }
       }
-    } catch (error) {
-      console.error('[Trips] Error fetching data:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
+
+      try {
+        const backendUser = await getBackendProfile();
+        if (backendUser) {
+          // 1. Obtener viajes / boletos
+          const userTickets = await getUserTickets(backendUser.id);
+          userTickets.sort(
+            (a, b) =>
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+          );
+          setTickets(userTickets);
+          await setLiteCache(CACHE_KEYS.TICKETS, userTickets);
+
+          // 2. Obtener cuenta de tarifa e historial de transacciones de recarga/débito
+          try {
+            const account = await getFareAccountByUserId(backendUser.id);
+            if (account) {
+              const userTxs = await getAccountTransactions(account.id);
+              userTxs.sort(
+                (a, b) =>
+                  new Date(b.createdAt).getTime() -
+                  new Date(a.createdAt).getTime(),
+              );
+              setTransactions(userTxs);
+              await setLiteCache(CACHE_KEYS.TRANSACTIONS, userTxs);
+            }
+          } catch (txErr) {
+            console.warn('[Trips] Error fetching transactions:', txErr);
+          }
+        }
+      } catch (error) {
+        console.error('[Trips] Error fetching data:', error);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [isLiteMode],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      fetchTicketsData();
+      fetchTicketsData(false);
     }, [fetchTicketsData]),
   );
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchTicketsData();
+    fetchTicketsData(true);
   };
 
   // Resumen dinámico de viajes calculado a partir de la API

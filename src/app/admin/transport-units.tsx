@@ -230,7 +230,7 @@ export default function AdminTransportUnitsScreen() {
           JSON.stringify(updated),
         );
       } catch (_) {}
-    } catch (err: any) {
+    } catch (_err: any) {
       Alert.alert('Error', 'No se pudo rechazar el documento.');
     } finally {
       setDetailLoading(false);
@@ -328,7 +328,7 @@ export default function AdminTransportUnitsScreen() {
                   JSON.stringify(updated),
                 );
               } catch (_) {}
-            } catch (err: any) {
+            } catch (_err: any) {
               Alert.alert('Error', 'No se pudo aprobar el documento.');
             } finally {
               setDetailLoading(false);

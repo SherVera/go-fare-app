@@ -12,54 +12,6 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
   const currentBalance =
     typeof balance === 'number' ? balance : parseFloat(balance as any) || 0;
 
-  if (isLiteMode) {
-    return (
-      <View style={[styles.card, styles.liteCard]}>
-        <View style={styles.topRow}>
-          <View>
-            <Text style={[styles.label, styles.liteLabel]}>
-              TICKETS DISPONIBLES
-            </Text>
-            <View style={styles.balanceRow}>
-              <Text style={[styles.balance, styles.liteBalance]}>
-                {currentBalance.toFixed(2)}
-              </Text>
-              <Text style={[styles.currency, styles.liteCurrency]}>
-                {' '}
-                {currentBalance === 1 ? 'ticket' : 'tickets'}
-              </Text>
-            </View>
-          </View>
-          <Pressable
-            style={styles.liteBuyButton}
-            onPress={() => router.push('/(tabs)/topup')}
-          >
-            <MaterialCommunityIcons
-              name="ticket-confirmation"
-              size={20}
-              color="#0EA5E9"
-            />
-            <Text style={styles.liteBuyText}>Comprar</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.bottomRow}>
-          <View>
-            <Text style={[styles.labelSmall, styles.liteLabel]}>
-              CARACAS MOVE ID
-            </Text>
-            <Text style={[styles.idNumber, styles.liteId]}>
-              {carnetId || '0000 • 0000 • 0000'}
-            </Text>
-          </View>
-          <View style={styles.liteBadge}>
-            <Text style={styles.liteBadgeText}>⚡ LITE</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <LinearGradient
       colors={['#1E40AF', '#3B82F6', '#0EA5E9']}
@@ -92,12 +44,15 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
 
       <View style={styles.bottomRow}>
         <View>
-          <Text style={styles.labelSmall}>CARACAS MOVE ID</Text>
-          <Text style={styles.idNumber}>
-            {carnetId || '0000 • 0000 • 0000'}
-          </Text>
+          <Text style={styles.labelSmall}>CÉDULA DE IDENTIDAD</Text>
+          <Text style={styles.idNumber}>{carnetId || 'V-00000000'}</Text>
         </View>
         <View style={styles.iconRow}>
+          {isLiteMode && (
+            <View style={styles.liteBadge}>
+              <Text style={styles.liteBadgeText}>⚡ LITE</Text>
+            </View>
+          )}
           <View style={[styles.miniIcon, { backgroundColor: '#065F46' }]}>
             <Ionicons name="bus" size={14} color="#FFFFFF" />
           </View>
@@ -116,53 +71,6 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
 };
 
 const styles = StyleSheet.create({
-  liteCard: {
-    backgroundColor: '#0F172A',
-    borderWidth: 1,
-    borderColor: '#334155',
-    elevation: 2,
-    shadowOpacity: 0.1,
-  },
-  liteLabel: {
-    color: '#94A3B8',
-  },
-  liteBalance: {
-    color: '#38BDF8',
-  },
-  liteCurrency: {
-    color: '#94A3B8',
-  },
-  liteBuyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(56, 189, 248, 0.4)',
-  },
-  liteBuyText: {
-    color: '#38BDF8',
-    fontFamily: tokens.typography.fontFamily.bold,
-    fontSize: 13,
-    marginLeft: 6,
-  },
-  liteId: {
-    color: '#F8FAFC',
-  },
-  liteBadge: {
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  liteBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontFamily: tokens.typography.fontFamily.black,
-    letterSpacing: 0.8,
-  },
   card: {
     borderRadius: 30,
     padding: 24,
@@ -202,12 +110,6 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.bold,
     marginLeft: 4,
   },
-  subLabel: {
-    color: 'rgba(255,255,255,0.65)',
-    fontSize: 11,
-    fontFamily: tokens.typography.fontFamily.medium,
-    marginTop: 4,
-  },
   buyButton: {
     width: 50,
     height: 50,
@@ -234,6 +136,22 @@ const styles = StyleSheet.create({
   },
   iconRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+  },
+  liteBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  liteBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.black,
+    letterSpacing: 0.5,
   },
   miniIcon: {
     width: 32,

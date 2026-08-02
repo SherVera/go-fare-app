@@ -21,7 +21,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { useLiteMode } from '@/context/LiteModeContext';
 import { findEmailByPhone, syncWithBackend } from '@/lib/api';
 import { refreshAuthSessionPhase } from '@/lib/auth-session';
-import { auth, signIn } from '@/lib/firebase';
+import { signIn } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function PhoneLoginScreen() {

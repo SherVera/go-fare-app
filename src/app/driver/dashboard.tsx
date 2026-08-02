@@ -76,7 +76,7 @@ export default function DriverDashboard() {
 
   // Polling de estadísticas de sesión y estado en tiempo real (cada 4 segundos)
   useEffect(() => {
-    if (!activeSession || activeSession.status !== 'open') return;
+    if (activeSession?.status !== 'open') return;
 
     const pollInterval = setInterval(async () => {
       try {

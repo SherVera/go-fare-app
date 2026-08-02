@@ -21,10 +21,8 @@ import type { RegisterFormState } from '@/interfaces';
 import {
   createBackendUser,
   createFareAccount,
-  loginWithFirebaseToken,
   registerWithEmail,
   resolveRoleUuid,
-  sendFirebaseVerificationEmail,
   syncWithBackend,
   updateBackendProfile,
   updateOwnNationalId,
@@ -226,7 +224,7 @@ export default function RegisterScreen() {
       }
 
       // 6. Actualizar perfil en el backend (nombres, apellidos y teléfono)
-      if (backendUser && backendUser.id) {
+      if (backendUser?.id) {
         try {
           await updateBackendProfile(backendUser.id, {
             displayName: calculatedDisplayName,

@@ -180,13 +180,13 @@ export default function DriverScanScreen() {
 
   // Polling de pagos y renovación del QR cifrado cada 4 segundos
   useEffect(() => {
-    if (!activeSession || activeSession.status !== 'open') return;
+    if (activeSession?.status !== 'open') return;
 
     const pollInterval = setInterval(async () => {
       try {
         // 1. Verificar si la sesión sigue activa/abierta
         const current = await getCurrentSession();
-        if (!current || current.status !== 'open') {
+        if (current?.status !== 'open') {
           setActiveSession(null);
           setQrCodeData(null);
           setRecentPayments([]);

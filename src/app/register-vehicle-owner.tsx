@@ -25,7 +25,6 @@ import {
   resolveRoleUuid,
   submitVehicleOwnerRequest,
   updateBackendProfile,
-  updateOwnNationalId,
 } from '@/lib/api';
 import { sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
