@@ -399,11 +399,16 @@ export default function LoginScreen() {
 
       await SecureStore.setItemAsync('user_role', userRole);
 
-      if (userRole === 'platform_admin' || userRole === 'admin') {
+      const normRole = (userRole || '').toLowerCase();
+      if (normRole === 'platform_admin' || normRole === 'admin') {
         router.replace('/admin/dashboard' as any);
-      } else if (userRole === 'transport_owner') {
+      } else if (
+        normRole === 'transport_owner' ||
+        normRole === 'vehicle_owner' ||
+        normRole === 'owner'
+      ) {
         router.replace('/vehicle-owner/dashboard' as any);
-      } else if (userRole === 'driver') {
+      } else if (normRole === 'driver' || normRole === 'conductor') {
         router.replace('/driver/dashboard' as any);
       } else {
         router.replace('/(tabs)' as any);

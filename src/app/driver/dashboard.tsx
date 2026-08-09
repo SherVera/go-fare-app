@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -28,6 +28,7 @@ import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function DriverDashboard() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeSession, setActiveSession] = useState<any | null>(null);
@@ -113,17 +114,32 @@ export default function DriverDashboard() {
     try {
       setLoading(true);
       const user = auth.currentUser;
-      if (user) {
-        try {
-          const backendUser = await getBackendProfile();
-          setDriverName(
-            backendUser.displayName ||
-              `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-              'Conductor',
-          );
-        } catch {
-          setDriverName(user.displayName || 'Conductor');
-        }
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+
+      try {
+        const backendUser = await getBackendProfile();
+        const resolved =
+          backendUser.displayName &&
+          backendUser.displayName !== 'Usuario Invitado' &&
+          backendUser.displayName !== 'Usuario'
+            ? backendUser.displayName
+            : `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim();
+
+        setDriverName(
+          resolved ||
+            user.displayName ||
+            user.email?.split('@')[0] ||
+            (user.phoneNumber ? `Conductor ${user.phoneNumber}` : 'Conductor'),
+        );
+      } catch {
+        setDriverName(
+          user.displayName ||
+            user.email?.split('@')[0] ||
+            (user.phoneNumber ? `Conductor ${user.phoneNumber}` : 'Conductor'),
+        );
       }
 
       // Cargar listas de vehículos y rutas asociadas (simuladas en frontend con UUIDs reales de Neon)
@@ -158,7 +174,7 @@ export default function DriverDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -279,9 +295,20 @@ export default function DriverDashboard() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
+      <SafeAreaView style={[styles.container, styles.center]} edges={['top']}>
+        <StatusBar style="dark" />
         <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
+        <Text
+          style={{
+            marginTop: 14,
+            fontSize: 15,
+            fontWeight: '600',
+            color: tokens.colors.mutedGray,
+          }}
+        >
+          Cargando datos de la cuenta...
+        </Text>
+      </SafeAreaView>
     );
   }
 

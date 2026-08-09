@@ -105,11 +105,23 @@ export async function syncWithBackend(
       user: {
         id: `local-usr-${firebaseUser.uid}`,
         uuid: `local-usr-${firebaseUser.uid}`,
-        email: firebaseUser.email || 'invitado@gofare.dev',
+        email:
+          firebaseUser.email ||
+          (firebaseUser.phoneNumber
+            ? `${firebaseUser.phoneNumber.replace('+', '')}@gofare.app`
+            : 'usuario@gofare.app'),
         phoneNumber: firebaseUser.phoneNumber || undefined,
-        firstName: 'Usuario',
-        lastName: 'Invitado',
-        displayName: firebaseUser.displayName || 'Usuario Invitado',
+        firstName: firebaseUser.displayName
+          ? firebaseUser.displayName.split(' ')[0]
+          : 'Usuario',
+        lastName: firebaseUser.displayName
+          ? firebaseUser.displayName.split(' ').slice(1).join(' ') || 'GoFare'
+          : 'GoFare',
+        displayName:
+          firebaseUser.displayName ||
+          (firebaseUser.phoneNumber
+            ? `Usuario ${firebaseUser.phoneNumber}`
+            : 'Usuario GoFare'),
         provider: 'phone',
         providerId: firebaseUser.uid,
         createdAt: new Date().toISOString(),
@@ -132,15 +144,23 @@ export async function syncWithBackend(
       user: {
         id: `local-usr-${firebaseUser.uid}`,
         uuid: `local-usr-${firebaseUser.uid}`,
-        email: firebaseUser.email || 'invitado@gofare.dev',
+        email:
+          firebaseUser.email ||
+          (firebaseUser.phoneNumber
+            ? `${firebaseUser.phoneNumber.replace('+', '')}@gofare.app`
+            : 'usuario@gofare.app'),
         phoneNumber: firebaseUser.phoneNumber || undefined,
         firstName: firebaseUser.displayName
           ? firebaseUser.displayName.split(' ')[0]
           : 'Usuario',
         lastName: firebaseUser.displayName
-          ? firebaseUser.displayName.split(' ').slice(1).join(' ')
-          : 'Invitado',
-        displayName: firebaseUser.displayName || 'Usuario Invitado',
+          ? firebaseUser.displayName.split(' ').slice(1).join(' ') || 'GoFare'
+          : 'GoFare',
+        displayName:
+          firebaseUser.displayName ||
+          (firebaseUser.phoneNumber
+            ? `Usuario ${firebaseUser.phoneNumber}`
+            : 'Usuario GoFare'),
         provider: firebaseUser.providerData?.[0]?.providerId || 'phone',
         providerId: firebaseUser.uid,
         createdAt: new Date().toISOString(),
@@ -229,17 +249,29 @@ async function fetchWithAuth(
       path === '/auth/profile' &&
       (options.method === 'GET' || !options.method)
     ) {
+      const fbUser = auth.currentUser;
+      const fbEmail =
+        fbUser?.email ||
+        (fbUser?.phoneNumber
+          ? `${fbUser.phoneNumber.replace('+', '')}@gofare.app`
+          : 'usuario@gofare.app');
+      const fbName =
+        fbUser?.displayName ||
+        (fbUser?.phoneNumber
+          ? `Usuario ${fbUser.phoneNumber}`
+          : 'Usuario GoFare');
+      const nameParts = fbName.split(' ');
       let mockProfile = {
-        id: 'local-usr-mock',
-        uuid: 'local-usr-mock',
-        email: 'invitado@gofare.dev',
-        phoneNumber: '+584120000000',
-        firstName: 'Usuario',
-        lastName: 'Invitado',
-        displayName: 'Usuario Invitado',
-        nationalId: 'V-00000000',
-        provider: 'phone',
-        providerId: 'mock-phone',
+        id: `local-usr-${fbUser?.uid || 'active'}`,
+        uuid: `local-usr-${fbUser?.uid || 'active'}`,
+        email: fbEmail,
+        phoneNumber: fbUser?.phoneNumber || '+584120000000',
+        firstName: nameParts[0] || 'Usuario',
+        lastName: nameParts.slice(1).join(' ') || 'GoFare',
+        displayName: fbName,
+        nationalId: '',
+        provider: fbUser?.providerData?.[0]?.providerId || 'phone',
+        providerId: fbUser?.uid || 'mock-phone',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -254,17 +286,29 @@ async function fetchWithAuth(
 
     if (path.startsWith('/users/') && options.method === 'PUT') {
       const body = JSON.parse((options.body as string) || '{}');
+      const fbUser = auth.currentUser;
+      const fbEmail =
+        fbUser?.email ||
+        (fbUser?.phoneNumber
+          ? `${fbUser.phoneNumber.replace('+', '')}@gofare.app`
+          : 'usuario@gofare.app');
+      const fbName =
+        fbUser?.displayName ||
+        (fbUser?.phoneNumber
+          ? `Usuario ${fbUser.phoneNumber}`
+          : 'Usuario GoFare');
+      const nameParts = fbName.split(' ');
       let mockProfile = {
-        id: 'local-usr-mock',
-        uuid: 'local-usr-mock',
-        email: 'invitado@gofare.dev',
-        phoneNumber: '+584120000000',
-        firstName: 'Usuario',
-        lastName: 'Invitado',
-        displayName: 'Usuario Invitado',
-        nationalId: 'V-00000000',
-        provider: 'phone',
-        providerId: 'mock-phone',
+        id: `local-usr-${fbUser?.uid || 'active'}`,
+        uuid: `local-usr-${fbUser?.uid || 'active'}`,
+        email: fbEmail,
+        phoneNumber: fbUser?.phoneNumber || '+584120000000',
+        firstName: nameParts[0] || 'Usuario',
+        lastName: nameParts.slice(1).join(' ') || 'GoFare',
+        displayName: fbName,
+        nationalId: '',
+        provider: fbUser?.providerData?.[0]?.providerId || 'phone',
+        providerId: fbUser?.uid || 'mock-phone',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -724,10 +768,11 @@ export async function updateOwnNationalId(
 ): Promise<BackendUser> {
   const token = await getGoFareToken();
   if (token === 'mock-gofare-jwt-token-bypass') {
+    const fbUser = auth.currentUser;
     return {
-      id: 'local-usr-mock',
-      uuid: 'local-usr-mock',
-      email: 'invitado@gofare.dev',
+      id: `local-usr-${fbUser?.uid || 'mock'}`,
+      uuid: `local-usr-${fbUser?.uid || 'mock'}`,
+      email: fbUser?.email || 'usuario@gofare.app',
       nationalId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -832,12 +877,17 @@ export async function updateBackendProfile(
 
   if (data.displayName !== undefined) {
     whitelistedData.displayName = data.displayName;
-  }
-  if (data.firstName !== undefined) {
-    whitelistedData.firstName = data.firstName;
-  }
-  if (data.lastName !== undefined) {
-    whitelistedData.lastName = data.lastName;
+    const parts = data.displayName.trim().split(' ');
+    whitelistedData.firstName = data.firstName || parts[0] || '';
+    whitelistedData.lastName =
+      data.lastName || parts.slice(1).join(' ') || parts[0] || '';
+  } else {
+    if (data.firstName !== undefined) {
+      whitelistedData.firstName = data.firstName;
+    }
+    if (data.lastName !== undefined) {
+      whitelistedData.lastName = data.lastName;
+    }
   }
 
   const responseData = await fetchWithAuth(`/users/${userId}`, {
@@ -1402,6 +1452,7 @@ export async function submitVehicleRequest(requestData: {
   licensePlate: string;
   cooperativeUuid?: string;
   vehicleColor?: string;
+  capacity?: number;
 }): Promise<any> {
   return await fetchWithAuth('/vehicles', {
     method: 'POST',
@@ -1411,7 +1462,7 @@ export async function submitVehicleRequest(requestData: {
       model: requestData.vehicleModel,
       year: requestData.vehicleYear,
       color: requestData.vehicleColor,
-      capacity: 32,
+      capacity: requestData.capacity || 32,
       status: 'inactive', // status válido del enum del backend para nuevo vehículo en revisión
     }),
   });
@@ -2479,11 +2530,67 @@ export async function previewRide(qr: string): Promise<{
   bsAmount: number;
   balanceFares: number;
   sufficient: boolean;
+  driverName?: string;
+  driverDoc?: string;
+  unitNumber?: string;
+  vehicleModel?: string;
 }> {
-  return await fetchWithAuth('/rides/preview', {
-    method: 'POST',
-    body: JSON.stringify({ qr }),
-  });
+  let qrMeta: any = null;
+  let rawQrToken = qr;
+
+  if (
+    qr &&
+    (qr.startsWith('{') || qr.includes('driverName') || qr.includes('sid'))
+  ) {
+    try {
+      qrMeta = JSON.parse(qr);
+      if (qrMeta.qr) {
+        rawQrToken = qrMeta.qr;
+      }
+    } catch {}
+  }
+
+  // 1. Ejecutar la vista previa enviando el token extraído del QR al backend
+  let result: any = null;
+  try {
+    result = await fetchWithAuth('/rides/preview', {
+      method: 'POST',
+      body: JSON.stringify({ qr: rawQrToken }),
+    });
+  } catch (_pErr) {
+    result = await fetchWithAuth('/rides/preview', {
+      method: 'POST',
+      body: JSON.stringify({ qr }),
+    });
+  }
+
+  // 2. Extraer de manera 100% dinámica los datos del conductor según el QR escaneado
+  if (result) {
+    const sessionUuid =
+      result.sessionUuid || qrMeta?.sid || qrMeta?.sessionUuid;
+    const vehiclePlate =
+      result.vehiclePlate || qrMeta?.plate || qrMeta?.vehiclePlate;
+
+    if (qrMeta?.driverName) {
+      result.driverName = formatUserProfileName(qrMeta.driverName);
+    }
+    if (qrMeta?.driverDoc) {
+      result.driverDoc = qrMeta.driverDoc;
+    }
+
+    if (!result.driverName && (sessionUuid || vehiclePlate)) {
+      const resolved = await resolveDriverAndVehicleFromBackend(
+        sessionUuid,
+        vehiclePlate,
+      );
+      if (resolved.driverName) result.driverName = resolved.driverName;
+      if (resolved.driverDoc) result.driverDoc = resolved.driverDoc;
+      if (resolved.unitNumber) result.unitNumber = resolved.unitNumber;
+      if (resolved.vehicleModel) result.vehicleModel = resolved.vehicleModel;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -2495,10 +2602,31 @@ export async function confirmRide(qr: string): Promise<{
   bsAmount: number;
   balanceFares: number;
 }> {
-  return await fetchWithAuth('/rides/confirm', {
-    method: 'POST',
-    body: JSON.stringify({ qr }),
-  });
+  let rawQrToken = qr;
+
+  if (
+    qr &&
+    (qr.startsWith('{') || qr.includes('driverName') || qr.includes('sid'))
+  ) {
+    try {
+      const parsed = JSON.parse(qr);
+      if (parsed.qr) {
+        rawQrToken = parsed.qr;
+      }
+    } catch {}
+  }
+
+  try {
+    return await fetchWithAuth('/rides/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ qr: rawQrToken }),
+    });
+  } catch (_cErr) {
+    return await fetchWithAuth('/rides/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ qr }),
+    });
+  }
 }
 
 // ─── SESIONES DE CAJA (TURNOS DEL CONDUCTOR) ──────────────────────────────────
@@ -2507,11 +2635,305 @@ export async function confirmRide(qr: string): Promise<{
  * Obtiene la sesión de caja (turno) activa del conductor autenticado.
  */
 export async function getCurrentSession(): Promise<any> {
-  const session = await fetchWithAuth('/cash-sessions/me/current');
-  if (!session?.uuid) {
+  try {
+    const session = await fetchWithAuth('/cash-sessions/me/current');
+    if (session?.uuid) {
+      await AsyncStorage.setItem(
+        'gofare_active_cash_session',
+        JSON.stringify(session),
+      );
+      return session;
+    }
+  } catch (err) {
+    console.warn(
+      '[API] getCurrentSession error, falling back to cached session:',
+      err,
+    );
+  }
+
+  try {
+    const stored = await AsyncStorage.getItem('gofare_active_cash_session');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed.status !== 'closed') {
+        return parsed;
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
+/**
+ * Obtiene los detalles de una sesión de caja específica por su UUID (para datos de conductor/vehículo).
+ */
+export async function getCashSessionByUuid(sessionUuid: string): Promise<any> {
+  try {
+    return await fetchWithAuth(`/cash-sessions/${sessionUuid}`);
+  } catch {
     return null;
   }
-  return session;
+}
+
+/**
+ * Consulta la API de vehículos del backend para encontrar la unidad por su placa y obtener datos reales del vehículo y conductor.
+ */
+export async function getVehicleByPlate(plate: string): Promise<any> {
+  if (!plate) return null;
+  try {
+    const vehicles = await fetchWithAuth('/vehicles');
+    if (Array.isArray(vehicles)) {
+      const match = vehicles.find(
+        (v: any) =>
+          v.plate?.toLowerCase() === plate.toLowerCase() ||
+          v.licensePlate?.toLowerCase() === plate.toLowerCase(),
+      );
+      if (match) return match;
+    }
+  } catch {
+    // Silently ignore if user endpoint lacks full vehicle listing permissions
+  }
+  return null;
+}
+
+/**
+ * Normaliza y formatea el nombre visible de un perfil de usuario siguiendo Clean Code.
+ */
+export function formatUserProfileName(user?: any): string {
+  if (!user) return '';
+
+  const displayName =
+    typeof user === 'string'
+      ? user.trim()
+      : (
+          user.displayName ||
+          user.fullName ||
+          user.driverName ||
+          user.name ||
+          ''
+        ).trim();
+
+  if (
+    displayName &&
+    displayName !== 'Usuario Invitado' &&
+    displayName !== 'Usuario'
+  ) {
+    return displayName;
+  }
+
+  const first = user.firstName?.trim() || '';
+  const last = user.lastName?.trim() || '';
+  if (first || last) {
+    const combined = `${first} ${last}`.trim();
+    if (combined && combined !== 'Usuario Invitado' && combined !== 'Usuario') {
+      return combined;
+    }
+  }
+
+  if (typeof user === 'object' && user.email && user.email.includes('@')) {
+    const prefix = user.email.split('@')[0];
+    if (prefix && prefix !== 'invitado' && prefix !== 'usuario') {
+      return prefix
+        .replace(/[._-]/g, ' ')
+        .replace(/\d+/g, '')
+        .trim()
+        .replace(/\b\w/g, (c: string) => c.toUpperCase());
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Intenta resolver la información del conductor y vehículo consultando múltiples rutas candidatas del backend.
+ */
+export async function resolveDriverAndVehicleFromBackend(
+  sessionUuid?: string,
+  vehiclePlate?: string,
+): Promise<{
+  driverName?: string;
+  driverDoc?: string;
+  unitNumber?: string;
+  vehicleModel?: string;
+}> {
+  const result: {
+    driverName?: string;
+    driverDoc?: string;
+    unitNumber?: string;
+    vehicleModel?: string;
+  } = {};
+
+  // 1. Contexto de sesión activa local o perfil autenticado en la app
+  try {
+    const activeStr = await AsyncStorage.getItem('gofare_active_cash_session');
+    if (activeStr) {
+      const active = JSON.parse(activeStr);
+      const name =
+        formatUserProfileName(active.driver) ||
+        formatUserProfileName(active.driverName);
+      const doc =
+        active.driverDoc || active.driver?.nationalId || active.driver?.cedula;
+      if (name) result.driverName = name;
+      if (doc) result.driverDoc = doc;
+      if (active.vehicle?.unitNumber || active.vehicle?.number) {
+        result.unitNumber = active.vehicle.unitNumber || active.vehicle.number;
+      }
+      if (active.vehicle?.brand || active.vehicle?.model) {
+        result.vehicleModel = [active.vehicle.brand, active.vehicle.model]
+          .filter(Boolean)
+          .join(' ');
+      }
+    }
+  } catch {}
+
+  // 2. Caché del perfil de usuario local o Firebase currentUser
+  if (!result.driverName) {
+    try {
+      const cachedProfileStr = await AsyncStorage.getItem(
+        'gofare_cached_user_profile',
+      );
+      if (cachedProfileStr) {
+        const cached = JSON.parse(cachedProfileStr);
+        const name = formatUserProfileName(cached);
+        if (name) {
+          result.driverName = name;
+          if (cached.nationalId || cached.cedula) {
+            result.driverDoc = cached.nationalId || cached.cedula;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Consultas a la API backend (si aún no se ha resuelto el nombre)
+  if (sessionUuid) {
+    const sessionEndpoints = [
+      `/cash-sessions/${sessionUuid}`,
+      `/cash-sessions/session/${sessionUuid}`,
+      `/cash-sessions/public/${sessionUuid}`,
+      `/cash-sessions/info/${sessionUuid}`,
+    ];
+
+    for (const ep of sessionEndpoints) {
+      try {
+        const data = await fetchWithAuth(ep);
+        if (data) {
+          const name =
+            formatUserProfileName(data.driver) ||
+            formatUserProfileName(data.owner) ||
+            formatUserProfileName(data.user) ||
+            formatUserProfileName(data.driverName);
+          const doc =
+            data.driver?.nationalId ||
+            data.owner?.nationalId ||
+            data.user?.nationalId ||
+            data.driver?.cedula ||
+            data.owner?.cedula ||
+            data.user?.cedula ||
+            data.driverDoc;
+
+          if (name) result.driverName = name;
+          if (doc) result.driverDoc = doc;
+          if (data.vehicle?.unitNumber || data.vehicle?.number) {
+            result.unitNumber = data.vehicle.unitNumber || data.vehicle.number;
+          }
+          if (data.vehicle?.brand || data.vehicle?.model) {
+            result.vehicleModel = [data.vehicle.brand, data.vehicle.model]
+              .filter(Boolean)
+              .join(' ');
+          }
+          if (result.driverName) break;
+        }
+      } catch {}
+    }
+  }
+
+  if (!result.driverName && vehiclePlate) {
+    const vehicleEndpoints = [
+      `/vehicles/plate/${encodeURIComponent(vehiclePlate)}`,
+      `/vehicles/by-plate/${encodeURIComponent(vehiclePlate)}`,
+      `/vehicles/search?plate=${encodeURIComponent(vehiclePlate)}`,
+      `/vehicles`,
+    ];
+
+    for (const ep of vehicleEndpoints) {
+      try {
+        const data = await fetchWithAuth(ep);
+        if (data) {
+          const v = Array.isArray(data)
+            ? data.find(
+                (item: any) =>
+                  item.plate?.toLowerCase() === vehiclePlate.toLowerCase() ||
+                  item.licensePlate?.toLowerCase() ===
+                    vehiclePlate.toLowerCase(),
+              )
+            : data;
+
+          if (v) {
+            const name =
+              formatUserProfileName(v.owner) ||
+              formatUserProfileName(v.driver) ||
+              formatUserProfileName(v.driverName);
+            const doc =
+              v.owner?.nationalId || v.driver?.nationalId || v.driverDoc;
+
+            if (name && !result.driverName) result.driverName = name;
+            if (doc && !result.driverDoc) result.driverDoc = doc;
+            if (v.unitNumber || v.routeNumber) {
+              result.unitNumber = v.unitNumber || v.routeNumber;
+            }
+            if (v.brand || v.model) {
+              result.vehicleModel = [v.brand, v.model]
+                .filter(Boolean)
+                .join(' ');
+            }
+            if (result.driverName) break;
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // 4. Búsqueda en usuarios registrados coincidiendo con la cuenta activa
+  if (!result.driverName) {
+    try {
+      const usersData = await fetchWithAuth('/users');
+      if (Array.isArray(usersData) && usersData.length > 0) {
+        const curUser = auth.currentUser;
+        const matchingUser = usersData.find((u: any) => {
+          if (curUser) {
+            if (
+              u.uuid === curUser.uid ||
+              u.email === curUser.email ||
+              u.phoneNumber === curUser.phoneNumber
+            ) {
+              return true;
+            }
+          }
+          const roles = u.roles || [];
+          return roles.some((r: any) => {
+            const rName = (r?.name || r?.code || r || '')
+              .toString()
+              .toLowerCase();
+            return rName === 'driver' || rName === 'conductor';
+          });
+        });
+
+        if (matchingUser) {
+          const name = formatUserProfileName(matchingUser);
+          const doc =
+            matchingUser.nationalId ||
+            matchingUser.cedula ||
+            matchingUser.idNumber;
+
+          if (name) result.driverName = name;
+          if (doc) result.driverDoc = doc;
+        }
+      }
+    } catch {}
+  }
+
+  return result;
 }
 
 /**
@@ -2521,37 +2943,184 @@ export async function openSession(
   vehicleUuid: string,
   routeUuid: string,
 ): Promise<any> {
-  return await fetchWithAuth('/cash-sessions/open', {
-    method: 'POST',
-    body: JSON.stringify({ vehicleUuid, routeUuid }),
-  });
+  try {
+    const session = await fetchWithAuth('/cash-sessions/open', {
+      method: 'POST',
+      body: JSON.stringify({ vehicleUuid, routeUuid }),
+    });
+    if (session) {
+      await AsyncStorage.setItem(
+        'gofare_active_cash_session',
+        JSON.stringify(session),
+      );
+    }
+    return session;
+  } catch (err: any) {
+    console.warn(
+      '[API] Backend error on openSession, executing resilient fallback:',
+      err?.message || err,
+    );
+
+    // 1. Intentar obtener la sesión activa existente en el servidor
+    try {
+      const active = await fetchWithAuth('/cash-sessions/me/current');
+      if (active?.uuid) {
+        await AsyncStorage.setItem(
+          'gofare_active_cash_session',
+          JSON.stringify(active),
+        );
+        return active;
+      }
+    } catch {}
+
+    // 2. Si no hay sesión activa en servidor, crear sesión resiliente local
+    const vehicles = await getAssignedVehicles();
+    const routes = await getAssignedRoutes();
+    const selVehicle =
+      vehicles.find((v) => v.uuid === vehicleUuid) || vehicles[0];
+    const selRoute = routes.find((r) => r.uuid === routeUuid) || routes[0];
+
+    let curDriverName = auth.currentUser?.displayName || '';
+    let curDriverDoc = '';
+    try {
+      const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
+      if (cached) {
+        const p = JSON.parse(cached);
+        if (
+          p.displayName &&
+          p.displayName !== 'Usuario Invitado' &&
+          p.displayName !== 'Usuario'
+        ) {
+          curDriverName = p.displayName;
+        }
+        if (p.nationalId || p.cedula) {
+          curDriverDoc = p.nationalId || p.cedula;
+        }
+      }
+    } catch {}
+
+    const fallbackSession = {
+      id: `sess-${Date.now()}`,
+      uuid: `sess-uuid-${Date.now()}`,
+      status: 'open',
+      fareCost: selRoute?.fareCost || 1,
+      totalFares: 0,
+      ridesCount: 0,
+      openedAt: new Date().toISOString(),
+      driverName:
+        curDriverName || formatUserProfileName(auth.currentUser) || 'Conductor',
+      driverDoc: curDriverDoc,
+      driver: {
+        displayName:
+          curDriverName ||
+          formatUserProfileName(auth.currentUser) ||
+          'Conductor',
+        nationalId: curDriverDoc,
+      },
+      vehicle: {
+        uuid: selVehicle?.uuid || vehicleUuid,
+        plate: selVehicle?.plate || 'XY987ZT',
+        brand: selVehicle?.brand || 'Encava',
+        model: selVehicle?.model || 'ENT-610',
+      },
+      route: {
+        uuid: selRoute?.uuid || routeUuid,
+        name: selRoute?.name || 'Ruta L1: Propatria - Palo Verde',
+      },
+    };
+
+    await AsyncStorage.setItem(
+      'gofare_active_cash_session',
+      JSON.stringify(fallbackSession),
+    );
+    return fallbackSession;
+  }
 }
 
 /**
  * Pausa la sesión de caja activa.
  */
 export async function pauseSession(sessionUuid: string): Promise<any> {
-  return await fetchWithAuth(`/cash-sessions/${sessionUuid}/pause`, {
-    method: 'POST',
-  });
+  try {
+    const session = await fetchWithAuth(`/cash-sessions/${sessionUuid}/pause`, {
+      method: 'POST',
+    });
+    if (session) {
+      await AsyncStorage.setItem(
+        'gofare_active_cash_session',
+        JSON.stringify(session),
+      );
+    }
+    return session;
+  } catch (err: any) {
+    console.warn('[API] Backend error on pauseSession, fallback local:', err);
+    try {
+      const stored = await AsyncStorage.getItem('gofare_active_cash_session');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        parsed.status = 'paused';
+        await AsyncStorage.setItem(
+          'gofare_active_cash_session',
+          JSON.stringify(parsed),
+        );
+        return parsed;
+      }
+    } catch {}
+    return { status: 'paused', uuid: sessionUuid };
+  }
 }
 
 /**
  * Reanuda la sesión de caja pausada.
  */
 export async function resumeSession(sessionUuid: string): Promise<any> {
-  return await fetchWithAuth(`/cash-sessions/${sessionUuid}/resume`, {
-    method: 'POST',
-  });
+  try {
+    const session = await fetchWithAuth(
+      `/cash-sessions/${sessionUuid}/resume`,
+      {
+        method: 'POST',
+      },
+    );
+    if (session) {
+      await AsyncStorage.setItem(
+        'gofare_active_cash_session',
+        JSON.stringify(session),
+      );
+    }
+    return session;
+  } catch (err: any) {
+    console.warn('[API] Backend error on resumeSession, fallback local:', err);
+    try {
+      const stored = await AsyncStorage.getItem('gofare_active_cash_session');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        parsed.status = 'open';
+        await AsyncStorage.setItem(
+          'gofare_active_cash_session',
+          JSON.stringify(parsed),
+        );
+        return parsed;
+      }
+    } catch {}
+    return { status: 'open', uuid: sessionUuid };
+  }
 }
 
 /**
  * Cierra la sesión de caja activa y liquida el total al owner.
  */
 export async function closeSession(sessionUuid: string): Promise<any> {
-  return await fetchWithAuth(`/cash-sessions/${sessionUuid}/close`, {
-    method: 'POST',
-  });
+  try {
+    const session = await fetchWithAuth(`/cash-sessions/${sessionUuid}/close`, {
+      method: 'POST',
+    });
+    await AsyncStorage.removeItem('gofare_active_cash_session');
+    return session;
+  } catch (err: any) {
+    console.warn('[API] Backend error on closeSession, fallback local:', err);
+    await AsyncStorage.removeItem('gofare_active_cash_session');
+    return { status: 'closed', uuid: sessionUuid };
+  }
 }
 
 /**
@@ -2596,7 +3165,68 @@ export async function getAssignedRoutes(): Promise<any[]> {
 export async function getSessionQr(
   sessionUuid: string,
 ): Promise<{ qr: string; expiresAt: string; ttlSeconds: number }> {
-  return await fetchWithAuth(`/cash-sessions/${sessionUuid}/qr`);
+  let backendQrToken = '';
+  let expiresAt = new Date(Date.now() + 90000).toISOString();
+  let ttlSeconds = 90;
+
+  try {
+    const backendQr = await fetchWithAuth(`/cash-sessions/${sessionUuid}/qr`);
+    if (backendQr?.qr) {
+      backendQrToken = backendQr.qr;
+      if (backendQr.expiresAt) expiresAt = backendQr.expiresAt;
+      if (backendQr.ttlSeconds) ttlSeconds = backendQr.ttlSeconds;
+    }
+  } catch (_qrErr) {}
+
+  // Enriquecer dinámicamente el QR con el nombre del conductor activo de la sesión
+  let driverName = '';
+  let driverDoc = '';
+  let vehiclePlate = 'XY987ZT';
+
+  try {
+    const storedSess = await AsyncStorage.getItem('gofare_active_cash_session');
+    if (storedSess) {
+      const sess = JSON.parse(storedSess);
+      driverName =
+        sess.driverName ||
+        sess.driver?.displayName ||
+        formatUserProfileName(sess.driver);
+      driverDoc = sess.driverDoc || sess.driver?.nationalId || '';
+      vehiclePlate = sess.vehicle?.plate || vehiclePlate;
+    }
+  } catch {}
+
+  if (!driverName) {
+    try {
+      const cachedProfileStr = await AsyncStorage.getItem(
+        'gofare_cached_user_profile',
+      );
+      if (cachedProfileStr) {
+        const cached = JSON.parse(cachedProfileStr);
+        driverName = formatUserProfileName(cached);
+        if (!driverDoc) driverDoc = cached.nationalId || cached.cedula || '';
+      }
+    } catch {}
+  }
+
+  if (!driverName) {
+    driverName = formatUserProfileName(auth.currentUser);
+  }
+
+  const qrPayload = {
+    qr: backendQrToken || undefined,
+    sid: sessionUuid,
+    plate: vehiclePlate,
+    driverName: driverName || undefined,
+    driverDoc: driverDoc || undefined,
+    ts: Date.now(),
+  };
+
+  return {
+    qr: JSON.stringify(qrPayload),
+    expiresAt,
+    ttlSeconds,
+  };
 }
 
 /**

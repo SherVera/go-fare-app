@@ -32,6 +32,7 @@ import {
   setLiteCache,
 } from '@/lib/api-cache';
 import { setClipboardText } from '@/lib/clipboard';
+import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 const RECHARGE_PACKAGES_BLUEPRINT = [
@@ -143,6 +144,10 @@ export default function TopUpBalanceScreen() {
 
   const loadUserData = useCallback(
     async (isManualRefresh = false) => {
+      if (!auth.currentUser) {
+        router.replace('/login');
+        return;
+      }
       // 1. En Modo Lite: consultar tasas guardadas en caché si no es actualización manual
       if (isLiteMode && !isManualRefresh) {
         const cachedRates = await getLiteCache<{

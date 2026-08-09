@@ -377,7 +377,7 @@ export default function DriverScanScreen() {
             <Text style={styles.notificationText}>
               {successNotification.passengerName} pagó{' '}
               <Text style={{ fontWeight: 'bold' }}>
-                {successNotification.fare.toFixed(2)} Fare
+                {successNotification.fare.toFixed(2)} Tickets
               </Text>
             </Text>
           </View>
@@ -420,7 +420,7 @@ export default function DriverScanScreen() {
           </View>
 
           <Text style={styles.qrFareValue}>
-            {Number(activeSession.fareCost).toFixed(2)} Fare
+            {Number(activeSession.fareCost).toFixed(2)} Tickets
           </Text>
 
           <Text style={styles.qrInstruction}>
@@ -483,7 +483,7 @@ export default function DriverScanScreen() {
                     <View style={styles.feedRightContainer}>
                       <View style={styles.feedRight}>
                         <Text style={styles.feedAmount}>
-                          +{Number(item.fareCost).toFixed(2)} Fare
+                          +{Number(item.fareCost).toFixed(2)} Tickets
                         </Text>
                         <Ionicons
                           name="checkmark-circle"

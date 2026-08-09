@@ -45,6 +45,7 @@ export default function ProfileScreen() {
     if (!user) {
       setUserProfile(null);
       setLoading(false);
+      router.replace('/login');
       return;
     }
 
@@ -56,6 +57,7 @@ export default function ProfileScreen() {
         cachedData = JSON.parse(cached);
         if (
           cachedData.email === 'invitado@gofare.dev' ||
+          cachedData.displayName === 'Usuario Invitado' ||
           (cachedData.uid && cachedData.uid !== user.uid)
         ) {
           await AsyncStorage.removeItem('gofare_cached_user_profile');

@@ -13,7 +13,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getBackendProfile } from '@/lib/api';
+import {
+  formatUserProfileName,
+  getBackendProfile,
+  updateBackendProfile,
+} from '@/lib/api';
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -23,9 +27,9 @@ export default function DriverProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [name, setName] = useState('Conductor');
-  const [email, setEmail] = useState('conductor@example.com');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('No registrado');
-  const [license, setLicense] = useState('V-12345678');
+  const [license, setLicense] = useState('');
 
   // Coop / Vehicle info
   const [cooperative, setCooperative] = useState('Línea Particular');
@@ -35,44 +39,75 @@ export default function DriverProfileScreen() {
     try {
       setLoading(true);
       const user = auth.currentUser;
-      if (user) {
-        try {
-          const backendUser = await getBackendProfile();
-          setName(
-            backendUser.displayName ||
-              `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-              'Conductor',
-          );
-          setEmail(backendUser.email);
-          setPhone(backendUser.phoneNumber || 'No registrado');
-        } catch (apiErr) {
-          console.warn(
-            '[DriverProfile] API error, falling back to local cache:',
-            apiErr,
-          );
+      if (!user) {
+        router.replace('/login');
+        return;
+      }
+      try {
+        const backendUser = await getBackendProfile();
+        const resolvedName =
+          formatUserProfileName(backendUser) ||
+          formatUserProfileName(user) ||
+          'Conductor';
+
+        if (
+          backendUser?.id &&
+          resolvedName &&
+          resolvedName !== 'Conductor' &&
+          backendUser.displayName !== resolvedName
+        ) {
           try {
-            const cached = await AsyncStorage.getItem(
-              'gofare_cached_user_profile',
-            );
-            if (cached) {
-              const cachedData = JSON.parse(cached);
+            await updateBackendProfile(backendUser.id, {
+              displayName: resolvedName,
+            });
+          } catch {}
+        }
+
+        setName(resolvedName);
+        setEmail(backendUser.email || user.email || '');
+        setPhone(
+          backendUser.phoneNumber || user.phoneNumber || 'No registrado',
+        );
+        const bUser = backendUser as any;
+        if (bUser.nationalId || bUser.idNumber || bUser.cedula) {
+          setLicense(bUser.nationalId || bUser.idNumber || bUser.cedula);
+        }
+      } catch (apiErr) {
+        console.warn(
+          '[DriverProfile] API error, falling back to local cache:',
+          apiErr,
+        );
+        try {
+          const cached = await AsyncStorage.getItem(
+            'gofare_cached_user_profile',
+          );
+          if (cached) {
+            const cachedData = JSON.parse(cached);
+            if (
+              cachedData.email === 'invitado@gofare.dev' ||
+              cachedData.displayName === 'Usuario Invitado'
+            ) {
+              await AsyncStorage.removeItem('gofare_cached_user_profile');
+            } else {
               setName(
-                cachedData.fullName || cachedData.displayName || 'Conductor',
+                cachedData.fullName ||
+                  cachedData.displayName ||
+                  user.displayName ||
+                  'Conductor',
               );
-              setEmail(
-                cachedData.email || user.email || 'conductor@example.com',
+              setEmail(cachedData.email || user.email || '');
+              setPhone(
+                cachedData.phoneNumber || user.phoneNumber || 'No registrado',
               );
-              setPhone(cachedData.phoneNumber || 'No registrado');
-              setLicense(
-                cachedData.nationalId || cachedData.idNumber || 'V-12345678',
-              );
+              setLicense(cachedData.nationalId || cachedData.idNumber || '');
             }
-          } catch (cacheErr) {
-            console.warn(
-              '[DriverProfile] Error loading cached data:',
-              cacheErr,
-            );
+          } else {
+            setName(user.displayName || 'Conductor');
+            setEmail(user.email || '');
+            setPhone(user.phoneNumber || 'No registrado');
           }
+        } catch (cacheErr) {
+          console.warn('[DriverProfile] Error loading cached data:', cacheErr);
         }
       }
 
@@ -89,7 +124,7 @@ export default function DriverProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -138,9 +173,20 @@ export default function DriverProfileScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
+      <SafeAreaView style={[styles.container, styles.center]} edges={['top']}>
+        <StatusBar style="dark" />
         <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
+        <Text
+          style={{
+            marginTop: 14,
+            fontSize: 15,
+            fontWeight: '600',
+            color: tokens.colors.mutedGray,
+          }}
+        >
+          Cargando perfil de usuario...
+        </Text>
+      </SafeAreaView>
     );
   }
 
