@@ -17,10 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PhoneLinkModal } from '@/components/PhoneLinkModal';
 import {
   confirmRide,
+  formatUserProfileName,
   getTicketByQr,
   previewRide,
+  resolveDriverAndVehicleFromBackend,
   validateTicketByQr,
 } from '@/lib/api';
+import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function PayTripScreen() {
@@ -41,7 +44,14 @@ export default function PayTripScreen() {
   // Modelo de Saldo / Fare
   const [balance, setBalance] = useState(0.0);
   const [routeFare, setRouteFare] = useState(15.0);
-  const [routeLabel, setRouteLabel] = useState('General');
+
+  // Datos reales del Conductor y Unidad (obtenidos del escaneo de la unidad)
+  const [driverName, setDriverName] = useState('');
+  const [driverDoc, setDriverDoc] = useState('');
+  const [vehiclePlate, setVehiclePlate] = useState('');
+  const [unitNumber, setUnitNumber] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
+  const [routeName, setRouteName] = useState('');
 
   const handleExecuteDirectPayment = async () => {
     if (!scannedQr) return;
@@ -88,6 +98,10 @@ export default function PayTripScreen() {
     type: string;
     data: string;
   }) => {
+    if (!auth.currentUser) {
+      router.replace('/login');
+      return;
+    }
     if (scanned || processing) return;
     setScanned(true);
     setProcessing(true);
@@ -130,11 +144,54 @@ export default function PayTripScreen() {
         );
       } else {
         // 2. Es el QR de una unidad de transporte (encriptado).
-        //    Llamar al backend para descifrar el QR y obtener los datos del viaje.
+        //    Llamar al backend para descifrar el QR y obtener los datos reales del viaje.
         const preview = await previewRide(scannedData);
+        console.log(
+          '[Scanner] Ride preview raw response:',
+          JSON.stringify(preview),
+        );
 
-        setRouteLabel(`${preview.routeName} (${preview.vehiclePlate})`);
-        setRouteFare(preview.fareCost);
+        const resolvedBackendData = await resolveDriverAndVehicleFromBackend(
+          preview.sessionUuid,
+          preview.vehiclePlate,
+        );
+
+        const anyPreview = preview as any;
+
+        const extractedDriverName =
+          formatUserProfileName(anyPreview.driverName) ||
+          formatUserProfileName(anyPreview.driver) ||
+          formatUserProfileName(anyPreview.owner) ||
+          formatUserProfileName(resolvedBackendData.driverName) ||
+          'Conductor de Unidad';
+
+        const extractedDriverDoc =
+          anyPreview.driverDoc ||
+          anyPreview.driver_doc ||
+          anyPreview.driverNationalId ||
+          resolvedBackendData.driverDoc ||
+          '';
+
+        const extractedUnitNumber =
+          resolvedBackendData.unitNumber ||
+          anyPreview.unitNumber ||
+          anyPreview.unit_number ||
+          anyPreview.vehicleNumber ||
+          '';
+
+        const extractedVehicleModel =
+          resolvedBackendData.vehicleModel ||
+          anyPreview.vehicleModel ||
+          anyPreview.vehicle_model ||
+          '';
+
+        setRouteName(preview.routeName || anyPreview.route_name || '');
+        setVehiclePlate(preview.vehiclePlate || anyPreview.vehicle_plate || '');
+        setDriverName(extractedDriverName);
+        setDriverDoc(extractedDriverDoc);
+        setUnitNumber(extractedUnitNumber);
+        setVehicleModel(extractedVehicleModel);
+        setRouteFare(preview.fareCost || 0);
         setBalance(preview.balanceFares);
         setScannedQr(scannedData);
 
@@ -176,6 +233,16 @@ export default function PayTripScreen() {
           'Error de Pago',
           'Se requiere un número de teléfono verificado para realizar pagos.',
           [{ text: 'Aceptar', onPress: () => setScanned(false) }],
+        );
+      } else if (
+        errMsg.includes('Expired or invalid QR code') ||
+        errMsg.includes('invalid QR') ||
+        errMsg.includes('Expired')
+      ) {
+        Alert.alert(
+          'Código QR Inválido o Expirado',
+          'El código QR escaneado ya no está activo o ha expirado. Por favor, solicita al conductor que muestre el código QR actualizado en su pantalla e intenta nuevamente.',
+          [{ text: 'Entendido', onPress: () => setScanned(false) }],
         );
       } else {
         Alert.alert(
@@ -374,8 +441,8 @@ export default function PayTripScreen() {
               <View style={styles.modalHeader}>
                 <Text style={styles.modalSheetTitle}>
                   {confirmStep === 'details'
-                    ? 'Confirmar Viaje'
-                    : 'Viaje Confirmado'}
+                    ? 'Confirmar Pago del Viaje'
+                    : 'Pago Confirmado'}
                 </Text>
                 {confirmStep === 'details' && (
                   <Pressable onPress={handleCloseConfirmModal} hitSlop={10}>
@@ -396,7 +463,7 @@ export default function PayTripScreen() {
                   />
                 </View>
 
-                <Text style={styles.modalSubtitle}>Confirma tu Fare</Text>
+                <Text style={styles.modalSubtitle}>Confirma tu Pago</Text>
 
                 {/* TICKET DIGITAL */}
                 <View style={styles.ticketCard}>
@@ -413,18 +480,60 @@ export default function PayTripScreen() {
                           size={18}
                           color={tokens.colors.primary}
                         />
-                        <Text style={styles.ticketLogoText}>FARE GOFARE</Text>
+                        <Text style={styles.ticketLogoText}>TICKET GOFARE</Text>
                       </View>
                       <View style={styles.ticketBadge}>
                         <Text style={styles.ticketBadgeText}>ACTIVO</Text>
                       </View>
                     </View>
 
-                    <View style={styles.ticketRouteRow}>
-                      <Text style={styles.ticketLabel}>UNIDAD / RUTA</Text>
-                      <Text style={styles.ticketValueLarge} numberOfLines={1}>
-                        {routeLabel}
+                    {/* SECCIÓN CONDUCTOR */}
+                    <View style={styles.detailsBlockContainer}>
+                      <View style={styles.detailsBlockHeader}>
+                        <MaterialCommunityIcons
+                          name="account-tie"
+                          size={18}
+                          color={tokens.colors.primary}
+                        />
+                        <Text style={styles.detailsBlockTitle}>CONDUCTOR</Text>
+                      </View>
+                      <Text style={styles.detailsBlockName}>
+                        {driverName ||
+                          (vehiclePlate
+                            ? `Conductor de Unidad (${vehiclePlate})`
+                            : 'Conductor de la Unidad')}
                       </Text>
+                      {driverDoc ? (
+                        <Text style={styles.detailsBlockSub}>
+                          C.I. {driverDoc}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    {/* SECCIÓN UNIDAD Y RUTA */}
+                    <View style={styles.detailsBlockContainer}>
+                      <View style={styles.detailsBlockHeader}>
+                        <MaterialCommunityIcons
+                          name="bus"
+                          size={18}
+                          color={tokens.colors.primary}
+                        />
+                        <Text style={styles.detailsBlockTitle}>
+                          UNIDAD Y RUTA
+                        </Text>
+                      </View>
+                      <Text style={styles.detailsBlockName}>
+                        {[
+                          unitNumber || null,
+                          vehicleModel ? `(${vehicleModel})` : null,
+                          vehiclePlate ? `Placa: ${vehiclePlate}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' • ') || 'Unidad de transporte'}
+                      </Text>
+                      {routeName ? (
+                        <Text style={styles.detailsBlockSub}>{routeName}</Text>
+                      ) : null}
                     </View>
 
                     <View style={styles.ticketPriceRow}>
@@ -568,11 +677,65 @@ export default function PayTripScreen() {
                       </View>
                     </View>
 
-                    <View style={styles.ticketRouteRow}>
-                      <Text style={styles.ticketLabel}>UNIDAD / RUTA</Text>
-                      <Text style={styles.ticketValueLarge} numberOfLines={1}>
-                        {routeLabel}
+                    {/* SECCIÓN CONDUCTOR */}
+                    <View style={styles.detailsBlockContainer}>
+                      <View style={styles.detailsBlockHeader}>
+                        <MaterialCommunityIcons
+                          name="account-tie"
+                          size={18}
+                          color="#10B981"
+                        />
+                        <Text
+                          style={[
+                            styles.detailsBlockTitle,
+                            { color: '#10B981' },
+                          ]}
+                        >
+                          CONDUCTOR
+                        </Text>
+                      </View>
+                      <Text style={styles.detailsBlockName}>
+                        {driverName ||
+                          (vehiclePlate
+                            ? `Conductor de Unidad (${vehiclePlate})`
+                            : 'Conductor de la Unidad')}
                       </Text>
+                      {driverDoc ? (
+                        <Text style={styles.detailsBlockSub}>
+                          C.I. {driverDoc}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    {/* SECCIÓN UNIDAD Y RUTA */}
+                    <View style={styles.detailsBlockContainer}>
+                      <View style={styles.detailsBlockHeader}>
+                        <MaterialCommunityIcons
+                          name="bus"
+                          size={18}
+                          color="#10B981"
+                        />
+                        <Text
+                          style={[
+                            styles.detailsBlockTitle,
+                            { color: '#10B981' },
+                          ]}
+                        >
+                          UNIDAD Y RUTA
+                        </Text>
+                      </View>
+                      <Text style={styles.detailsBlockName}>
+                        {[
+                          unitNumber || null,
+                          vehicleModel ? `(${vehicleModel})` : null,
+                          vehiclePlate ? `Placa: ${vehiclePlate}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' • ') || 'Unidad de transporte'}
+                      </Text>
+                      {routeName ? (
+                        <Text style={styles.detailsBlockSub}>{routeName}</Text>
+                      ) : null}
                     </View>
 
                     <View style={styles.ticketPriceRow}>
@@ -952,6 +1115,35 @@ const styles = StyleSheet.create({
   ticketTop: {
     padding: 20,
     paddingBottom: 12,
+  },
+  detailsBlockContainer: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+  },
+  detailsBlockHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  detailsBlockTitle: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+    letterSpacing: 0.5,
+  },
+  detailsBlockName: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.textDark,
+  },
+  detailsBlockSub: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#64748B',
+    marginTop: 2,
   },
   ticketHeaderRow: {
     flexDirection: 'row',

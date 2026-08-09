@@ -237,6 +237,47 @@ export default function RootLayout() {
 
   const fontsReady = loaded || fontLoadTimedOut;
 
+  // 0. Fast-path: Restaurar sesión autenticada inmediatamente desde caché local al abrir la app
+  useEffect(() => {
+    let isMounted = true;
+    const restoreCachedSession = async () => {
+      try {
+        const cachedRole = await SecureStore.getItemAsync('user_role');
+        const cachedJwt = await SecureStore.getItemAsync('gofare_jwt_token');
+        const cachedProfileStr = await AsyncStorage.getItem(
+          'gofare_cached_user_profile',
+        );
+
+        if (cachedProfileStr) {
+          try {
+            const parsed = JSON.parse(cachedProfileStr);
+            if (
+              parsed.email === 'invitado@gofare.dev' ||
+              parsed.displayName === 'Usuario Invitado'
+            ) {
+              await AsyncStorage.removeItem('gofare_cached_user_profile');
+            }
+          } catch {}
+        }
+
+        if (isMounted && cachedRole && (cachedJwt || cachedProfileStr)) {
+          console.log(
+            '[Layout] Fast-path: Sesión autenticada restaurada desde caché:',
+            cachedRole,
+          );
+          setUserRole(cachedRole);
+          setPhase('signed_in');
+        }
+      } catch (err) {
+        console.warn('[Layout] Error en fast-path restore:', err);
+      }
+    };
+    restoreCachedSession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // 1. Firebase Auth + perfil(onboarding) + sincronización de rol
   useEffect(() => {
     let cancelled = false;
@@ -330,11 +371,28 @@ export default function RootLayout() {
       let role = null;
       if (backendUser) {
         const roles = (backendUser as any).roles || [];
-        const isAdmin = roles.some(
-          (r: any) => r.name === 'platform_admin' || r.name === 'admin',
-        );
-        const isOwner = roles.some((r: any) => r.name === 'transport_owner');
-        const isDriver = roles.some((r: any) => r.name === 'driver');
+        const isAdmin = roles.some((r: any) => {
+          const name = (r?.name || r?.role || r?.code || r || '')
+            .toString()
+            .toLowerCase();
+          return name === 'platform_admin' || name === 'admin';
+        });
+        const isOwner = roles.some((r: any) => {
+          const name = (r?.name || r?.role || r?.code || r || '')
+            .toString()
+            .toLowerCase();
+          return (
+            name === 'transport_owner' ||
+            name === 'vehicle_owner' ||
+            name === 'owner'
+          );
+        });
+        const isDriver = roles.some((r: any) => {
+          const name = (r?.name || r?.role || r?.code || r || '')
+            .toString()
+            .toLowerCase();
+          return name === 'driver' || name === 'conductor';
+        });
         role = isAdmin
           ? 'platform_admin'
           : isOwner
@@ -347,8 +405,6 @@ export default function RootLayout() {
       }
 
       // Si el backend devuelve 'passenger', verificar los Firebase Custom Claims.
-      // Esto resuelve el caso donde la base de datos de producción no tiene los
-      // roles correctamente asignados, pero los custom claims de Firebase Auth sí.
       if (!role || role === 'passenger') {
         try {
           const idTokenResult = await currentUser.getIdTokenResult(false);
@@ -359,14 +415,12 @@ export default function RootLayout() {
             'platform_admin',
             'admin',
             'transport_owner',
+            'vehicle_owner',
             'driver',
+            'conductor',
           ];
-          if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
-            console.log(
-              '[Layout] Usando rol de Firebase Custom Claims:',
-              claimRole,
-            );
-            role = claimRole;
+          if (claimRole && PRIVILEGED_ROLES.includes(claimRole.toLowerCase())) {
+            role = claimRole.toLowerCase();
           }
         } catch (claimErr) {
           console.warn('[Layout] Error al leer custom claims:', claimErr);
@@ -387,7 +441,11 @@ export default function RootLayout() {
         return;
       }
 
-      await SecureStore.setItemAsync('user_role', role || 'passenger');
+      const finalRole = role || 'passenger';
+      await SecureStore.setItemAsync('user_role', finalRole);
+      if (!cancelled) {
+        setUserRole(finalRole);
+      }
 
       let complete = false;
       if (
@@ -493,13 +551,28 @@ export default function RootLayout() {
           const backendUser = await getBackendProfile();
           if (backendUser && active) {
             const roles = (backendUser as any).roles || [];
-            const isAdmin = roles.some(
-              (r: any) => r.name === 'platform_admin' || r.name === 'admin',
-            );
-            const isOwner = roles.some(
-              (r: any) => r.name === 'transport_owner',
-            );
-            const isDriver = roles.some((r: any) => r.name === 'driver');
+            const isAdmin = roles.some((r: any) => {
+              const name = (r?.name || r?.role || r?.code || r || '')
+                .toString()
+                .toLowerCase();
+              return name === 'platform_admin' || name === 'admin';
+            });
+            const isOwner = roles.some((r: any) => {
+              const name = (r?.name || r?.role || r?.code || r || '')
+                .toString()
+                .toLowerCase();
+              return (
+                name === 'transport_owner' ||
+                name === 'vehicle_owner' ||
+                name === 'owner'
+              );
+            });
+            const isDriver = roles.some((r: any) => {
+              const name = (r?.name || r?.role || r?.code || r || '')
+                .toString()
+                .toLowerCase();
+              return name === 'driver' || name === 'conductor';
+            });
             let newRole = isAdmin
               ? 'platform_admin'
               : isOwner
@@ -522,14 +595,19 @@ export default function RootLayout() {
                     'platform_admin',
                     'admin',
                     'transport_owner',
+                    'vehicle_owner',
                     'driver',
+                    'conductor',
                   ];
-                  if (claimRole && PRIVILEGED_ROLES.includes(claimRole)) {
+                  if (
+                    claimRole &&
+                    PRIVILEGED_ROLES.includes(claimRole.toLowerCase())
+                  ) {
                     console.log(
                       '[Layout] loadAndVerify: usando Custom Claim:',
                       claimRole,
                     );
-                    newRole = claimRole;
+                    newRole = claimRole.toLowerCase();
                   }
                 }
               } catch (claimErr) {
@@ -675,30 +753,53 @@ export default function RootLayout() {
       'verify-email',
     ]);
 
+    const isPublic = Boolean(s0 && publicAuthRoutes.has(s0));
+
+    // SEGURIDAD ESTRICTA: Si no existe un usuario activo autenticado en Firebase/auth,
+    // redirigir INMEDIATAMENTE a la pantalla de Login. Cero usuarios invitados admitidos.
+    if (!auth.currentUser || phase === 'signed_out') {
+      if (!isPublic) {
+        console.log(
+          '[Layout] No auth.currentUser active. Strict redirecting to /login',
+        );
+        router.replace('/login');
+      }
+      return;
+    }
+
     if (phase === 'signed_in') {
       const onGate = !s0 || publicAuthRoutes.has(s0) || s0 === 'onboarding';
+      const normRole = (userRole || '').toLowerCase();
 
       if (onGate) {
-        if (userRole === 'platform_admin') {
+        if (normRole === 'platform_admin' || normRole === 'admin') {
           router.replace('/admin/dashboard' as any);
-        } else if (userRole === 'transport_owner') {
+        } else if (
+          normRole === 'transport_owner' ||
+          normRole === 'vehicle_owner' ||
+          normRole === 'owner'
+        ) {
           router.replace('/vehicle-owner/dashboard' as any);
-        } else if (userRole === 'driver') {
+        } else if (normRole === 'driver' || normRole === 'conductor') {
           router.replace('/driver/dashboard' as any);
         } else {
           router.replace('/(tabs)' as any);
         }
       } else {
         // Verificar correspondencia de rol si intenta navegar
-        if (userRole === 'platform_admin') {
+        if (normRole === 'platform_admin' || normRole === 'admin') {
           if (s0 !== 'admin') {
             router.replace('/admin/dashboard' as any);
           }
-        } else if (userRole === 'transport_owner') {
+        } else if (
+          normRole === 'transport_owner' ||
+          normRole === 'vehicle_owner' ||
+          normRole === 'owner'
+        ) {
           if (s0 === '(tabs)' || s0 === 'driver' || s0 === 'admin') {
             router.replace('/vehicle-owner/dashboard' as any);
           }
-        } else if (userRole === 'driver') {
+        } else if (normRole === 'driver' || normRole === 'conductor') {
           if (s0 === '(tabs)' || s0 === 'vehicle-owner' || s0 === 'admin') {
             router.replace('/driver/dashboard' as any);
           }
@@ -713,18 +814,10 @@ export default function RootLayout() {
     }
 
     if (phase === 'needs_onboarding') {
-      const isPublic = s0 && publicAuthRoutes.has(s0);
       if (!isPublic && s0 !== 'onboarding') {
         router.replace('/onboarding' as any);
       }
       return;
-    }
-
-    if (phase === 'signed_out' || !auth.currentUser) {
-      const isPublic = s0 && publicAuthRoutes.has(s0);
-      if (!isPublic) {
-        router.replace('/login');
-      }
     }
   }, [phase, fontsReady, segments, router, userRole]);
 

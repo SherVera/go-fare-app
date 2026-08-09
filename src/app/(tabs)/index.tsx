@@ -41,6 +41,7 @@ export default function HomeDashboard() {
       setUserProfile(null);
       setLoading(false);
       setRefreshing(false);
+      router.replace('/login');
       return;
     }
 
@@ -51,6 +52,7 @@ export default function HomeDashboard() {
         const parsed = JSON.parse(cached);
         if (
           parsed.email === 'invitado@gofare.dev' ||
+          parsed.displayName === 'Usuario Invitado' ||
           (parsed.uid && parsed.uid !== user.uid)
         ) {
           await AsyncStorage.removeItem('gofare_cached_user_profile');

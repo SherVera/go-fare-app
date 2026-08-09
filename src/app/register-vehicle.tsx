@@ -98,7 +98,7 @@ export default function RegisterVehicleScreen() {
     vehicleColor: '',
     vehicleYear: '',
     licensePlate: '',
-    capacity: '',
+    capacity: '32',
     cooperativeUuid: '',
     tituloPropiedadNumber: '',
     tituloPropiedadIssuedAt: '',
@@ -191,9 +191,9 @@ export default function RegisterVehicleScreen() {
 
     const capacityNum = parseInt(form.capacity, 10);
     if (!form.capacity.trim()) {
-      newErrors.capacity = 'La capacidad es requerida';
+      newErrors.capacity = 'La capacidad de pasajeros es requerida';
     } else if (Number.isNaN(capacityNum) || capacityNum < 1) {
-      newErrors.capacity = 'La capacidad debe ser al menos 1';
+      newErrors.capacity = 'La capacidad debe ser al menos 1 pasajero';
     }
 
     setErrors(newErrors);
@@ -256,6 +256,11 @@ export default function RegisterVehicleScreen() {
   const handleNextStep = () => {
     if (validateStep1()) {
       setCurrentStep(2);
+    } else {
+      Alert.alert(
+        'Campos Requeridos',
+        'Por favor completa todos los campos requeridos del vehículo antes de continuar.',
+      );
     }
   };
 
@@ -278,6 +283,7 @@ export default function RegisterVehicleScreen() {
         vehicleYear: parseInt(form.vehicleYear, 10),
         licensePlate: form.licensePlate.trim().toUpperCase(),
         vehicleColor: form.vehicleColor.trim(),
+        capacity: parseInt(form.capacity, 10) || 32,
         cooperativeUuid: form.cooperativeUuid || undefined,
       });
 
@@ -584,6 +590,35 @@ export default function RegisterVehicleScreen() {
                   )}
                 </View>
               </View>
+
+              {/* Capacidad (Nº de Pasajeros) */}
+              <Text style={styles.inputLabel}>CAPACIDAD (Nº DE PASAJEROS)</Text>
+              <View
+                style={[
+                  styles.inputCard,
+                  errors.capacity && styles.inputCardError,
+                ]}
+              >
+                <Ionicons
+                  name="people-outline"
+                  size={20}
+                  color={errors.capacity ? '#EF4444' : '#8594AB'}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej. 32"
+                  placeholderTextColor="#A1A1AA"
+                  keyboardType="numeric"
+                  maxLength={3}
+                  value={form.capacity}
+                  onChangeText={(text) => updateField('capacity', text)}
+                  editable={!loading}
+                />
+              </View>
+              {errors.capacity && (
+                <Text style={styles.errorText}>{errors.capacity}</Text>
+              )}
 
               {/* Cooperativa Asociada (Opcional) */}
               <Text style={styles.inputLabel}>
