@@ -1067,6 +1067,7 @@ export async function topUpBalance(data: {
   reference: string;
   phone?: string;
   document?: string;
+  bankCode?: string;
 }): Promise<{
   balanceFares: number;
   faresCredited: number;

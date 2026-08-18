@@ -54,10 +54,11 @@ const PAYMENT_METHODS: PaymentMethod[] = [
   {
     id: 'tarjeta',
     title: 'Tarjeta Débito/Crédito',
-    subtitle: 'Visa / Mastercard / Nacional',
+    subtitle: 'Próximamente',
     iconName: 'credit-card',
     iconBgColor: '#ECFDF5',
     iconColor: '#10B981',
+    disabled: true,
   },
   {
     id: 'cripto',
@@ -130,7 +131,7 @@ export default function TopUpBalanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   // Campos de Pago Móvil
-  const [pmBank, setPmBank] = useState('Banesco Banco Universal');
+  const [pmBank, setPmBank] = useState('');
   const [showBankModal, setShowBankModal] = useState(false);
   const [pmPhone, setPmPhone] = useState('');
   const [pmIdNumber, setPmIdNumber] = useState('');
@@ -176,7 +177,6 @@ export default function TopUpBalanceScreen() {
         const backendUser = await getBackendProfile();
         if (backendUser) {
           setUserId(backendUser.id);
-          setPmPhone(backendUser.phoneNumber || '');
 
           let account = null;
           try {
@@ -218,7 +218,10 @@ export default function TopUpBalanceScreen() {
       Alert.alert('Error', 'No se pudo cargar tu perfil. Intenta de nuevo.');
       return;
     }
-    // Resetear campos
+    // Resetear campos para que inicien vacíos
+    setPmBank('');
+    setPmPhone('');
+    setPmIdNumber('');
     setPmReference('');
     setCardHolder('');
     setCardNumber('');
@@ -231,6 +234,13 @@ export default function TopUpBalanceScreen() {
   const handleConfirmPurchase = async () => {
     // Validaciones
     if (selectedMethod === 'pago_movil') {
+      if (!pmBank || pmBank.trim() === '') {
+        Alert.alert(
+          'Atención',
+          'Por favor selecciona el banco emisor del Pago Móvil.',
+        );
+        return;
+      }
       if (!/^(04|02)\d{9}$/.test(pmPhone.trim())) {
         Alert.alert(
           'Atención',
@@ -290,16 +300,25 @@ export default function TopUpBalanceScreen() {
         reference: pmReference.trim(),
         phone: pmPhone.trim(),
         document: pmIdNumber.trim(),
+        bankCode: pmBank,
       });
       setBalance(Number(result.balanceFares));
       setPayStep('success');
     } catch (error: any) {
       console.error('[TopUp] Purchase error:', error);
-      Alert.alert(
-        'Error de Recarga',
-        error.message ||
-          'No pudimos verificar tu pago. Revisa la referencia e intenta nuevamente.',
-      );
+      const msg = error.message || '';
+      if (msg.includes('ya fue utilizada') || msg.includes('Conflict')) {
+        Alert.alert(
+          'Referencia Ya Registrada',
+          'Esta referencia de pago ya fue utilizada previamente para una recarga.',
+        );
+      } else {
+        Alert.alert(
+          'Pago No Verificado',
+          msg ||
+            'No pudimos verificar tu pago. Revisa la referencia e intenta nuevamente.',
+        );
+      }
       setPayStep('details');
     }
   };
@@ -327,7 +346,7 @@ export default function TopUpBalanceScreen() {
   };
 
   const copyAllPagoMovil = async () => {
-    const text = `Pago Móvil GoFare:\nBanco: Banesco (0134)\nRIF: J-48291048\nTeléfono: 0412-5551234\nMonto: Bs. ${selectedPkg.amount.toFixed(2).replace('.', ',')}`;
+    const text = `Pago Móvil GoFare:\nBanco: BNC (0191)\nRIF: J-501928340\nTeléfono: 0412-5551234\nMonto: Bs. ${selectedPkg.amount.toFixed(2).replace('.', ',')}`;
     await setClipboardText(text, 'Datos de Pago Móvil');
   };
 
@@ -620,14 +639,12 @@ export default function TopUpBalanceScreen() {
                           <Text style={styles.targetItemLabel}>
                             Banco Destino:
                           </Text>
-                          <Text style={styles.targetItemValue}>
-                            Banesco (0134)
-                          </Text>
+                          <Text style={styles.targetItemValue}>BNC (0191)</Text>
                         </View>
                         <Pressable
                           style={styles.copyChip}
                           onPress={() =>
-                            copyToClipboard('Banesco', 'Banco Destino')
+                            copyToClipboard('BNC', 'Banco Destino')
                           }
                         >
                           <Ionicons
@@ -644,12 +661,14 @@ export default function TopUpBalanceScreen() {
                           <Text style={styles.targetItemLabel}>
                             RIF Destino:
                           </Text>
-                          <Text style={styles.targetItemValue}>J-48291048</Text>
+                          <Text style={styles.targetItemValue}>
+                            J-501928340
+                          </Text>
                         </View>
                         <Pressable
                           style={styles.copyChip}
                           onPress={() =>
-                            copyToClipboard('J48291048', 'RIF Destino')
+                            copyToClipboard('J501928340', 'RIF Destino')
                           }
                         >
                           <Ionicons
@@ -736,8 +755,13 @@ export default function TopUpBalanceScreen() {
                       style={styles.bankSelectBox}
                       onPress={() => setShowBankModal(true)}
                     >
-                      <Text style={styles.bankSelectText}>
-                        {pmBank || 'Seleccionar Banco...'}
+                      <Text
+                        style={[
+                          styles.bankSelectText,
+                          !pmBank && { color: '#94A3B8' },
+                        ]}
+                      >
+                        {pmBank || 'Seleccione el Banco'}
                       </Text>
                       <Ionicons name="chevron-down" size={20} color="#64748B" />
                     </Pressable>
