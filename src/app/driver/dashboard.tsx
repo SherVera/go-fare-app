@@ -8,12 +8,14 @@ import {
   Alert,
   Animated,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
   closeSession,
   getAssignedRoutes,
@@ -30,6 +32,7 @@ import { tokens } from '@/theme/tokens';
 export default function DriverDashboard() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeSession, setActiveSession] = useState<any | null>(null);
 
@@ -173,8 +176,14 @@ export default function DriverDashboard() {
       console.warn('[DriverDashboard] Error loading data:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [router]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDriverData();
+  }, [loadDriverData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -293,23 +302,8 @@ export default function DriverDashboard() {
     );
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={[styles.container, styles.center]} edges={['top']}>
-        <StatusBar style="dark" />
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-        <Text
-          style={{
-            marginTop: 14,
-            fontSize: 15,
-            fontWeight: '600',
-            color: tokens.colors.mutedGray,
-          }}
-        >
-          Cargando datos de la cuenta...
-        </Text>
-      </SafeAreaView>
-    );
+  if (loading && !refreshing) {
+    return <AppLoadingScreen message="Cargando panel de conductor..." />;
   }
 
   const isEnServicio = activeSession?.status === 'open';
@@ -394,6 +388,13 @@ export default function DriverDashboard() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+          />
+        }
       >
         {/* Saludo */}
         <View style={styles.greetingSection}>

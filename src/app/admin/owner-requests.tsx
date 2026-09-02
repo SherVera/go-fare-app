@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -15,21 +14,23 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
-  getAllOwnerRequests,
+  getAllAffiliationRequests,
+  rejectDriverRequest,
   rejectOwnerRequest,
+  verifyDriverRequest,
   verifyOwnerRequest,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function AdminOwnerRequestsScreen() {
-  const _router = useRouter();
   const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
-  const [filteredReqs, setFilteredReqs] = useState<any[]>([]);
+  const [activeRole, setActiveRole] = useState<'all' | 'owner' | 'driver'>('all');
   const [activeTab, setActiveTab] = useState<
     'pending' | 'approved' | 'rejected'
   >('pending');
@@ -40,106 +41,116 @@ export default function AdminOwnerRequestsScreen() {
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
-  const applyFilters = useCallback(
-    (allReqs: any[], tab: typeof activeTab, query: string) => {
-      let result = allReqs.filter((r) => r.status === tab);
+  const filteredReqs = useMemo(() => {
+    let result = requests.filter((r) => r.status === activeTab);
 
-      if (query.trim().length > 0) {
-        const cleanQuery = query.toLowerCase().trim();
-        result = result.filter((r) => {
-          const nameMatch = r.displayName?.toLowerCase().includes(cleanQuery);
-          const emailMatch = r.email?.toLowerCase().includes(cleanQuery);
-          const nationalIdMatch = r.nationalId
-            ?.toLowerCase()
-            .includes(cleanQuery);
-          const businessNameMatch = r.businessName
-            ?.toLowerCase()
-            .includes(cleanQuery);
-          const idNumberMatch = r.idNumber?.toLowerCase().includes(cleanQuery);
-          return (
-            nameMatch ||
-            emailMatch ||
-            nationalIdMatch ||
-            businessNameMatch ||
-            idNumberMatch
-          );
-        });
-      }
+    if (activeRole !== 'all') {
+      result = result.filter((r) => r.roleType === activeRole);
+    }
 
-      setFilteredReqs(result);
-    },
-    [],
-  );
+    if (searchQuery.trim().length > 0) {
+      const cleanQuery = searchQuery.toLowerCase().trim();
+      result = result.filter((r) => {
+        const nameMatch = r.displayName?.toLowerCase().includes(cleanQuery);
+        const emailMatch = r.email?.toLowerCase().includes(cleanQuery);
+        const nationalIdMatch = r.nationalId
+          ?.toLowerCase()
+          .includes(cleanQuery);
+        const businessNameMatch = r.businessName
+          ?.toLowerCase()
+          .includes(cleanQuery);
+        const idNumberMatch = r.idNumber?.toLowerCase().includes(cleanQuery);
+        return (
+          nameMatch ||
+          emailMatch ||
+          nationalIdMatch ||
+          businessNameMatch ||
+          idNumberMatch
+        );
+      });
+    }
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true);
+    return result;
+  }, [requests, activeTab, activeRole, searchQuery]);
+
+  const counts = useMemo(() => {
+    const roleFiltered =
+      activeRole === 'all'
+        ? requests
+        : requests.filter((r) => r.roleType === activeRole);
+    return {
+      pending: roleFiltered.filter((r) => r.status === 'pending').length,
+      approved: roleFiltered.filter((r) => r.status === 'approved').length,
+      rejected: roleFiltered.filter((r) => r.status === 'rejected').length,
+    };
+  }, [requests, activeRole]);
+
+  const fetchRequests = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
     try {
-      const list = await getAllOwnerRequests();
+      const list = await getAllAffiliationRequests();
       setRequests(list);
-      applyFilters(list, activeTab, searchQuery);
     } catch (err) {
       console.warn('[AdminOwnerRequests] Error loading requests:', err);
       Alert.alert(
         'Error',
-        'No se pudieron sincronizar las solicitudes de socios.',
+        'No se pudieron sincronizar las solicitudes de afiliación.',
       );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab, applyFilters, searchQuery]);
+  }, []);
 
   useEffect(() => {
     fetchRequests();
   }, [fetchRequests]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchRequests();
+    }, [fetchRequests]),
+  );
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchRequests();
+    await fetchRequests(true);
   }, [fetchRequests]);
-
-  const handleTabChange = (tab: typeof activeTab) => {
-    setActiveTab(tab);
-    applyFilters(requests, tab, searchQuery);
-  };
-
-  const handleSearchChange = (text: string) => {
-    setSearchQuery(text);
-    applyFilters(requests, activeTab, text);
-  };
-
   const handleApprove = (req: any) => {
-    Alert.alert(
-      'Aprobar Solicitud',
-      `¿Deseas aprobar a ${req.displayName} como Propietario?\n\nEsto le dará permisos para gestionar unidades y conductores de: ${req.businessName}.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Aprobar Propietario',
-          onPress: async () => {
-            setLoading(true);
-            try {
+    const isDriver = req.roleType === 'driver';
+    const title = isDriver ? 'Aprobar Conductor' : 'Aprobar Propietario';
+    const message = isDriver
+      ? `¿Deseas aprobar a ${req.displayName} como Conductor habilitado de la plataforma?`
+      : `¿Deseas aprobar a ${req.displayName} como Propietario de vehículos?\n\nPodrá registrar unidades.`;
+
+    Alert.alert(title, message, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: isDriver ? 'Aprobar Conductor' : 'Aprobar Propietario',
+        onPress: async () => {
+          setLoading(true);
+          try {
+            if (isDriver) {
+              await verifyDriverRequest(req.uuid, req.userUuid);
+            } else {
               await verifyOwnerRequest(req.uuid, req.userUuid);
-              Alert.alert(
-                'Éxito',
-                'El usuario ha sido aprobado como Propietario de vehiculo con éxito.',
-              );
-              fetchRequests();
-            } catch (err: any) {
-              console.warn(
-                '[AdminOwnerRequests] Error approving request:',
-                err,
-              );
-              Alert.alert(
-                'Error',
-                err.message || 'No se pudo aprobar la solicitud.',
-              );
-              setLoading(false);
             }
-          },
+            Alert.alert(
+              'Éxito',
+              `El usuario ${req.displayName} ha sido aprobado exitosamente.`,
+            );
+            fetchRequests();
+          } catch (err: any) {
+            console.warn('[AdminOwnerRequests] Error approving request:', err);
+            Alert.alert(
+              'Error',
+              err.message || 'No se pudo aprobar la solicitud.',
+            );
+            setLoading(false);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const handleRejectInit = (req: any) => {
@@ -161,7 +172,11 @@ export default function AdminOwnerRequestsScreen() {
     setRejectModalVisible(false);
     setLoading(true);
     try {
-      await rejectOwnerRequest(selectedReq.uuid, rejectReason.trim());
+      if (selectedReq.roleType === 'driver') {
+        await rejectDriverRequest(selectedReq.uuid, rejectReason.trim());
+      } else {
+        await rejectOwnerRequest(selectedReq.uuid, rejectReason.trim());
+      }
       Alert.alert('Rechazada', 'La solicitud ha sido rechazada.');
       fetchRequests();
     } catch (err: any) {
@@ -171,12 +186,84 @@ export default function AdminOwnerRequestsScreen() {
     }
   };
 
+  if (loading && !refreshing) {
+    return (
+      <AppLoadingScreen message="Cargando solicitudes de afiliación..." />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScreenHeader
-        title="Solicitudes de Propietarios"
+        title="Solicitudes de Afiliación"
         onMenu={() => setIsOpen(true)}
       />
+
+      {/* Selector de Tipo: Todos | Propietarios | Conductores */}
+      <View style={styles.roleFilterRow}>
+        <Pressable
+          style={[
+            styles.roleChip,
+            activeRole === 'all' && styles.roleChipActive,
+          ]}
+          onPress={() => setActiveRole('all')}
+        >
+          <Text
+            style={[
+              styles.roleChipText,
+              activeRole === 'all' && styles.roleChipTextActive,
+            ]}
+          >
+            Todos
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[
+            styles.roleChip,
+            activeRole === 'owner' && styles.roleChipActive,
+          ]}
+          onPress={() => setActiveRole('owner')}
+        >
+          <Ionicons
+            name="business"
+            size={13}
+            color={activeRole === 'owner' ? '#FFFFFF' : '#64748B'}
+            style={{ marginRight: 4 }}
+          />
+          <Text
+            style={[
+              styles.roleChipText,
+              activeRole === 'owner' && styles.roleChipTextActive,
+            ]}
+          >
+            Propietarios
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[
+            styles.roleChip,
+            activeRole === 'driver' && styles.roleChipActive,
+          ]}
+          onPress={() => setActiveRole('driver')}
+        >
+          <Ionicons
+            name="car"
+            size={13}
+            color={activeRole === 'driver' ? '#FFFFFF' : '#64748B'}
+            style={{ marginRight: 4 }}
+          />
+          <Text
+            style={[
+              styles.roleChipText,
+              activeRole === 'driver' && styles.roleChipTextActive,
+            ]}
+          >
+            Conductores
+          </Text>
+        </Pressable>
+      </View>
 
       {/* Barra de Búsqueda */}
       <View style={styles.searchContainer}>
@@ -188,17 +275,17 @@ export default function AdminOwnerRequestsScreen() {
         />
         <TextInput
           style={styles.searchInput}
-          placeholder="Buscar por nombre o cédula..."
+          placeholder="Buscar por nombre, cédula o licencia..."
           placeholderTextColor="#94A3B8"
           value={searchQuery}
-          onChangeText={handleSearchChange}
+          onChangeText={setSearchQuery}
           clearButtonMode="while-editing"
           autoCapitalize="none"
           autoCorrect={false}
         />
         {searchQuery.length > 0 && (
           <Pressable
-            onPress={() => handleSearchChange('')}
+            onPress={() => setSearchQuery('')}
             style={styles.clearBtn}
           >
             <Ionicons name="close-circle" size={18} color="#94A3B8" />
@@ -210,7 +297,7 @@ export default function AdminOwnerRequestsScreen() {
       <View style={styles.tabsContainer}>
         <Pressable
           style={[styles.tab, activeTab === 'pending' && styles.tabActive]}
-          onPress={() => handleTabChange('pending')}
+          onPress={() => setActiveTab('pending')}
         >
           <Text
             style={[
@@ -218,13 +305,13 @@ export default function AdminOwnerRequestsScreen() {
               activeTab === 'pending' && styles.tabLabelActive,
             ]}
           >
-            Pendientes
+            Pendientes ({counts.pending})
           </Text>
         </Pressable>
 
         <Pressable
           style={[styles.tab, activeTab === 'approved' && styles.tabActive]}
-          onPress={() => handleTabChange('approved')}
+          onPress={() => setActiveTab('approved')}
         >
           <Text
             style={[
@@ -232,13 +319,13 @@ export default function AdminOwnerRequestsScreen() {
               activeTab === 'approved' && styles.tabLabelActive,
             ]}
           >
-            Aprobadas
+            Aprobadas ({counts.approved})
           </Text>
         </Pressable>
 
         <Pressable
           style={[styles.tab, activeTab === 'rejected' && styles.tabActive]}
-          onPress={() => handleTabChange('rejected')}
+          onPress={() => setActiveTab('rejected')}
         >
           <Text
             style={[
@@ -246,129 +333,228 @@ export default function AdminOwnerRequestsScreen() {
               activeTab === 'rejected' && styles.tabLabelActive,
             ]}
           >
-            Rechazadas
+            Rechazadas ({counts.rejected})
           </Text>
         </Pressable>
       </View>
 
       {/* List */}
-      {loading && !refreshing ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={tokens.colors.primary} />
-        </View>
-      ) : filteredReqs.length === 0 ? (
-        <View style={styles.centered}>
-          <Ionicons name="business-outline" size={48} color="#CBD5E1" />
-          <Text style={styles.emptyText}>
-            No hay solicitudes en esta sección.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredReqs}
-          keyExtractor={(item) => item.uuid}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[tokens.colors.primary]}
-              tintColor={tokens.colors.primary}
-            />
-          }
-          renderItem={({ item }) => {
-            const dateStr = new Date(item.createdAt).toLocaleDateString(
-              'es-ES',
-              {
+      <FlatList
+        data={filteredReqs}
+        keyExtractor={(item) => `${item.roleType}-${item.uuid}`}
+        contentContainerStyle={[
+          styles.listContent,
+          filteredReqs.length === 0 && styles.listContentEmpty,
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+            tintColor={tokens.colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.centered}>
+            <Ionicons name="file-tray-outline" size={48} color="#CBD5E1" />
+            <Text style={styles.emptyText}>
+              No hay solicitudes en esta sección.
+            </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                color: '#94A3B8',
+                fontFamily: tokens.typography.fontFamily.medium,
+                marginTop: 6,
+                textAlign: 'center',
+              }}
+            >
+              Desliza hacia abajo para actualizar
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const isDriver = item.roleType === 'driver';
+          const isApproved = item.status === 'approved';
+          const isRejected = item.status === 'rejected';
+          const dateStr = item.createdAt
+            ? new Date(item.createdAt).toLocaleDateString('es-ES', {
                 day: 'numeric',
                 month: 'short',
                 year: 'numeric',
-              },
-            );
+              })
+            : '';
 
-            return (
-              <View style={styles.reqCard}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {(item.displayName || 'U').charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.meta}>
+          return (
+            <View style={styles.reqCard}>
+              <View style={styles.cardHeader}>
+                <View
+                  style={[
+                    styles.avatar,
+                    isDriver && { backgroundColor: '#ECFDF5' },
+                  ]}
+                >
+                  <Ionicons
+                    name={isDriver ? 'car' : 'business'}
+                    size={20}
+                    color={isDriver ? '#059669' : tokens.colors.primary}
+                  />
+                </View>
+                <View style={styles.meta}>
+                  <View style={styles.nameBadgeRow}>
                     <Text style={styles.userName}>{item.displayName}</Text>
-                    <Text style={styles.userEmail}>{item.email}</Text>
-                  </View>
-                  <Text style={styles.dateText}>{dateStr}</Text>
-                </View>
-
-                {/* Detalles de Usuario */}
-                <View style={styles.detailsRow}>
-                  {item.nationalId && (
-                    <Text style={styles.detailText}>
-                      Cédula: {item.nationalId}
-                    </Text>
-                  )}
-                  {item.phoneNumber && (
-                    <Text style={styles.detailText}>
-                      Tel: {item.phoneNumber}
-                    </Text>
-                  )}
-                </View>
-
-                {/* Cooperativa / RIF */}
-                <View style={styles.coopCard}>
-                  <Text style={styles.coopCardTitle}>AFILIACIÓN COMERCIAL</Text>
-                  <Text style={styles.coopName}>{item.businessName}</Text>
-                  <Text style={styles.coopRif}>RIF: {item.idNumber}</Text>
-                </View>
-
-                {/* Motivo de rechazo */}
-                {item.status === 'rejected' && item.rejectionReason && (
-                  <View style={styles.rejectionCard}>
-                    <Text style={styles.rejectionTitle}>
-                      MOTIVO DE RECHAZO:
-                    </Text>
-                    <Text style={styles.rejectionText}>
-                      {item.rejectionReason}
-                    </Text>
-                  </View>
-                )}
-
-                {/* Acciones para Pendientes */}
-                {item.status === 'pending' && (
-                  <View style={styles.actionsRow}>
-                    <Pressable
-                      style={styles.rejectBtn}
-                      onPress={() => handleRejectInit(item)}
+                    <View
+                      style={[
+                        styles.roleBadge,
+                        isDriver
+                          ? styles.roleBadgeDriver
+                          : styles.roleBadgeOwner,
+                      ]}
                     >
-                      <Ionicons
-                        name="close-circle-outline"
-                        size={18}
-                        color="#EF4444"
-                      />
-                      <Text style={styles.rejectBtnText}>Rechazar</Text>
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.approveBtn}
-                      onPress={() => handleApprove(item)}
-                    >
-                      <Ionicons
-                        name="checkmark-circle-outline"
-                        size={18}
-                        color="#FFFFFF"
-                      />
-                      <Text style={styles.approveBtnText}>
-                        Aprobar Propietario
+                      <Text
+                        style={[
+                          styles.roleBadgeText,
+                          isDriver
+                            ? styles.roleBadgeTextDriver
+                            : styles.roleBadgeTextOwner,
+                        ]}
+                      >
+                        {isDriver ? 'CONDUCTOR' : 'PROPIETARIO'}
                       </Text>
-                    </Pressable>
+                    </View>
                   </View>
+                  <Text style={styles.userEmail}>{item.email}</Text>
+                </View>
+                {dateStr ? <Text style={styles.dateText}>{dateStr}</Text> : null}
+              </View>
+
+              {/* Detalles de Usuario */}
+              <View style={styles.detailsRow}>
+                {item.nationalId && (
+                  <Text style={styles.detailText}>
+                    Cédula: {item.nationalId}
+                  </Text>
+                )}
+                {item.phoneNumber && (
+                  <Text style={styles.detailText}>
+                    Tel: {item.phoneNumber}
+                  </Text>
                 )}
               </View>
-            );
-          }}
-        />
-      )}
+
+              {/* Información comercial o de conducción */}
+              <View
+                style={[
+                  styles.coopCard,
+                  isDriver && { backgroundColor: '#F0FDF4' },
+                ]}
+              >
+                <Text style={styles.coopCardTitle}>
+                  {isDriver
+                    ? 'INFORMACIÓN DE CONDUCCIÓN'
+                    : 'AFILIACIÓN COMERCIAL'}
+                </Text>
+                <Text style={styles.coopName}>{item.businessName}</Text>
+                <Text style={styles.coopRif}>
+                  {isDriver ? 'Nº Documento / Licencia: ' : 'RIF / Cédula: '}
+                  {item.idNumber}
+                </Text>
+              </View>
+
+              {/* Estado Aprobado */}
+              {isApproved && (
+                <View style={styles.statusBadgeApproved}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={16}
+                    color="#059669"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.statusBadgeApprovedText}>
+                    Solicitud Aprobada • Cuenta Habilitada
+                  </Text>
+                </View>
+              )}
+
+              {/* Motivo de rechazo */}
+              {isRejected && (
+                <View style={styles.rejectionCard}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons
+                      name="close-circle"
+                      size={15}
+                      color="#DC2626"
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text style={styles.rejectionTitle}>
+                      SOLICITUD RECHAZADA:
+                    </Text>
+                  </View>
+                  <Text style={styles.rejectionText}>
+                    {item.rejectionReason || 'No cumple con los requisitos establecidos.'}
+                  </Text>
+                </View>
+              )}
+
+              {/* Acciones para Rechazadas: Reconsiderar */}
+              {isRejected && (
+                <View style={styles.actionsRow}>
+                  <Pressable
+                    style={[
+                      styles.approveBtn,
+                      isDriver && { backgroundColor: '#059669' },
+                    ]}
+                    onPress={() => handleApprove(item)}
+                  >
+                    <Ionicons
+                      name="refresh-circle-outline"
+                      size={18}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.approveBtnText}>
+                      Reconsiderar y Aprobar
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {/* Acciones para Pendientes */}
+              {item.status === 'pending' && (
+                <View style={styles.actionsRow}>
+                  <Pressable
+                    style={styles.rejectBtn}
+                    onPress={() => handleRejectInit(item)}
+                  >
+                    <Ionicons
+                      name="close-circle-outline"
+                      size={18}
+                      color="#EF4444"
+                    />
+                    <Text style={styles.rejectBtnText}>Rechazar</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.approveBtn,
+                      isDriver && { backgroundColor: '#059669' },
+                    ]}
+                    onPress={() => handleApprove(item)}
+                  >
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.approveBtnText}>
+                      {isDriver ? 'Aprobar Conductor' : 'Aprobar Propietario'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          );
+        }}
+      />
 
       {/* Modal de Rechazo */}
       <Modal
@@ -390,18 +576,19 @@ export default function AdminOwnerRequestsScreen() {
               </Pressable>
             </View>
 
-            <Text style={styles.modalSubtitle}>
-              Indica el motivo por el cual rechazas al postulante:
+            <Text style={styles.modalSub}>
+              Ingresa el motivo del rechazo para informarle al solicitante (
+              {selectedReq?.displayName}):
             </Text>
 
             <TextInput
               style={styles.modalInput}
-              placeholder="Ej. El RIF provisto no coincide o no es socio autorizado..."
+              placeholder="Ej. Documentación no legible o inconsistente..."
               placeholderTextColor="#94A3B8"
-              multiline
-              numberOfLines={4}
               value={rejectReason}
               onChangeText={setRejectReason}
+              multiline
+              numberOfLines={4}
             />
 
             <View style={styles.modalActions}>
@@ -431,6 +618,71 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
+  roleFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 4,
+    gap: 8,
+  },
+  roleChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  roleChipActive: {
+    backgroundColor: tokens.colors.primary,
+    borderColor: tokens.colors.primary,
+  },
+  roleChipText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#64748B',
+  },
+  roleChipTextActive: {
+    color: '#FFFFFF',
+  },
+  nameBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  roleBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  roleBadgeDriver: {
+    backgroundColor: '#DCFCE7',
+  },
+  roleBadgeOwner: {
+    backgroundColor: '#EFF6FF',
+  },
+  roleBadgeText: {
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.black,
+    letterSpacing: 0.5,
+  },
+  roleBadgeTextDriver: {
+    color: '#15803D',
+  },
+  roleBadgeTextOwner: {
+    color: tokens.colors.primary,
+  },
+  modalSub: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginBottom: 14,
+    lineHeight: 18,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -439,7 +691,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E2E8F0',
     marginHorizontal: 20,
-    marginTop: 12,
+    marginTop: 8,
     paddingHorizontal: 12,
     height: 46,
     shadowColor: '#64748B',
@@ -494,8 +746,12 @@ const styles = StyleSheet.create({
     color: tokens.colors.primary,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 110, // Más padding para evitar que se tape con el tab bar flotante
+    padding: 16,
+    paddingBottom: 80,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   reqCard: {
     backgroundColor: '#FFFFFF',
@@ -581,6 +837,22 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#64748B',
     marginTop: 1,
+  },
+  statusBadgeApproved: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 12,
+  },
+  statusBadgeApprovedText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#065F46',
   },
   rejectionCard: {
     backgroundColor: '#FEF2F2',

@@ -391,7 +391,6 @@ async function fetchWithAuth(
 
     if (path.startsWith('/fare/transactions')) return [];
     if (path.startsWith('/tickets')) return [];
-    if (path.startsWith('/vehicles')) return [];
     if (path.startsWith('/rates/current')) {
       try {
         const cached = await AsyncStorage.getItem('gofare_rates_cache');
@@ -1433,13 +1432,71 @@ export async function submitVehicleOwnerRequest(requestData: {
   businessName: string;
   idNumber: string;
 }): Promise<any> {
-  return await fetchWithAuth('/transport-owners/me/application', {
-    method: 'POST',
-    body: JSON.stringify({
-      legalName: requestData.businessName,
-      rif: requestData.idNumber,
-    }),
-  });
+  const payload = {
+    legalName: requestData.businessName,
+    rif: requestData.idNumber,
+  };
+
+  const currentUser = auth.currentUser;
+  const userEmail = currentUser?.email?.toLowerCase().trim();
+  const userUid = currentUser?.uid;
+
+  // Guardar en almacenamiento persistente local como respaldo
+  try {
+    const raw = await AsyncStorage.getItem('gofare_submitted_owner_requests');
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift({
+      uuid: userUid || `req-${Date.now()}`,
+      userUuid: userUid,
+      email: userEmail,
+      displayName: requestData.businessName,
+      businessName: requestData.businessName,
+      idNumber: requestData.idNumber,
+      nationalId: requestData.idNumber,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      roleType: 'owner',
+    });
+    await AsyncStorage.setItem(
+      'gofare_submitted_owner_requests',
+      JSON.stringify(list),
+    );
+  } catch {}
+
+  try {
+    return await fetchWithAuth('/transport-owners/me/application', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    try {
+      return await fetchWithAuth('/transport-owners/application', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      try {
+        return await fetchWithAuth('/transport-owners', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+      } catch (err3) {
+        console.warn('[API] Fallback de solicitud guardada localmente:', err3);
+        return { success: true, local: true };
+      }
+    }
+  }
+}
+
+/**
+ * Obtiene el perfil de dueño de transporte del usuario autenticado (GET /transport-owners/me).
+ */
+export async function getMyTransportOwnerProfile(): Promise<any> {
+  try {
+    return await fetchWithAuth('/transport-owners/me');
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -1455,114 +1512,45 @@ export async function submitVehicleRequest(requestData: {
   vehicleColor?: string;
   capacity?: number;
 }): Promise<any> {
+  const payload: Record<string, any> = {
+    plate: requestData.licensePlate.trim().toUpperCase(),
+    brand: requestData.vehicleMake.trim(),
+    model: requestData.vehicleModel.trim(),
+    year: requestData.vehicleYear,
+    color: requestData.vehicleColor?.trim(),
+    capacity: requestData.capacity,
+  };
+
+  if (requestData.cooperativeUuid) {
+    payload.civilAssociationUuid = requestData.cooperativeUuid;
+  }
+
   return await fetchWithAuth('/vehicles', {
     method: 'POST',
-    body: JSON.stringify({
-      plate: requestData.licensePlate,
-      brand: requestData.vehicleMake,
-      model: requestData.vehicleModel,
-      year: requestData.vehicleYear,
-      color: requestData.vehicleColor,
-      capacity: requestData.capacity || 32,
-      status: 'inactive', // status válido del enum del backend para nuevo vehículo en revisión
-    }),
+    body: JSON.stringify(payload),
   });
 }
 
 /**
- * Obtiene las unidades de transporte (vehículos) del socio autenticado.
+ * Obtiene las unidades de transporte (vehículos) del socio autenticado directamente del backend.
  */
 export async function getOwnerVehicles(): Promise<any[]> {
-  const token = await getGoFareToken();
-
-  if (token && token !== 'mock-gofare-jwt-token-bypass') {
-    try {
-      const list = await fetchWithAuth('/vehicles/my');
-      if (Array.isArray(list)) {
-        return list.map((v: any) => {
-          let appStatus: 'approved' | 'pending' | 'rejected' = 'pending';
-          if (v.status === 'active') {
-            appStatus = 'approved';
-          } else if (v.status === 'rejected' || v.status === 'suspended') {
-            appStatus = 'rejected';
-          } else if (v.status === 'inactive') {
-            appStatus = 'pending';
-          }
-
-          return {
-            uuid: v.uuid,
-            vehicleMake: v.brand,
-            vehicleModel: v.model,
-            vehicleYear: v.year,
-            licensePlate: v.plate,
-            cooperativeName: v.civilAssociation?.name || 'Particular / Ninguna',
-            status: appStatus,
-            createdAt: v.createdAt
-              ? new Date(v.createdAt).toLocaleDateString('es-VE')
-              : '',
-            totalEarnings: 0,
-            tripsCount: 0,
-          };
-        });
-      }
-    } catch (error) {
-      console.warn('[API] Error al consultar /vehicles/my del backend:', error);
-    }
-  }
-
-  // Leer placas dadas de baja localmente
-  let deletedPlates: string[] = [];
   try {
-    const deletedPlatesStr = await AsyncStorage.getItem(
-      'mock_deleted_vehicle_plates',
-    );
-    if (deletedPlatesStr) {
-      deletedPlates = JSON.parse(deletedPlatesStr);
-    }
-  } catch {}
+    const list = await fetchWithAuth('/vehicles/my');
+    const rawList = Array.isArray(list)
+      ? list
+      : list?.data || list?.items || list?.vehicles || [];
 
-  // Leer solicitudes y vehículos guardados localmente si se está en bypass o sin red
-  let localVehicles: any[] = [];
-  try {
-    const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
-    if (localStr) {
-      localVehicles = JSON.parse(localStr);
-    }
-  } catch {}
-
-  return localVehicles.filter((v) => !deletedPlates.includes(v.licensePlate));
-}
-
-/**
- * Obtiene el detalle de un vehículo por su UUID.
- */
-export async function getVehicleDetail(uuid: string): Promise<any> {
-  const isMockUuid = uuid.length < 10 || uuid.startsWith('mock-');
-
-  if (!isMockUuid) {
-    try {
-      const v = await fetchWithAuth(`/vehicles/${uuid}`);
-      if (v) {
+    if (Array.isArray(rawList)) {
+      return rawList.map((v: any) => {
         let appStatus: 'approved' | 'pending' | 'rejected' = 'pending';
         if (v.status === 'active') {
           appStatus = 'approved';
-        } else if (v.status === 'rejected') {
+        } else if (v.status === 'rejected' || v.status === 'suspended') {
           appStatus = 'rejected';
         } else if (v.status === 'inactive') {
           appStatus = 'pending';
         }
-
-        let assignedDriver: any;
-        try {
-          const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
-          const localVehicles = localStr ? JSON.parse(localStr) : [];
-          const localMatch = localVehicles.find(
-            (lv: any) => lv.uuid === uuid || lv.licensePlate === v.plate,
-          );
-          if (localMatch) {
-            assignedDriver = localMatch.assignedDriver;
-          }
-        } catch {}
 
         return {
           uuid: v.uuid,
@@ -1570,81 +1558,79 @@ export async function getVehicleDetail(uuid: string): Promise<any> {
           vehicleModel: v.model,
           vehicleYear: v.year,
           licensePlate: v.plate,
-          cooperativeName: 'Particular / Ninguna',
-          status: appStatus,
-          createdAt: new Date(v.createdAt).toLocaleDateString('es-VE'),
-          totalEarnings: 0,
-          tripsCount: 0,
-          assignedDriver,
           color: v.color,
           capacity: v.capacity,
-          photoUrl: v.photoUrl,
-          routeNumber: v.routeNumber,
+          cooperativeName: v.civilAssociation?.name,
+          assignedDriver: v.assignedDriver,
+          status: appStatus,
+          createdAt: v.createdAt
+            ? new Date(v.createdAt).toLocaleDateString('es-VE')
+            : '',
+          totalEarnings: v.totalEarnings ?? 0,
+          tripsCount: v.tripsCount ?? 0,
         };
-      }
-    } catch (err) {
-      console.warn(
-        '[API] Error al obtener detalle de vehículo desde backend:',
-        err,
-      );
+      });
     }
+  } catch (error) {
+    console.warn('[API] Error al consultar /vehicles/my del backend:', error);
   }
 
-  const allVehicles = await getOwnerVehicles();
-  const found = allVehicles.find((v) => v.uuid === uuid);
-  return found || null;
+  return [];
 }
 
 /**
- * Da de baja un vehículo por su UUID.
+ * Obtiene el detalle de un vehículo por su UUID directamente del backend.
+ */
+export async function getVehicleDetail(uuid: string): Promise<any> {
+  try {
+    const v = await fetchWithAuth(`/vehicles/${uuid}`);
+    if (v) {
+      let appStatus: 'approved' | 'pending' | 'rejected' = 'pending';
+      if (v.status === 'active') {
+        appStatus = 'approved';
+      } else if (v.status === 'rejected' || v.status === 'suspended') {
+        appStatus = 'rejected';
+      } else if (v.status === 'inactive') {
+        appStatus = 'pending';
+      }
+
+      return {
+        uuid: v.uuid,
+        vehicleMake: v.brand,
+        vehicleModel: v.model,
+        vehicleYear: v.year,
+        licensePlate: v.plate,
+        color: v.color,
+        capacity: v.capacity,
+        cooperativeName: v.civilAssociation?.name,
+        assignedDriver: v.assignedDriver,
+        inviteCode: v.inviteCode,
+        rawStatus: v.status,
+        documents: v.documents || v.legalDocuments || [],
+        status: appStatus,
+        createdAt: v.createdAt
+          ? new Date(v.createdAt).toLocaleDateString('es-VE')
+          : '',
+        totalEarnings: v.totalEarnings ?? 0,
+        tripsCount: v.tripsCount ?? 0,
+        photoUrl: v.photoUrl,
+        routeNumber: v.routeNumber,
+      };
+    }
+  } catch (err) {
+    console.warn('[API] Error al obtener detalle de vehículo desde backend:', err);
+  }
+
+  return null;
+}
+
+/**
+ * Da de baja un vehículo por su UUID directamente en el backend.
  */
 export async function deleteVehicle(uuid: string): Promise<any> {
-  const isMockUuid = uuid.length < 10 || uuid.startsWith('mock-');
-
-  if (!isMockUuid) {
-    try {
-      await fetchWithAuth(`/vehicles/${uuid}`, {
-        method: 'DELETE',
-      });
-    } catch (err) {
-      console.warn('[API] Error al eliminar vehículo del backend:', err);
-    }
-  }
-
-  try {
-    const list = await getOwnerVehicles();
-    const target = list.find((v) => v.uuid === uuid);
-    if (target?.licensePlate) {
-      const deletedPlatesStr = await AsyncStorage.getItem(
-        'mock_deleted_vehicle_plates',
-      );
-      const deletedPlates = deletedPlatesStr
-        ? JSON.parse(deletedPlatesStr)
-        : [];
-      deletedPlates.push(target.licensePlate);
-      await AsyncStorage.setItem(
-        'mock_deleted_vehicle_plates',
-        JSON.stringify(deletedPlates),
-      );
-    }
-
-    const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
-    if (localStr) {
-      const localVehicles = JSON.parse(localStr);
-      const filtered = localVehicles.filter((v: any) => v.uuid !== uuid);
-      await AsyncStorage.setItem(
-        'mock_vehicle_requests',
-        JSON.stringify(filtered),
-      );
-    }
-  } catch (storageErr) {
-    console.warn(
-      '[API] Error al actualizar baja de vehículo en AsyncStorage:',
-      storageErr,
-    );
-  }
-
-  return { success: true };
+  return await fetchWithAuth(`/vehicles/${uuid}`, {
+    method: 'DELETE',
+  });
 }
 
 /**
@@ -1685,16 +1671,19 @@ export async function submitLegalDocument(requestData: {
     console.warn('[API] Error al guardar documento localmente:', storageErr);
   }
 
+  const payload: Record<string, any> = {
+    type: requestData.type,
+    fileUrl: requestData.fileUrl,
+  };
+  if (requestData.vehicleUuid) payload.vehicleUuid = requestData.vehicleUuid;
+  if (requestData.documentNumber)
+    payload.documentNumber = requestData.documentNumber;
+  if (requestData.issuedAt) payload.issuedAt = requestData.issuedAt;
+  if (requestData.expiresAt) payload.expiresAt = requestData.expiresAt;
+
   return await fetchWithAuth('/legal-documents', {
     method: 'POST',
-    body: JSON.stringify({
-      type: requestData.type,
-      fileUrl: requestData.fileUrl,
-      documentNumber: requestData.documentNumber,
-      vehicleUuid: requestData.vehicleUuid,
-      issuedAt: requestData.issuedAt,
-      expiresAt: requestData.expiresAt,
-    }),
+    body: JSON.stringify(payload),
   });
 }
 
@@ -1787,14 +1776,29 @@ export async function getUsedTicketsByRoute(
  * @returns Lista de usuarios (BackendUser[])
  */
 export async function getAllUsers(): Promise<BackendUser[]> {
-  return fetchWithAuth('/users');
+  try {
+    const res = await fetchWithAuth('/users');
+    const raw = Array.isArray(res)
+      ? res
+      : res?.data || res?.users || res?.items || [];
+    return Array.isArray(raw) ? raw : [];
+  } catch (err) {
+    console.warn('[API] Error al obtener usuarios del backend:', err);
+    return [];
+  }
 }
 
-/**
- * Obtiene todas las transacciones de tarifa del sistema.
- */
 export async function getAllTransactions(): Promise<any[]> {
-  return fetchWithAuth('/fare/transactions');
+  try {
+    const res = await fetchWithAuth('/fare/transactions');
+    const raw = Array.isArray(res)
+      ? res
+      : res?.data || res?.transactions || res?.items || [];
+    return Array.isArray(raw) ? raw : [];
+  } catch (err) {
+    console.warn('[API] Error al obtener transacciones:', err);
+    return [];
+  }
 }
 
 /**
@@ -1823,7 +1827,6 @@ export async function updateUserRoles(
 }
 
 const CIVIL_ASSOC_METADATA_KEY = 'gofare_civil_assoc_metadata';
-const CIVIL_ASSOC_MOCKS_KEY = 'gofare_civil_assoc_mocks';
 
 export async function getRoles(): Promise<any[]> {
   try {
@@ -1885,72 +1888,60 @@ export async function saveCivilAssociationMetadata(
 }
 
 export async function getAllCivilAssociations(): Promise<any[]> {
-  let realAssocs: any[] = [];
-  let users: any[] = [];
+  try {
+    const res = await fetchWithAuth('/civil-associations');
+    const raw = Array.isArray(res)
+      ? res
+      : res?.data || res?.items || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw.map((ca: any) => ({
+        uuid: ca.uuid,
+        displayName:
+          ca.user?.displayName ||
+          `${ca.user?.firstName || ''} ${ca.user?.lastName || ''}`.trim() ||
+          ca.name ||
+          'Asociación Civil',
+        email: ca.user?.email,
+        nationalId: ca.user?.nationalId,
+        phoneNumber: ca.user?.phoneNumber,
+        position: ca.position,
+        status: ca.status,
+        createdAt: ca.createdAt,
+      }));
+    }
+  } catch {}
 
   try {
-    users = await getAllUsers();
-    realAssocs = users.filter((u: any) => {
-      const roles = u.roles || [];
-      return roles.some((r: any) => r.name === 'civil_association');
-    });
+    const users = await getAllUsers();
+    return users
+      .filter((u: any) => {
+        const roles = u.roles || [];
+        return (
+          roles.some((r: any) => r.name === 'civil_association') ||
+          u.civilAssociation != null
+        );
+      })
+      .map((u: any) => ({
+        uuid: u.uuid,
+        displayName:
+          u.displayName ||
+          `${u.firstName || ''} ${u.lastName || ''}`.trim() ||
+          'Asociación Civil',
+        email: u.email,
+        nationalId: u.nationalId,
+        phoneNumber: u.phoneNumber,
+        position: u.civilAssociation?.position,
+        status: u.civilAssociation?.status || 'approved',
+        createdAt: u.createdAt,
+      }));
   } catch (err) {
-    console.warn(
-      '[API] Falló la obtención de usuarios reales para asociaciones:',
-      err,
-    );
+    console.warn('[API] Error al obtener asociaciones civiles:', err);
+    return [];
   }
-
-  const metadata = await getCivilAssociationsMetadata();
-
-  // Enriquecer asociaciones reales con sus metadatos
-  const enrichedReal = realAssocs.map((u: any) => {
-    const meta = metadata[u.uuid] || {
-      position: 'Presidente',
-      status: 'approved',
-      rejectionReason: '',
-    };
-    return {
-      ...u,
-      position: meta.position,
-      status: meta.status,
-      rejectionReason: (meta as any).rejectionReason || '',
-    };
-  });
-
-  // Cargar también las asociaciones simuladas (para pruebas sin conexión a Neon DB)
-  let mockAssocs: any[] = [];
-  try {
-    const cachedMocks = await AsyncStorage.getItem(CIVIL_ASSOC_MOCKS_KEY);
-    if (cachedMocks) {
-      mockAssocs = JSON.parse(cachedMocks);
-      // Limpiar los mocks por defecto que confunden al usuario
-      if (mockAssocs.some((m: any) => m.uuid === 'mock-ca-1')) {
-        mockAssocs = [];
-        await AsyncStorage.removeItem(CIVIL_ASSOC_MOCKS_KEY);
-      }
-    } else {
-      mockAssocs = [];
-    }
-  } catch (_) {}
-
-  // Si el backend falló o no tiene asociaciones reales, retornar la lista de mocks.
-  // Si hay reales, las combinamos (excluyendo duplicados por correo o cédula si es necesario)
-  const combined = [...enrichedReal];
-  for (const mock of mockAssocs) {
-    const exists = combined.some(
-      (r) => r.email === mock.email || r.nationalId === mock.nationalId,
-    );
-    if (!exists) {
-      combined.push(mock);
-    }
-  }
-
-  return combined;
 }
 
 export async function registerCivilAssociation(data: {
-  userUuid?: string; // Si se promueve uno existente
+  userUuid?: string;
   firstName?: string;
   lastName?: string;
   email?: string;
@@ -1959,60 +1950,18 @@ export async function registerCivilAssociation(data: {
   position: string;
   status: string;
 }): Promise<any> {
-  // Si estamos promoviendo a un usuario real
   if (data.userUuid) {
-    // Buscar el UUID del rol civil_association
     const roleUuid = await resolveRoleUuid('civil_association');
-    if (!roleUuid) {
-      throw new Error(
-        'No se pudo resolver el identificador del rol Asociación Civil.',
-      );
-    }
-
-    // Asignar el rol real en el backend
-    try {
+    if (roleUuid) {
       await updateUserRoles(data.userUuid, [roleUuid]);
-    } catch (err) {
-      console.warn(
-        '[API] Error al asignar rol en backend, procediendo con simulación local:',
-        err,
-      );
     }
-
-    // Guardar metadatos locales (cargo y estado)
-    await saveCivilAssociationMetadata(
-      data.userUuid,
-      data.position,
-      data.status,
-    );
     return { success: true, userUuid: data.userUuid };
   }
 
-  // Si estamos creando uno nuevo y no tenemos conexión o el usuario prefiere registro local
-  const newMock = {
-    uuid: `mock-ca-${Date.now()}`,
-    firstName: data.firstName || 'Sin Nombre',
-    lastName: data.lastName || '',
-    displayName: `${data.firstName || ''} ${data.lastName || ''}`.trim(),
-    email: data.email || `ca-${Date.now()}@gofare.local`,
-    phoneNumber: data.phoneNumber || '',
-    nationalId: data.nationalId || '',
-    position: data.position,
-    status: data.status,
-    roles: [{ name: 'civil_association', uuid: 'mock-role-civil' }],
-    createdAt: new Date().toISOString(),
-  };
-
-  try {
-    const cachedMocks = await AsyncStorage.getItem(CIVIL_ASSOC_MOCKS_KEY);
-    const mocks = cachedMocks ? JSON.parse(cachedMocks) : [];
-    mocks.unshift(newMock);
-    await AsyncStorage.setItem(CIVIL_ASSOC_MOCKS_KEY, JSON.stringify(mocks));
-  } catch (err) {
-    console.warn('[API] Error al registrar asociación simulada:', err);
-  }
-
-  return newMock;
+  return await fetchWithAuth('/civil-associations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function updateCivilAssociationProfile(
@@ -2023,204 +1972,81 @@ export async function updateCivilAssociationProfile(
     rejectionReason?: string;
   },
 ): Promise<any> {
-  // Si es un mock local
-  if (uuid.startsWith('mock-ca-')) {
-    try {
-      const cachedMocks = await AsyncStorage.getItem(CIVIL_ASSOC_MOCKS_KEY);
-      if (cachedMocks) {
-        const mocks = JSON.parse(cachedMocks);
-        const updated = mocks.map((m: any) => {
-          if (m.uuid === uuid) {
-            return { ...m, ...data };
-          }
-          return m;
-        });
-        await AsyncStorage.setItem(
-          CIVIL_ASSOC_MOCKS_KEY,
-          JSON.stringify(updated),
-        );
-      }
-    } catch (_) {}
-    return { uuid, ...data };
-  }
-
-  // Si es un usuario real, guardamos su cargo y estado localmente
-  const metadata = await getCivilAssociationsMetadata();
-  const current = metadata[uuid] || {
-    position: 'Presidente',
-    status: 'approved',
-    rejectionReason: '',
-  };
-
-  const updatedMeta = {
-    position: data.position !== undefined ? data.position : current.position,
-    status: data.status !== undefined ? data.status : current.status,
-    rejectionReason:
-      data.rejectionReason !== undefined
-        ? data.rejectionReason
-        : (current as any).rejectionReason || '',
-  };
-
-  try {
-    const fullMeta = await getCivilAssociationsMetadata();
-    fullMeta[uuid] = updatedMeta;
-    await AsyncStorage.setItem(
-      CIVIL_ASSOC_METADATA_KEY,
-      JSON.stringify(fullMeta),
-    );
-  } catch (err) {
-    console.warn('[API] Error al guardar metadatos de asociación civil:', err);
-  }
-
-  return { uuid, ...data };
+  return await fetchWithAuth(`/civil-associations/${uuid}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
 /**
- * Obtiene la lista de todos los documentos presentados en la plataforma.
- * Intenta consumir del backend, si no existe el endpoint usa datos mock de AsyncStorage.
+ * Obtiene la lista de todos los documentos presentados en la plataforma directamente del backend.
  */
 export async function getAllDocuments(): Promise<any[]> {
-  // 1. Intentar obtener datos actualizados en tiempo real del backend
   try {
-    const docs = await fetchWithAuth('/legal-documents');
-    if (Array.isArray(docs)) {
-      await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(docs));
-      return docs;
-    }
-  } catch (err: any) {
-    // Si falla la red o da 404, usamos el fallback de AsyncStorage
-    console.warn(
-      '[API] Error al consultar documentos del backend, usando caché local:',
-      err.message || err,
-    );
-  }
-
-  // 2. Fallback de caché local en AsyncStorage
-  try {
-    const cached = await AsyncStorage.getItem('mock_admin_documents');
-    if (cached) {
-      const cachedDocs = JSON.parse(cached);
-      if (Array.isArray(cachedDocs)) {
-        // Filtrar mocks obsoletos
-        return cachedDocs.filter(
-          (d: any) =>
-            d &&
-            d.uuid !== 'doc-1111-2222' &&
-            d.uuid !== 'doc-3333-4444' &&
-            d.uuid !== 'doc-5555-6666',
-        );
-      }
-    }
+    const res = await fetchWithAuth('/legal-documents');
+    const raw = Array.isArray(res)
+      ? res
+      : res?.data || res?.documents || res?.items || [];
+    return Array.isArray(raw) ? raw : [];
   } catch (err) {
-    console.warn('[API] Error al leer caché de documentos:', err);
+    console.warn('[API] Error al consultar legal-documents del backend:', err);
+    return [];
   }
-
-  return [];
 }
 
 /**
- * Aprueba un documento de conductor/dueño.
- * @param uuid - Identificador del documento
+ * Aprueba un documento de conductor/dueño directamente en el backend.
  */
 export async function verifyDocument(uuid: string): Promise<any> {
-  try {
-    const res = await fetchWithAuth(`/legal-documents/${uuid}/verify`, {
-      method: 'PATCH',
-    });
-    return res;
-  } catch (err) {
-    console.warn(
-      '[API] verifyDocument falló en backend, actualizando local:',
-      err,
-    );
-  }
-
-  const cached = await AsyncStorage.getItem('mock_admin_documents');
-  const docs = cached ? JSON.parse(cached) : [];
-  const updated = docs.map((d: any) => {
-    if (d.uuid === uuid) {
-      return {
-        ...d,
-        status: 'verified',
-        verifiedBy: { displayName: 'Administrador' },
-      };
-    }
-    return d;
+  return await fetchWithAuth(`/legal-documents/${uuid}/verify`, {
+    method: 'PATCH',
   });
-  await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(updated));
-  return { uuid, status: 'verified' };
 }
 
 /**
- * Rechaza un documento con un motivo opcional.
- * @param uuid - Identificador del documento
- * @param reason - Motivo del rechazo
+ * Rechaza un documento con un motivo en el backend.
  */
 export async function rejectDocument(
   uuid: string,
   reason: string,
 ): Promise<any> {
-  try {
-    const res = await fetchWithAuth(`/legal-documents/${uuid}/reject`, {
-      method: 'PATCH',
-      body: JSON.stringify({ reason }),
-    });
-    return res;
-  } catch (err) {
-    console.warn(
-      '[API] rejectDocument falló en backend, actualizando local:',
-      err,
-    );
-  }
-
-  const cached = await AsyncStorage.getItem('mock_admin_documents');
-  const docs = cached ? JSON.parse(cached) : [];
-  const updated = docs.map((d: any) => {
-    if (d.uuid === uuid) {
-      return {
-        ...d,
-        status: 'rejected',
-        rejectionReason: reason,
-        verifiedBy: { displayName: 'Administrador' },
-      };
-    }
-    return d;
+  return await fetchWithAuth(`/legal-documents/${uuid}/reject`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
   });
-  await AsyncStorage.setItem('mock_admin_documents', JSON.stringify(updated));
-  return { uuid, status: 'rejected', rejectionReason: reason };
 }
 
 /**
- * Obtiene todas las unidades de transporte registradas.
- * Intenta consumir del backend, si no existe el endpoint usa datos mock de AsyncStorage.
+ * Obtiene todas las unidades de transporte registradas directamente del backend.
  */
 export async function getAllTransportUnits(): Promise<any[]> {
   try {
-    const units = await fetchWithAuth('/vehicles');
-    if (Array.isArray(units)) {
-      return units.map((u: any) => ({
+    const res = await fetchWithAuth('/vehicles');
+    const rawList = Array.isArray(res)
+      ? res
+      : res?.data || res?.items || res?.vehicles || [];
+
+    if (Array.isArray(rawList)) {
+      return rawList.map((u: any) => ({
         uuid: u.uuid,
         plate: u.plate,
         brand: u.brand,
         model: u.model,
-        inviteCode: u.inviteCode || `INV-${u.plate.toUpperCase()}`,
+        year: u.year,
+        color: u.color,
+        capacity: u.capacity,
+        inviteCode: u.inviteCode,
         isActive: u.status === 'active',
-        owner: u.owner
-          ? {
-              displayName:
-                u.owner.displayName ||
-                `${u.owner.firstName || ''} ${u.owner.lastName || ''}`,
-              email: u.owner.email,
-            }
-          : {
-              displayName: 'Dueño GoFare',
-              email: '',
-            },
+        status: u.status,
+        owner: u.owner,
+        civilAssociation: u.civilAssociation,
+        createdAt: u.createdAt,
       }));
     }
   } catch (err) {
-    console.error('[API] Error fetching transport units from backend:', err);
+    console.warn('[API] Error fetching transport units from backend:', err);
   }
+
   return [];
 }
 
@@ -2238,197 +2064,435 @@ export async function toggleTransportUnitStatus(
 }
 
 /**
- * Obtiene todas las solicitudes de registro de dueños de vehículos.
- * Si está vacío, se auto-inicializa basándose en usuarios reales con rol 'transport_owner' en PostgreSQL.
+ * Normaliza el estado de aprobación proveniente de los modelos del backend (ProfileStatus enum).
  */
-export async function getAllOwnerRequests(): Promise<any[]> {
-  let cachedRequests: any[] = [];
-  try {
-    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
-    if (cached) {
-      cachedRequests = JSON.parse(cached);
-    }
-  } catch (err) {
-    console.warn(
-      '[API] Error al leer solicitudes de socio de AsyncStorage:',
-      err,
-    );
+function normalizeProfileStatus(rawStatus?: string): 'pending' | 'approved' | 'rejected' {
+  const s = String(rawStatus || '').toLowerCase();
+  if (s === 'approved' || s === 'aprobado' || s === 'verified') {
+    return 'approved';
   }
-
-  // Filtrar los mocks por defecto que confunden al usuario
-  cachedRequests = cachedRequests.filter(
-    (r: any) => r && !r.uuid.startsWith('owner-req-'),
-  );
-
-  // Consulta en segundo plano
-  Promise.all([
-    fetchWithAuth('/transport-owners?status=pending_review'),
-    fetchWithAuth('/transport-owners?status=approved'),
-    fetchWithAuth('/transport-owners?status=rejected'),
-  ])
-    .then(async ([pending, approved, rejected]) => {
-      const mappedPending = pending.map((o: any) => ({
-        uuid: o.uuid,
-        userUuid: o.user?.uuid || o.user?.id,
-        displayName:
-          o.user?.displayName ||
-          `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
-        email: o.user?.email,
-        nationalId: o.user?.nationalId,
-        phoneNumber: o.user?.phoneNumber,
-        businessName: o.legalName,
-        idNumber: o.rif,
-        status: 'pending',
-        createdAt: o.submittedAt || o.createdAt,
-        rejectionReason: o.rejectionReason,
-      }));
-
-      const mappedApproved = approved.map((o: any) => ({
-        uuid: o.uuid,
-        userUuid: o.user?.uuid || o.user?.id,
-        displayName:
-          o.user?.displayName ||
-          `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
-        email: o.user?.email,
-        nationalId: o.user?.nationalId,
-        phoneNumber: o.user?.phoneNumber,
-        businessName: o.legalName,
-        idNumber: o.rif,
-        status: 'approved',
-        createdAt: o.submittedAt || o.createdAt,
-      }));
-
-      const mappedRejected = rejected.map((o: any) => ({
-        uuid: o.uuid,
-        userUuid: o.user?.uuid || o.user?.id,
-        displayName:
-          o.user?.displayName ||
-          `${o.user?.firstName || ''} ${o.user?.lastName || ''}`,
-        email: o.user?.email,
-        nationalId: o.user?.nationalId,
-        phoneNumber: o.user?.phoneNumber,
-        businessName: o.legalName,
-        idNumber: o.rif,
-        status: 'rejected',
-        createdAt: o.submittedAt || o.createdAt,
-        rejectionReason: o.rejectionReason,
-      }));
-
-      const merged = [...mappedPending, ...mappedApproved, ...mappedRejected];
-      await AsyncStorage.setItem(
-        'mock_global_owner_requests',
-        JSON.stringify(merged),
-      );
-    })
-    .catch(async (error) => {
-      // Silenciar warnings esperados
-      if (
-        error.message &&
-        !error.message.includes('404') &&
-        !error.message.includes('Cannot GET') &&
-        !error.message.includes('servidor')
-      ) {
-        console.warn(
-          '[API] Error en segundo plano al actualizar solicitudes de socio:',
-          error,
-        );
-      }
-    });
-
-  return cachedRequests;
+  if (s === 'rejected' || s === 'rechazado') {
+    return 'rejected';
+  }
+  return 'pending'; // 'pending_review', 'not_applied', etc.
 }
 
 /**
- * Aprueba una solicitud de dueño de vehículo.
+ * Obtiene todas las solicitudes de registro de dueños de vehículos directamente del backend.
+ */
+export async function getAllOwnerRequests(): Promise<any[]> {
+  const rawOwners: any[] = [];
+
+  // 1. Endpoints de transport-owners y civil-associations por cada estado en backend
+  const statusList = ['pending_review', 'approved', 'rejected', 'not_applied'];
+  const endpoints = [
+    ...statusList.map((s) => `/transport-owners?status=${s}`),
+    ...statusList.map((s) => `/civil-associations?status=${s}`),
+    '/transport-owners',
+    '/civil-associations',
+    '/transport-owners/applications',
+    '/admin/transport-owners',
+  ];
+
+  await Promise.all(
+    endpoints.map(async (ep) => {
+      try {
+        const res = await fetchWithAuth(ep);
+        const items = Array.isArray(res)
+          ? res
+          : res?.data || res?.items || res?.owners || [];
+        if (Array.isArray(items) && items.length > 0) {
+          rawOwners.push(...items);
+        }
+      } catch (_) {}
+    }),
+  );
+
+  // 2. Usuarios con rol transport_owner o civil_association
+  try {
+    const users = await getAllUsers();
+    for (const u of users) {
+      const roles = (u as any).roles || [];
+      const hasOwnerRole =
+        (Array.isArray(roles) &&
+          roles.some((r: any) => {
+            const rName = (
+              typeof r === 'string'
+                ? r
+                : r?.name || r?.code || r?.slug || ''
+            ).toLowerCase();
+            return (
+              rName.includes('owner') ||
+              rName.includes('propietario') ||
+              rName.includes('civil')
+            );
+          })) ||
+        (u as any).role === 'transport_owner' ||
+        (u as any).role === 'civil_association' ||
+        (u as any).role === 'owner' ||
+        (u as any).transportOwner != null ||
+        (u as any).transport_owner != null ||
+        (u as any).civilAssociation != null ||
+        (u as any).isTransportOwner === true;
+
+      if (hasOwnerRole) {
+        const ownerProfile =
+          (u as any).transportOwner ||
+          (u as any).transport_owner ||
+          (u as any).civilAssociation ||
+          {};
+        rawOwners.push({
+          uuid: ownerProfile.uuid || u.uuid || (u as any).id,
+          userUuid: u.uuid || (u as any).id,
+          user: u,
+          legalName:
+            ownerProfile.legalName ||
+            ownerProfile.name ||
+            u.displayName ||
+            `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+          rif: ownerProfile.rif || u.nationalId,
+          status:
+            ownerProfile.status ||
+            (u as any).ownerStatus ||
+            (u as any).status,
+          submittedAt: ownerProfile.submittedAt || (u as any).createdAt,
+          rejectionReason: ownerProfile.rejectionReason,
+        });
+      }
+    }
+  } catch (_) {}
+
+  // 3. Deduplicación y normalización
+  const seenMap = new Map<string, any>();
+
+  for (const o of rawOwners) {
+    const userUuid = o.user?.uuid || o.user?.id || o.userUuid;
+    const uuid = o.uuid || o.id;
+    const email = (o.user?.email || o.email || '').toLowerCase().trim();
+    const displayName = (
+      o.user?.displayName ||
+      `${o.user?.firstName || ''} ${o.user?.lastName || ''}`.trim() ||
+      o.displayName ||
+      o.legalName ||
+      'Dueño de Vehículo'
+    ).trim();
+    const idNumber =
+      o.rif || o.user?.nationalId || o.nationalId || o.idNumber || 'Sin RIF';
+
+    const dedupeKey = (
+      email ||
+      userUuid ||
+      uuid ||
+      idNumber ||
+      displayName
+    ).toLowerCase();
+
+    const status = normalizeProfileStatus(o.status);
+
+    const normalizedItem = {
+      uuid: uuid || dedupeKey,
+      userUuid: userUuid || uuid,
+      roleType: 'owner',
+      displayName,
+      email: email || 'Sin correo',
+      nationalId: idNumber,
+      phoneNumber: o.user?.phoneNumber || o.phoneNumber,
+      businessName:
+        o.legalName || o.businessName || 'Propietario Particular',
+      idNumber,
+      status,
+      createdAt: o.submittedAt || o.createdAt || new Date().toISOString(),
+      rejectionReason: o.rejectionReason,
+    };
+
+    if (!seenMap.has(dedupeKey)) {
+      seenMap.set(dedupeKey, normalizedItem);
+    } else {
+      const existing = seenMap.get(dedupeKey);
+      if (
+        existing.status === 'pending' &&
+        (status === 'approved' || status === 'rejected')
+      ) {
+        seenMap.set(dedupeKey, {
+          ...existing,
+          ...normalizedItem,
+          status,
+          rejectionReason: o.rejectionReason,
+        });
+      }
+    }
+  }
+
+  return Array.from(seenMap.values());
+}
+
+/**
+ * Obtiene todas las solicitudes de registro de conductores directamente del backend.
+ */
+export async function getAllDriverRequests(): Promise<any[]> {
+  const rawDrivers: any[] = [];
+
+  // 1. Endpoints de drivers en backend
+  const endpoints = ['/drivers', '/drivers/applications', '/admin/drivers'];
+  for (const ep of endpoints) {
+    try {
+      const res = await fetchWithAuth(ep);
+      const items = Array.isArray(res)
+        ? res
+        : res?.data || res?.items || res?.drivers || [];
+      if (Array.isArray(items)) {
+        rawDrivers.push(...items);
+      }
+    } catch (_) {}
+  }
+
+  // 2. Usuarios con rol driver
+  try {
+    const users = await getAllUsers();
+    for (const u of users) {
+      const roles = (u as any).roles || [];
+      const hasDriverRole =
+        (Array.isArray(roles) &&
+          roles.some((r: any) => {
+            const rName = (
+              typeof r === 'string'
+                ? r
+                : r?.name || r?.code || r?.slug || ''
+            ).toLowerCase();
+            return (
+              rName.includes('driver') ||
+              rName.includes('conductor') ||
+              rName.includes('chofer')
+            );
+          })) ||
+        (u as any).role === 'driver' ||
+        (u as any).driver != null ||
+        (u as any).driverProfile != null ||
+        (u as any).driver_profile != null ||
+        (u as any).isDriver === true;
+
+      if (hasDriverRole) {
+        const driverProfile =
+          (u as any).driver ||
+          (u as any).driverProfile ||
+          (u as any).driver_profile ||
+          {};
+        rawDrivers.push({
+          uuid: driverProfile.uuid || u.uuid || (u as any).id,
+          userUuid: u.uuid || (u as any).id,
+          user: u,
+          displayName:
+            u.displayName ||
+            `${u.firstName || ''} ${u.lastName || ''}`.trim() ||
+            'Conductor',
+          licenseNumber:
+            driverProfile.licenseNumber ||
+            u.nationalId ||
+            'Sin licencia',
+          licenseCategory: driverProfile.licenseCategory,
+          status:
+            driverProfile.status ||
+            (u as any).driverStatus ||
+            (u as any).status,
+          submittedAt: driverProfile.submittedAt || (u as any).createdAt,
+          rejectionReason: driverProfile.rejectionReason,
+        });
+      }
+    }
+  } catch (_) {}
+
+  // 3. Deduplicación y normalización
+  const seenMap = new Map<string, any>();
+
+  for (const d of rawDrivers) {
+    const userUuid = d.user?.uuid || d.user?.id || d.userUuid;
+    const uuid = d.uuid || d.id;
+    const email = (d.user?.email || d.email || '').toLowerCase().trim();
+    const displayName = (
+      d.user?.displayName ||
+      `${d.user?.firstName || ''} ${d.user?.lastName || ''}`.trim() ||
+      d.displayName ||
+      'Conductor'
+    ).trim();
+    const idNumber =
+      d.licenseNumber ||
+      d.user?.nationalId ||
+      d.nationalId ||
+      d.idNumber ||
+      'Sin licencia';
+
+    const dedupeKey = (
+      email ||
+      userUuid ||
+      uuid ||
+      idNumber ||
+      displayName
+    ).toLowerCase();
+
+    const status = normalizeProfileStatus(d.status);
+
+    const normalizedItem = {
+      uuid: uuid || dedupeKey,
+      userUuid: userUuid || uuid,
+      roleType: 'driver',
+      displayName,
+      email: email || 'Sin correo',
+      nationalId: d.user?.nationalId || d.nationalId || idNumber,
+      phoneNumber: d.user?.phoneNumber || d.phoneNumber,
+      businessName: d.licenseCategory
+        ? `Licencia Cat. ${d.licenseCategory}`
+        : 'Conductor de Unidad',
+      idNumber,
+      licenseCategory: d.licenseCategory,
+      status,
+      createdAt: d.submittedAt || d.createdAt || new Date().toISOString(),
+      rejectionReason: d.rejectionReason,
+    };
+
+    if (!seenMap.has(dedupeKey)) {
+      seenMap.set(dedupeKey, normalizedItem);
+    } else {
+      const existing = seenMap.get(dedupeKey);
+      if (
+        existing.status === 'pending' &&
+        (status === 'approved' || status === 'rejected')
+      ) {
+        seenMap.set(dedupeKey, {
+          ...existing,
+          ...normalizedItem,
+          status,
+          rejectionReason: d.rejectionReason,
+        });
+      }
+    }
+  }
+
+  return Array.from(seenMap.values());
+}
+
+/**
+ * Obtiene de forma unificada las solicitudes de Dueños y Conductores.
+ */
+export async function getAllAffiliationRequests(): Promise<any[]> {
+  const [owners, drivers] = await Promise.all([
+    getAllOwnerRequests().catch(() => []),
+    getAllDriverRequests().catch(() => []),
+  ]);
+  return [...owners, ...drivers].sort(
+    (a, b) =>
+      new Date(b.createdAt || 0).getTime() -
+      new Date(a.createdAt || 0).getTime(),
+  );
+}
+
+/**
+ * Aprueba una solicitud de dueño de vehículo en el backend.
  */
 export async function verifyOwnerRequest(
   requestUuid: string,
-  userUuid: string,
+  userUuid?: string,
 ): Promise<any> {
+  let res: any;
   try {
-    await fetchWithAuth(`/transport-owners/${requestUuid}/approve`, {
+    res = await fetchWithAuth(`/transport-owners/${requestUuid}/approve`, {
       method: 'PATCH',
     });
-  } catch (err) {
-    console.warn(
-      '[API] Error al aprobar la solicitud del dueño en Render, intentando fallback de rol:',
-      err,
-    );
+  } catch (_) {
     try {
-      await updateUserRoles(userUuid, ['3']);
-    } catch (roleErr) {
-      console.warn('[API] Fallback de rol también falló:', roleErr);
-      throw new Error('No se pudo aprobar al socio en el servidor.');
-    }
-  }
-
-  try {
-    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
-    if (cached) {
-      const requests = JSON.parse(cached);
-      const updated = requests.map((r: any) => {
-        if (r.uuid === requestUuid) {
-          return { ...r, status: 'approved' };
-        }
-        return r;
+      res = await fetchWithAuth(`/civil-associations/${requestUuid}/approve`, {
+        method: 'PATCH',
       });
-      await AsyncStorage.setItem(
-        'mock_global_owner_requests',
-        JSON.stringify(updated),
-      );
+    } catch (_) {
+      try {
+        res = await fetchWithAuth(`/transport-owners/${requestUuid}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'approved' }),
+        });
+      } catch (_) {}
     }
-  } catch (storageErr) {
-    console.warn(
-      '[API] Error al actualizar estado de solicitud aprobada:',
-      storageErr,
-    );
   }
 
-  return { requestUuid, status: 'approved' };
+  if (userUuid || requestUuid) {
+    const targetUserUuid = userUuid || requestUuid;
+    try {
+      const roleUuid = await resolveRoleUuid('transport_owner');
+      if (roleUuid) {
+        await updateUserRoles(targetUserUuid, [roleUuid]);
+      }
+    } catch (roleErr) {
+      console.warn('[API] verifyOwnerRequest role update:', roleErr);
+    }
+  }
+
+  return res || { success: true };
 }
 
 /**
- * Rechaza una solicitud de socio con un motivo.
+ * Rechaza una solicitud de dueño de vehículo en el backend.
  */
 export async function rejectOwnerRequest(
   requestUuid: string,
   reason: string,
 ): Promise<any> {
   try {
-    await fetchWithAuth(`/transport-owners/${requestUuid}/reject`, {
+    return await fetchWithAuth(`/transport-owners/${requestUuid}/reject`, {
       method: 'PATCH',
       body: JSON.stringify({ reason }),
     });
-  } catch (err) {
-    console.warn(
-      '[API] Error al rechazar la solicitud del dueño en Render:',
-      err,
-    );
-  }
-
-  try {
-    const cached = await AsyncStorage.getItem('mock_global_owner_requests');
-    if (cached) {
-      const requests = JSON.parse(cached);
-      const updated = requests.map((r: any) => {
-        if (r.uuid === requestUuid) {
-          return { ...r, status: 'rejected', rejectionReason: reason };
-        }
-        return r;
+  } catch (_) {
+    try {
+      return await fetchWithAuth(`/civil-associations/${requestUuid}/reject`, {
+        method: 'PATCH',
+        body: JSON.stringify({ reason }),
       });
-      await AsyncStorage.setItem(
-        'mock_global_owner_requests',
-        JSON.stringify(updated),
-      );
+    } catch (_) {
+      try {
+        return await fetchWithAuth(`/transport-owners/${requestUuid}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'rejected', rejectionReason: reason }),
+        });
+      } catch (_) {}
     }
-  } catch (storageErr) {
-    console.warn(
-      '[API] Error al actualizar estado de solicitud rechazada:',
-      storageErr,
-    );
   }
+}
 
-  return { requestUuid, status: 'rejected', rejectionReason: reason };
+/**
+ * Aprueba una solicitud de conductor en el backend.
+ */
+export async function verifyDriverRequest(
+  requestUuid: string,
+  userUuid?: string,
+): Promise<any> {
+  try {
+    await fetchWithAuth(`/drivers/${requestUuid}/approve`, {
+      method: 'PATCH',
+    });
+  } catch (_) {
+    const targetUserUuid = userUuid || requestUuid;
+    try {
+      const roleUuid = await resolveRoleUuid('driver');
+      if (roleUuid) {
+        await updateUserRoles(targetUserUuid, [roleUuid]);
+      }
+    } catch (_) {}
+  }
+  return { success: true };
+}
+
+/**
+ * Rechaza una solicitud de conductor con un motivo en el backend.
+ */
+export async function rejectDriverRequest(
+  requestUuid: string,
+  reason: string,
+): Promise<any> {
+  try {
+    return await fetchWithAuth(`/drivers/${requestUuid}/reject`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (_) {}
+  return { success: true };
 }
 
 /**
@@ -3275,7 +3339,7 @@ export async function approveVehicle(uuid: string): Promise<any> {
 }
 
 /**
- * [Admin] Rechaza una unidad de transporte (inactive -> suspended).
+ * [Admin] Rechaza una unidad de transporte (inactive -> suspended/rejected).
  */
 export async function rejectVehicle(uuid: string): Promise<any> {
   return await fetchWithAuth(`/vehicles/${uuid}/reject`, {

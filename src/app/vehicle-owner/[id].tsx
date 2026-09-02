@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -8,17 +7,23 @@ import {
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
   deleteVehicle,
+  getAllDocuments,
   getBackendInviteCodes,
   getVehicleDetail,
+  submitLegalDocument,
 } from '@/lib/api';
+import { setClipboardText } from '@/lib/clipboard';
 import { tokens } from '@/theme/tokens';
 
 interface MockDriver {
@@ -35,7 +40,11 @@ interface MockVehicle {
   vehicleModel: string;
   vehicleYear: number;
   licensePlate: string;
-  cooperativeName: string;
+  color?: string;
+  capacity?: number;
+  cooperativeName?: string;
+  inviteCode?: string;
+  documents?: any[];
   status: 'approved' | 'pending' | 'rejected';
   createdAt: string;
   adminNotes?: string;
@@ -50,8 +59,15 @@ export default function VehicleDetailsScreen() {
 
   const [vehicle, setVehicle] = useState<MockVehicle | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [isDriverModalVisible, setIsDriverModalVisible] = useState(false);
   const [drivers, setDrivers] = useState<MockDriver[]>([]);
+
+  // Estados para reenvío de documento rechazado
+  const [reuploadModalVisible, setReuploadModalVisible] = useState(false);
+  const [docToReupload, setDocToReupload] = useState<any | null>(null);
+  const [newDocNumber, setNewDocNumber] = useState('');
+  const [reuploadLoading, setReuploadLoading] = useState(false);
 
   // Cargar conductores reales del backend (de invitaciones canjeadas)
   const loadAssociatedDrivers = useCallback(async () => {
@@ -75,57 +91,107 @@ export default function VehicleDetailsScreen() {
     }
   }, []);
 
-  // Cargar datos del vehículo desde el backend
-  const loadVehicle = useCallback(async () => {
+  // Cargar datos del vehículo y documentos desde el backend
+  const loadVehicle = useCallback(async (isRefresh = false) => {
     try {
-      setLoading(true);
+      if (!isRefresh) setLoading(true);
       if (!id) return;
-      const found = await getVehicleDetail(id);
+      const [found, allDocs] = await Promise.all([
+        getVehicleDetail(id),
+        getAllDocuments().catch(() => []),
+      ]);
       if (found) {
-        setVehicle(found);
+        const vehicleDocs = (Array.isArray(allDocs) ? allDocs : []).filter(
+          (d: any) =>
+            d.vehicle?.uuid === found.uuid ||
+            d.vehicleUuid === found.uuid ||
+            d.vehicleId === found.uuid ||
+            (d.vehicle && d.vehicle.plate === found.licensePlate),
+        );
+        setVehicle({
+          ...found,
+          documents:
+            vehicleDocs.length > 0 ? vehicleDocs : found.documents || [],
+        });
       }
     } catch (err) {
       console.warn('[Details] Error loading vehicle details:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [id]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadVehicle(true), loadAssociatedDrivers()]);
+  }, [loadVehicle, loadAssociatedDrivers]);
 
   useEffect(() => {
     loadVehicle();
     loadAssociatedDrivers();
   }, [loadVehicle, loadAssociatedDrivers]);
 
-  // Actualizar conductor asignado
+  useFocusEffect(
+    useCallback(() => {
+      loadVehicle();
+      loadAssociatedDrivers();
+    }, [loadVehicle, loadAssociatedDrivers]),
+  );
+
+  const handleStartReupload = (doc: any) => {
+    setDocToReupload(doc);
+    setNewDocNumber(doc.documentNumber || '');
+    setReuploadModalVisible(true);
+  };
+
+  const handleConfirmReupload = async () => {
+    if (!docToReupload || !vehicle) return;
+    if (!newDocNumber.trim()) {
+      Alert.alert(
+        'Campo Requerido',
+        'Por favor ingresa el número actualizado del documento o póliza.',
+      );
+      return;
+    }
+
+    try {
+      setReuploadLoading(true);
+      await submitLegalDocument({
+        type: docToReupload.type,
+        vehicleUuid: vehicle.uuid,
+        documentNumber: newDocNumber.trim(),
+        fileUrl: `https://storage.gofare.com/docs/${docToReupload.type}_${Date.now()}.pdf`,
+      });
+
+      setReuploadModalVisible(false);
+      Alert.alert(
+        'Recaudo Reenviado',
+        'El documento ha sido cargado nuevamente y enviado a revisión de la administración.',
+      );
+      await loadVehicle();
+    } catch (err: any) {
+      console.warn('[Details] Error re-uploading document:', err);
+      Alert.alert('Error', err.message || 'No se pudo reenviar el documento.');
+    } finally {
+      setReuploadLoading(false);
+    }
+  };
+
+  // Actualizar o desvincular conductor asignado
   const handleAssignDriver = async (driver: MockDriver | undefined) => {
     if (!vehicle) return;
 
     try {
-      const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
-      const localVehicles: MockVehicle[] = localStr ? JSON.parse(localStr) : [];
-
-      // Buscar si este vehículo ya está en AsyncStorage
-      const idx = localVehicles.findIndex((v) => v.uuid === vehicle.uuid);
       const updatedVehicle = { ...vehicle, assignedDriver: driver };
-
-      if (idx !== -1) {
-        localVehicles[idx] = updatedVehicle;
-      } else {
-        localVehicles.push(updatedVehicle);
-      }
-
-      await AsyncStorage.setItem(
-        'mock_vehicle_requests',
-        JSON.stringify(localVehicles),
-      );
       setVehicle(updatedVehicle);
       setIsDriverModalVisible(false);
 
       Alert.alert(
-        'Conductor Actualizado',
+        driver ? 'Conductor Actualizado' : 'Conductor Desvinculado',
         driver
           ? `Se ha asignado a ${driver.name} como conductor de esta unidad.`
-          : 'Se ha desvinculado al conductor de esta unidad.',
+          : 'Se ha quitado y desvinculado al conductor de esta unidad exitosamente.',
       );
     } catch (err) {
       console.error('[Details] Error updating driver:', err);
@@ -134,6 +200,32 @@ export default function VehicleDetailsScreen() {
         'No se pudo actualizar el conductor. Intente de nuevo.',
       );
     }
+  };
+
+  // Confirmar quitar conductor
+  const handleConfirmRemoveDriver = () => {
+    if (!vehicle?.assignedDriver) return;
+
+    if (!isApproved) {
+      Alert.alert(
+        'Operación no permitida',
+        'No puedes modificar el conductor asignado hasta que la unidad esté aprobada.',
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Quitar Conductor',
+      `¿Estás seguro de que deseas quitar a ${vehicle.assignedDriver.name} como conductor de esta unidad?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Quitar Conductor',
+          style: 'destructive',
+          onPress: () => handleAssignDriver(undefined),
+        },
+      ],
+    );
   };
 
   // Eliminar vehículo (dar de baja)
@@ -174,11 +266,9 @@ export default function VehicleDetailsScreen() {
     );
   };
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
+      <AppLoadingScreen message="Cargando detalles de la unidad..." />
     );
   }
 
@@ -238,6 +328,13 @@ export default function VehicleDetailsScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+          />
+        }
       >
         {/* ── TARJETA PRINCIPAL VEHÍCULO ── */}
         <View style={styles.vehicleMainCard}>
@@ -265,6 +362,21 @@ export default function VehicleDetailsScreen() {
             <View style={styles.specBox}>
               <Text style={styles.specLabel}>AÑO DE FABRICACIÓN</Text>
               <Text style={styles.specValue}>{vehicle.vehicleYear}</Text>
+            </View>
+          </View>
+
+          <View style={styles.specGrid}>
+            <View style={styles.specBox}>
+              <Text style={styles.specLabel}>COLOR</Text>
+              <Text style={styles.specValue}>
+                {vehicle.color || 'No especificado'}
+              </Text>
+            </View>
+            <View style={styles.specBox}>
+              <Text style={styles.specLabel}>CAPACIDAD</Text>
+              <Text style={styles.specValue}>
+                {vehicle.capacity ? `${vehicle.capacity} pasajeros` : 'No especificada'}
+              </Text>
             </View>
           </View>
 
@@ -308,6 +420,192 @@ export default function VehicleDetailsScreen() {
               </Text>
             </View>
           </View>
+
+          {/* Código de Invitación si está disponible */}
+          {vehicle.inviteCode && (
+            <View style={styles.inviteCodeCardBlock}>
+              <View style={styles.inviteCodeHeader}>
+                <Ionicons name="key-outline" size={16} color="#D97706" />
+                <Text style={styles.inviteCodeLabel}>
+                  CÓDIGO DE INVITACIÓN CONDUCTOR
+                </Text>
+              </View>
+              <View style={styles.inviteCodeRow}>
+                <Text style={styles.inviteCodeValue}>{vehicle.inviteCode}</Text>
+                <Pressable
+                  style={styles.inviteCodeCopyBtn}
+                  onPress={() =>
+                    setClipboardText(
+                      vehicle.inviteCode || '',
+                      'Código de Invitación',
+                    )
+                  }
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name="copy-outline"
+                    size={16}
+                    color={tokens.colors.primary}
+                  />
+                  <Text style={styles.inviteCodeCopyText}>Copiar</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* ── ALERTA DE DOCUMENTOS RECHAZADOS ── */}
+        {(isRejected ||
+          (vehicle.documents || []).some((d: any) => d.status === 'rejected')) && (
+          <View style={styles.rejectedBanner}>
+            <View style={styles.rejectedHeader}>
+              <Ionicons
+                name="alert-circle"
+                size={22}
+                color="#DC2626"
+                style={{ marginRight: 8 }}
+              />
+              <Text style={styles.rejectedTitle}>
+                Atención: Documentos Rechazados
+              </Text>
+            </View>
+            <Text style={styles.rejectedNotes}>
+              {vehicle.adminNotes ||
+                'Uno o más recaudos adjuntos de esta unidad fueron rechazados por el administrador. Revisa los motivos a continuación y vuelve a cargar los documentos corregidos para activar tu unidad.'}
+            </Text>
+          </View>
+        )}
+
+        {/* ── DOCUMENTOS REGISTRADOS ── */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeaderRow}>
+            <Ionicons
+              name="document-text-outline"
+              size={22}
+              color={tokens.colors.primary}
+              style={{ marginRight: 8 }}
+            />
+            <Text style={styles.sectionCardTitle}>Documentos del Vehículo</Text>
+          </View>
+
+          {vehicle.documents && vehicle.documents.length > 0 ? (
+            vehicle.documents.map((doc: any, idx: number) => {
+              const isDocPending =
+                doc.status === 'pending_review' || doc.status === 'pending';
+              const isDocVerified = doc.status === 'verified';
+              const isDocRejected = doc.status === 'rejected';
+              const docBadgeBg = isDocVerified
+                ? '#ECFDF5'
+                : isDocPending
+                  ? '#FEF3C7'
+                  : '#FEF2F2';
+              const docBadgeColor = isDocVerified
+                ? '#059669'
+                : isDocPending
+                  ? '#D97706'
+                  : '#DC2626';
+              const docStatusText = isDocVerified
+                ? 'Aprobado'
+                : isDocPending
+                  ? 'En Revisión'
+                  : 'Rechazado';
+
+              return (
+                <View
+                  key={doc.uuid || `doc-${idx}`}
+                  style={styles.docItemCard}
+                >
+                  <View style={styles.docItemMainRow}>
+                    <View style={styles.docItemLeft}>
+                      <View style={styles.docIconCircle}>
+                        <Ionicons
+                          name={
+                            doc.type === 'titulo_propiedad' ||
+                            doc.type === 'carnet_circulacion'
+                              ? 'document-text'
+                              : doc.type === 'seguro_responsabilidad_civil'
+                                ? 'shield-checkmark'
+                                : 'newspaper'
+                          }
+                          size={18}
+                          color={tokens.colors.primary}
+                        />
+                      </View>
+                      <View style={styles.docItemMeta}>
+                        <Text style={styles.docItemTitle}>
+                          {doc.type === 'titulo_propiedad' ||
+                          doc.type === 'carnet_circulacion'
+                            ? 'Carnet de Circulación'
+                            : doc.type === 'seguro_responsabilidad_civil'
+                              ? 'Responsabilidad Civil (RCV)'
+                              : 'Revisión Técnica (INTT)'}
+                        </Text>
+                        <Text style={styles.docItemSub}>
+                          Nº: {doc.documentNumber || 'Sin número'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View
+                      style={[styles.docBadge, { backgroundColor: docBadgeBg }]}
+                    >
+                      <Text
+                        style={[styles.docBadgeText, { color: docBadgeColor }]}
+                      >
+                        {docStatusText}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Motivo de Rechazo */}
+                  {isDocRejected && (
+                    <View style={styles.docRejectionReasonBox}>
+                      <Text style={styles.docRejectionReasonLabel}>
+                        MOTIVO DEL RECHAZO:
+                      </Text>
+                      <Text style={styles.docRejectionReasonText}>
+                        {doc.rejectionReason ||
+                          'El documento no cumple con los requerimientos necesarios o no es legible.'}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Botón para volver a cargar el recaudo */}
+                  {isDocRejected && (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.reuploadDocBtn,
+                        pressed && { opacity: 0.8 },
+                      ]}
+                      onPress={() => handleStartReupload(doc)}
+                    >
+                      <Ionicons
+                        name="cloud-upload-outline"
+                        size={16}
+                        color="#DC2626"
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={styles.reuploadDocBtnText}>
+                        Volver a Cargar Documento
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })
+          ) : (
+            <View style={styles.noDocsBlock}>
+              <Ionicons
+                name="information-circle-outline"
+                size={22}
+                color="#8594AB"
+                style={{ marginBottom: 4 }}
+              />
+              <Text style={styles.noDocsText}>
+                Documentos registrados en proceso de verificación por la
+                administración.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* ── MOTIVO DE RECHAZO (SI APLICA) ── */}
@@ -368,25 +666,35 @@ export default function VehicleDetailsScreen() {
                     Teléfono: {vehicle.assignedDriver.phone}
                   </Text>
                 </View>
-                <Pressable
-                  style={styles.driverActionBtn}
-                  onPress={() => {
-                    if (isApproved) {
-                      setIsDriverModalVisible(true);
-                    } else {
-                      Alert.alert(
-                        'Operación no permitida',
-                        'No puedes modificar el conductor asignado hasta que la unidad esté aprobada.',
-                      );
-                    }
-                  }}
-                >
-                  <Ionicons
-                    name="create-outline"
-                    size={20}
-                    color={tokens.colors.primary}
-                  />
-                </Pressable>
+                <View style={styles.driverActionsRow}>
+                  <Pressable
+                    style={styles.driverActionBtn}
+                    onPress={() => {
+                      if (isApproved) {
+                        setIsDriverModalVisible(true);
+                      } else {
+                        Alert.alert(
+                          'Operación no permitida',
+                          'No puedes modificar el conductor asignado hasta que la unidad esté aprobada.',
+                        );
+                      }
+                    }}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name="create-outline"
+                      size={18}
+                      color={tokens.colors.primary}
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={styles.driverRemoveBtn}
+                    onPress={handleConfirmRemoveDriver}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                  </Pressable>
+                </View>
               </View>
             ) : (
               <View style={styles.noDriverBlock}>
@@ -614,7 +922,12 @@ export default function VehicleDetailsScreen() {
               {vehicle.assignedDriver && (
                 <Pressable
                   style={styles.unassignOptionBtn}
-                  onPress={() => handleAssignDriver(undefined)}
+                  onPress={() => {
+                    setIsDriverModalVisible(false);
+                    setTimeout(() => {
+                      handleConfirmRemoveDriver();
+                    }, 250);
+                  }}
                 >
                   <Ionicons
                     name="person-remove-outline"
@@ -623,11 +936,102 @@ export default function VehicleDetailsScreen() {
                     style={{ marginRight: 8 }}
                   />
                   <Text style={styles.unassignOptionText}>
-                    Desvincular Conductor Actual
+                    Quitar / Desvincular Conductor Actual
                   </Text>
                 </Pressable>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── MODAL RECARGAR / CORREGIR DOCUMENTO ── */}
+      <Modal
+        visible={reuploadModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setReuploadModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Cargar Nuevo Documento</Text>
+              <Pressable onPress={() => setReuploadModalVisible(false)}>
+                <Ionicons
+                  name="close-circle-outline"
+                  size={24}
+                  color="#64748B"
+                />
+              </Pressable>
+            </View>
+
+            {docToReupload && (
+              <>
+                <Text style={styles.modalSubtitle}>
+                  Ingresa los datos actualizados para{' '}
+                  <Text
+                    style={{
+                      fontFamily: tokens.typography.fontFamily.bold,
+                      color: '#0F172A',
+                    }}
+                  >
+                    {docToReupload.type === 'titulo_propiedad' ||
+                    docToReupload.type === 'carnet_circulacion'
+                      ? 'Carnet de Circulación'
+                      : docToReupload.type === 'seguro_responsabilidad_civil'
+                        ? 'Responsabilidad Civil (RCV)'
+                        : 'Revisión Técnica (INTT)'}
+                  </Text>
+                  :
+                </Text>
+
+                <Text style={styles.inputLabel}>
+                  NÚMERO DE DOCUMENTO / PÓLIZA
+                </Text>
+                <TextInput
+                  style={styles.reuploadInput}
+                  placeholder="Ej. 01-44-98765432 o INTT-12345"
+                  placeholderTextColor="#94A3B8"
+                  value={newDocNumber}
+                  onChangeText={setNewDocNumber}
+                  autoCapitalize="characters"
+                />
+
+                <View style={styles.reuploadActionsRow}>
+                  <Pressable
+                    style={styles.modalCancelBtn}
+                    onPress={() => setReuploadModalVisible(false)}
+                  >
+                    <Text style={styles.modalCancelText}>Cancelar</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.modalSubmitBtn,
+                      reuploadLoading && { opacity: 0.6 },
+                    ]}
+                    onPress={handleConfirmReupload}
+                    disabled={reuploadLoading}
+                  >
+                    {reuploadLoading ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="cloud-upload"
+                          size={16}
+                          color="#FFFFFF"
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={styles.modalSubmitText}>
+                          Enviar a Revisión
+                        </Text>
+                      </>
+                    )}
+                  </Pressable>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -768,6 +1172,154 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: tokens.typography.fontFamily.bold,
   },
+  inviteCodeCardBlock: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  inviteCodeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  inviteCodeLabel: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#B45309',
+    letterSpacing: 0.5,
+    marginLeft: 6,
+  },
+  inviteCodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inviteCodeValue: {
+    fontSize: 16,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#92400E',
+    letterSpacing: 0.8,
+  },
+  inviteCodeCopyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  inviteCodeCopyText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+    marginLeft: 4,
+  },
+  docItemCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  docItemMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  docItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  docIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  docItemMeta: {
+    flex: 1,
+  },
+  docItemTitle: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#18243E',
+  },
+  docItemSub: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#8594AB',
+    marginTop: 2,
+  },
+  docBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  docBadgeText: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.bold,
+  },
+  docRejectionReasonBox: {
+    backgroundColor: '#FEF2F2',
+    borderLeftWidth: 3,
+    borderLeftColor: '#DC2626',
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 8,
+  },
+  docRejectionReasonLabel: {
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#991B1B',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  docRejectionReasonText: {
+    fontSize: 11.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#B91C1C',
+    lineHeight: 16,
+  },
+  reuploadDocBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 8,
+  },
+  reuploadDocBtnText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#DC2626',
+  },
+  noDocsBlock: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+  },
+  noDocsText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#8594AB',
+    textAlign: 'center',
+    marginTop: 4,
+  },
   rejectedBanner: {
     backgroundColor: '#FFF5F5',
     borderWidth: 1,
@@ -862,13 +1414,28 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#8594AB',
   },
+  driverActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   driverActionBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#EFF6FF',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#BFDBFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  driverRemoveBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1056,9 +1623,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FFF5F5',
-    borderRadius: 12,
-    paddingVertical: 10,
-    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 14,
+    paddingVertical: 12,
+    marginTop: 10,
+    marginBottom: 4,
   },
   unassignOptionText: {
     fontSize: 13,
@@ -1098,5 +1668,63 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#64748B',
     textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginBottom: 14,
+    lineHeight: 18,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#64748B',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  reuploadInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#0F172A',
+    marginBottom: 16,
+  },
+  reuploadActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 6,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  modalCancelText: {
+    fontFamily: tokens.typography.fontFamily.bold,
+    fontSize: 13,
+    color: '#475569',
+  },
+  modalSubmitBtn: {
+    flex: 1.4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: tokens.colors.primary,
+  },
+  modalSubmitText: {
+    fontFamily: tokens.typography.fontFamily.bold,
+    fontSize: 13,
+    color: '#FFFFFF',
   },
 });

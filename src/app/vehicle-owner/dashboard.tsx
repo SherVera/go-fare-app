@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import type { MockVehicle } from '@/interfaces';
 import { getBackendProfile, getOwnerVehicles } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
@@ -48,6 +49,7 @@ export default function VehicleOwnerDashboard() {
       rif: '',
     },
   );
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -115,7 +117,7 @@ export default function VehicleOwnerDashboard() {
             `${profile.firstName || ''} ${profile.lastName || ''}`.trim();
           setCooperative({
             name: ownerName
-              ? `Socio: ${ownerName}`
+              ? `Dueño: ${ownerName}`
               : 'Particular / Sin Asociación',
             rif: profile.nationalId ? `Cédula: ${profile.nationalId}` : '',
           });
@@ -132,6 +134,7 @@ export default function VehicleOwnerDashboard() {
         err,
       );
     } finally {
+      setLoading(false);
       setRefreshing(false);
     }
   }, []);
@@ -189,6 +192,12 @@ export default function VehicleOwnerDashboard() {
         };
     }
   };
+
+  if (loading && !refreshing) {
+    return (
+      <AppLoadingScreen message="Cargando panel de unidades..." />
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

@@ -3,6 +3,7 @@ export interface MockDriver {
   name: string;
   nationalId: string;
   phone: string;
+  email?: string;
   status: 'active' | 'inactive';
 }
 

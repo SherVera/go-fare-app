@@ -1,119 +1,258 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
+import { getAllTransactions, getOwnerVehicles } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
-interface MockVehicle {
-  uuid: string;
-  vehicleMake: string;
-  vehicleModel: string;
-  vehicleYear: number;
-  licensePlate: string;
-  cooperativeName: string;
-  status: 'approved' | 'pending' | 'rejected';
-  createdAt: string;
-  totalEarnings?: number;
-  tripsCount?: number;
+interface RecentTransaction {
+  id: string;
+  time: string;
+  vehicle: string;
+  route: string;
+  amount: number;
 }
 
-const VEHICLES_BASE_EARNINGS: Record<
-  string,
-  { earnings: number; trips: number }
-> = {
-  '1': { earnings: 3240.0, trips: 216 },
-  '2': { earnings: 1890.0, trips: 126 },
-  '3': { earnings: 840.0, trips: 56 },
-};
+interface WeeklyBarData {
+  day: string;
+  amount: string;
+  height: string;
+}
+
+function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return 'Reciente';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return 'Reciente';
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMinutes < 1) return 'Hace un momento';
+  if (diffMinutes < 60) return `Hace ${diffMinutes} min`;
+  if (diffHours < 24) return `Hace ${diffHours} h`;
+  if (diffDays === 1) return 'Ayer';
+  if (diffDays < 7) return `Hace ${diffDays} días`;
+
+  return date.toLocaleDateString('es-VE', {
+    day: 'numeric',
+    month: 'short',
+  });
+}
 
 export default function VehicleOwnerEarnings() {
-  const _router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [totalEarnings, setTotalEarnings] = useState(5970.0);
-  const [totalTrips, setTotalTrips] = useState(398);
-  const [activeUnitsCount, setActiveUnitsCount] = useState(3);
+  const [refreshing, setRefreshing] = useState(false);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [totalTrips, setTotalTrips] = useState(0);
+  const [activeUnitsCount, setActiveUnitsCount] = useState(0);
+  const [recentTx, setRecentTx] = useState<RecentTransaction[]>([]);
+  const [weeklyData, setWeeklyData] = useState<WeeklyBarData[]>([
+    { day: 'Lun', amount: '0 Bs', height: '0%' },
+    { day: 'Mar', amount: '0 Bs', height: '0%' },
+    { day: 'Mie', amount: '0 Bs', height: '0%' },
+    { day: 'Jue', amount: '0 Bs', height: '0%' },
+    { day: 'Vie', amount: '0 Bs', height: '0%' },
+    { day: 'Sab', amount: '0 Bs', height: '0%' },
+    { day: 'Dom', amount: '0 Bs', height: '0%' },
+  ]);
 
   const loadEarningsData = useCallback(async () => {
     try {
-      setLoading(true);
-      const localStr = await AsyncStorage.getItem('mock_vehicle_requests');
-      const localVehicles: MockVehicle[] = localStr ? JSON.parse(localStr) : [];
+      const [vehicles, allTx] = await Promise.all([
+        getOwnerVehicles().catch((err) => {
+          console.warn('[Earnings] Error al obtener vehículos:', err);
+          return [];
+        }),
+        getAllTransactions().catch((err) => {
+          console.warn('[Earnings] Error al obtener transacciones:', err);
+          return [];
+        }),
+      ]);
 
-      const deletedPlatesStr = await AsyncStorage.getItem(
-        'mock_deleted_vehicle_plates',
+      const approvedVehicles = vehicles.filter(
+        (v: any) => v.status === 'approved',
       );
-      const deletedPlates: string[] = deletedPlatesStr
-        ? JSON.parse(deletedPlatesStr)
-        : [];
 
-      // Lista base filtrada de eliminados
-      const baseApproved = [
-        { uuid: '1', licensePlate: 'AB123CD', status: 'approved' },
-        { uuid: '2', licensePlate: 'XY987ZT', status: 'approved' },
-        { uuid: '3', licensePlate: 'HJ321OP', status: 'approved' },
-      ].filter((v) => !deletedPlates.includes(v.licensePlate));
-
-      // Combinar
       let totalE = 0;
       let totalT = 0;
-      let count = 0;
 
-      // Calcular para los base aprobados que no fueron borrados
-      for (const baseV of baseApproved) {
-        // Ver si hay versión en AsyncStorage con más ganancias
-        const localCopy = localVehicles.find(
-          (lv) => lv.licensePlate === baseV.licensePlate,
-        );
-        const e =
-          localCopy?.totalEarnings !== undefined
-            ? localCopy.totalEarnings
-            : (VEHICLES_BASE_EARNINGS[baseV.uuid]?.earnings ?? 0);
-        const t =
-          localCopy?.tripsCount !== undefined
-            ? localCopy.tripsCount
-            : (VEHICLES_BASE_EARNINGS[baseV.uuid]?.trips ?? 0);
-
-        totalE += e;
-        totalT += t;
-        count++;
-      }
-
-      // Calcular para los nuevos agregados aprobados
-      const localApprovedOnly = localVehicles.filter(
-        (lv) =>
-          lv.status === 'approved' &&
-          !['AB123CD', 'XY987ZT', 'HJ321OP'].includes(lv.licensePlate),
-      );
-
-      for (const lv of localApprovedOnly) {
-        totalE += lv.totalEarnings !== undefined ? lv.totalEarnings : 450.0;
-        totalT += lv.tripsCount !== undefined ? lv.tripsCount : 30;
-        count++;
+      for (const v of approvedVehicles) {
+        totalE += Number(v.totalEarnings) || 0;
+        totalT += Number(v.tripsCount) || 0;
       }
 
       setTotalEarnings(totalE);
       setTotalTrips(totalT);
-      setActiveUnitsCount(count);
+      setActiveUnitsCount(approvedVehicles.length);
+
+      // Mapear transacciones reales que pertenezcan a la flota del dueño
+      const vehicleUuids = new Set(
+        approvedVehicles.map((v: any) => v.uuid).filter(Boolean),
+      );
+      const vehiclePlates = new Set(
+        approvedVehicles
+          .map((v: any) => (v.licensePlate || '').toLowerCase().trim())
+          .filter(Boolean),
+      );
+
+      const ownerTx = (allTx || []).filter((tx: any) => {
+        if (!tx) return false;
+        if (tx.vehicleUuid && vehicleUuids.has(tx.vehicleUuid)) return true;
+        if (tx.vehicle?.uuid && vehicleUuids.has(tx.vehicle.uuid)) return true;
+        if (
+          tx.vehicle?.plate &&
+          vehiclePlates.has(tx.vehicle.plate.toLowerCase().trim())
+        )
+          return true;
+        if (
+          tx.licensePlate &&
+          vehiclePlates.has(tx.licensePlate.toLowerCase().trim())
+        )
+          return true;
+        if (tx.description) {
+          const desc = tx.description.toLowerCase();
+          for (const plate of vehiclePlates) {
+            if (plate && desc.includes(plate)) return true;
+          }
+        }
+        return false;
+      });
+
+      // Ordenar por fecha descendente
+      const sortedTx = [...ownerTx].sort((a: any, b: any) => {
+        const timeA = new Date(a.createdAt || a.timestamp || 0).getTime();
+        const timeB = new Date(b.createdAt || b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+
+      const formattedTx: RecentTransaction[] = sortedTx
+        .slice(0, 15)
+        .map((tx: any) => {
+          const vehicleObj = approvedVehicles.find(
+            (v: any) =>
+              v.uuid === tx.vehicleUuid ||
+              v.uuid === tx.vehicle?.uuid ||
+              (v.licensePlate &&
+                tx.description &&
+                tx.description
+                  .toLowerCase()
+                  .includes(v.licensePlate.toLowerCase())),
+          );
+
+          const vehicleTitle = vehicleObj
+            ? `${vehicleObj.vehicleMake} ${vehicleObj.vehicleModel} (${vehicleObj.licensePlate})`
+            : tx.vehicleTitle || tx.vehicle?.name || 'Unidad de Transporte';
+
+          return {
+            id: String(tx.uuid || tx.id || Math.random()),
+            time: formatRelativeTime(tx.createdAt || tx.timestamp),
+            vehicle: vehicleTitle,
+            route: tx.route || tx.description || 'Pasaje Urbano',
+            amount: Math.abs(Number(tx.amount || tx.fareAmount || 0)),
+          };
+        });
+
+      setRecentTx(formattedTx);
+
+      // Calcular gráfico semanal real
+      const daysMap: { [key: number]: string } = {
+        1: 'Lun',
+        2: 'Mar',
+        3: 'Mie',
+        4: 'Jue',
+        5: 'Vie',
+        6: 'Sab',
+        0: 'Dom',
+      };
+
+      const now = new Date();
+      const currentDay = now.getDay();
+      const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + mondayOffset);
+      monday.setHours(0, 0, 0, 0);
+
+      const dayTotals: { [dayLabel: string]: number } = {
+        Lun: 0,
+        Mar: 0,
+        Mie: 0,
+        Jue: 0,
+        Vie: 0,
+        Sab: 0,
+        Dom: 0,
+      };
+
+      for (const tx of ownerTx) {
+        const txDate = new Date(tx.createdAt || tx.timestamp);
+        if (!isNaN(txDate.getTime()) && txDate >= monday) {
+          const dayLabel = daysMap[txDate.getDay()];
+          if (dayLabel && dayTotals[dayLabel] !== undefined) {
+            dayTotals[dayLabel] += Math.abs(
+              Number(tx.amount || tx.fareAmount || 0),
+            );
+          }
+        }
+      }
+
+      const maxDayAmount = Math.max(...Object.values(dayTotals), 0);
+      const calculatedWeekly: WeeklyBarData[] = [
+        'Lun',
+        'Mar',
+        'Mie',
+        'Jue',
+        'Vie',
+        'Sab',
+        'Dom',
+      ].map((day) => {
+        const amount = dayTotals[day];
+        let height = '0%';
+        if (maxDayAmount > 0 && amount > 0) {
+          const pct = Math.round((amount / maxDayAmount) * 100);
+          height = `${Math.max(pct, 12)}%`;
+        }
+        return {
+          day,
+          amount: `${amount.toFixed(0)} Bs`,
+          height,
+        };
+      });
+
+      setWeeklyData(calculatedWeekly);
     } catch (err) {
       console.warn('[Earnings] Error calculating fleet earnings:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     loadEarningsData();
+  }, [loadEarningsData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadEarningsData();
+    }, [loadEarningsData]),
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadEarningsData();
   }, [loadEarningsData]);
 
   const handleRequestPayout = () => {
@@ -151,60 +290,8 @@ export default function VehicleOwnerEarnings() {
     );
   };
 
-  const weeklyData = [
-    { day: 'Lun', amount: '850 Bs', height: '60%' },
-    { day: 'Mar', amount: '1100 Bs', height: '80%' },
-    { day: 'Mie', amount: '950 Bs', height: '70%' },
-    { day: 'Jue', amount: '1250 Bs', height: '90%' },
-    { day: 'Vie', amount: '1400 Bs', height: '100%' },
-    { day: 'Sab', amount: '420 Bs', height: '30%' },
-    { day: 'Dom', amount: '0 Bs', height: '0%' },
-  ];
-
-  const recentTx = [
-    {
-      id: 'tx1',
-      time: 'Hace 2 min',
-      vehicle: 'Toyota Coaster (AB123CD)',
-      route: 'Ruta 201',
-      amount: 15.0,
-    },
-    {
-      id: 'tx2',
-      time: 'Hace 12 min',
-      vehicle: 'Hyundai County (HJ321OP)',
-      route: 'Ruta 201',
-      amount: 15.0,
-    },
-    {
-      id: 'tx3',
-      time: 'Hace 18 min',
-      vehicle: 'Encava ENT-610 (XY987ZT)',
-      route: 'Ruta L1',
-      amount: 20.0,
-    },
-    {
-      id: 'tx4',
-      time: 'Hace 45 min',
-      vehicle: 'Toyota Coaster (AB123CD)',
-      route: 'Ruta 201',
-      amount: 15.0,
-    },
-    {
-      id: 'tx5',
-      time: 'Hace 1 hora',
-      vehicle: 'Encava ENT-610 (XY987ZT)',
-      route: 'Ruta L1',
-      amount: 20.0,
-    },
-  ];
-
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
-    );
+  if (loading && !refreshing) {
+    return <AppLoadingScreen message="Cargando ingresos de la flota..." />;
   }
 
   return (
@@ -219,6 +306,13 @@ export default function VehicleOwnerEarnings() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+          />
+        }
       >
         {/* balance card */}
         <View style={styles.balanceCard}>
@@ -240,19 +334,32 @@ export default function VehicleOwnerEarnings() {
           <Pressable
             style={({ pressed }) => [
               styles.payoutBtn,
-              pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
-              totalEarnings <= 0 && styles.payoutBtnDisabled,
+              totalEarnings > 0
+                ? styles.payoutBtnActive
+                : styles.payoutBtnDisabled,
+              pressed &&
+                totalEarnings > 0 && {
+                  opacity: 0.9,
+                  transform: [{ scale: 0.98 }],
+                },
             ]}
             onPress={handleRequestPayout}
             disabled={totalEarnings <= 0}
           >
             <Ionicons
-              name="card"
-              size={20}
-              color={tokens.colors.primary}
+              name={totalEarnings > 0 ? 'card' : 'wallet-outline'}
+              size={18}
+              color={totalEarnings > 0 ? tokens.colors.primary : '#94A3B8'}
               style={{ marginRight: 8 }}
             />
-            <Text style={styles.payoutBtnText}>Cobrar Ingresos Acumulados</Text>
+            <Text
+              style={[
+                styles.payoutBtnText,
+                totalEarnings <= 0 && styles.payoutBtnTextDisabled,
+              ]}
+            >
+              Cobrar Ingresos Acumulados
+            </Text>
           </Pressable>
         </View>
 
@@ -282,20 +389,41 @@ export default function VehicleOwnerEarnings() {
         {/* recent activity */}
         <Text style={styles.sectionTitle}>Actividad de Cobros Recientes</Text>
         <View style={styles.transactionsCard}>
-          {recentTx.map((tx) => (
-            <View key={tx.id} style={styles.txRow}>
-              <View style={styles.txIconWrapper}>
-                <Ionicons name="cash-outline" size={18} color="#16A34A" />
+          {recentTx.length === 0 ? (
+            <View style={styles.emptyActivityContainer}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="receipt-outline" size={28} color="#94A3B8" />
               </View>
-              <View style={styles.txDetails}>
-                <Text style={styles.txVehicleName}>{tx.vehicle}</Text>
-                <Text style={styles.txRoute}>
-                  {tx.route} • {tx.time}
-                </Text>
-              </View>
-              <Text style={styles.txAmount}>+{tx.amount.toFixed(2)} Bs</Text>
+              <Text style={styles.emptyActivityTitle}>
+                Sin cobros registrados
+              </Text>
+              <Text style={styles.emptyActivitySubtitle}>
+                Los cobros de pasajes generados por tus unidades y conductores
+                aparecerán aquí automáticamente en tiempo real.
+              </Text>
             </View>
-          ))}
+          ) : (
+            recentTx.map((tx, idx) => (
+              <View
+                key={tx.id}
+                style={[
+                  styles.txRow,
+                  idx === recentTx.length - 1 && { borderBottomWidth: 0 },
+                ]}
+              >
+                <View style={styles.txIconWrapper}>
+                  <Ionicons name="cash-outline" size={18} color="#16A34A" />
+                </View>
+                <View style={styles.txDetails}>
+                  <Text style={styles.txVehicleName}>{tx.vehicle}</Text>
+                  <Text style={styles.txRoute}>
+                    {tx.route} • {tx.time}
+                  </Text>
+                </View>
+                <Text style={styles.txAmount}>+{tx.amount.toFixed(2)} Bs</Text>
+              </View>
+            ))
+          )}
         </View>
 
         {/* Espaciador final */}
@@ -335,7 +463,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   balanceCard: {
-    backgroundColor: '#0F172A', // Slate 900
+    backgroundColor: '#0F172A',
     borderRadius: 32,
     padding: 24,
     alignItems: 'center',
@@ -395,23 +523,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     height: 52,
     width: '100%',
+  },
+  payoutBtnActive: {
+    backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.12,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 3,
   },
   payoutBtnDisabled: {
-    opacity: 0.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   payoutBtnText: {
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.bold,
     color: tokens.colors.primary,
+  },
+  payoutBtnTextDisabled: {
+    color: '#94A3B8',
+    fontFamily: tokens.typography.fontFamily.medium,
   },
   sectionTitle: {
     fontSize: 16,
@@ -510,5 +646,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.black,
     color: '#16A34A',
+  },
+  emptyActivityContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+  },
+  emptyIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  emptyActivityTitle: {
+    fontSize: 14.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  emptyActivitySubtitle: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#94A3B8',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

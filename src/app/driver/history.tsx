@@ -4,7 +4,6 @@ import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Platform,
   RefreshControl,
@@ -13,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
   getAllTransactions,
   getAllUsers,
@@ -237,9 +237,7 @@ export default function DriverHistoryScreen() {
 
   if (loading && !refreshing) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
+      <AppLoadingScreen message="Cargando historial de viajes..." />
     );
   }
 
@@ -382,7 +380,8 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 24,
-    paddingBottom: 110, // Margen para que las tabs no tapen el contenido
+    paddingBottom: 110,
+    flexGrow: 1,
   },
   card: {
     backgroundColor: '#FFFFFF',

@@ -1,13 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
   getAllCivilAssociations,
@@ -134,6 +134,21 @@ export default function AdminCivilAssociationsScreen() {
     [applyFilters, search, activeTab],
   );
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchAssociations(true);
+  }, [fetchAssociations]);
+
+  useEffect(() => {
+    fetchAssociations();
+  }, [fetchAssociations]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAssociations();
+    }, [fetchAssociations]),
+  );
+
   const fetchAvailableUsers = async () => {
     try {
       const allUsers = await getAllUsers();
@@ -152,15 +167,6 @@ export default function AdminCivilAssociationsScreen() {
       console.warn('[AdminCivilAssociations] Error fetching candidates:', err);
     }
   };
-
-  useEffect(() => {
-    fetchAssociations();
-  }, [fetchAssociations]);
-
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await fetchAssociations(true);
-  }, [fetchAssociations]);
 
   const handleSearchChange = (text: string) => {
     setSearch(text);
@@ -243,40 +249,13 @@ export default function AdminCivilAssociationsScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              if (selectedAssoc.uuid.startsWith('mock-ca-')) {
-                // Es un mock local, lo eliminamos de la lista simulada
-                const cached = await getAllCivilAssociations();
-                const updated = cached.filter(
-                  (m: any) => m.uuid !== selectedAssoc.uuid,
+              const roleUuid = await resolveRoleUuid('passenger');
+              if (!roleUuid) {
+                throw new Error(
+                  'No se pudo resolver el ID de rol de pasajero.',
                 );
-                // AsyncStorage helper local save
-                const mockKey = 'gofare_civil_assoc_mocks';
-                const filteredMocks = updated.filter((r: any) =>
-                  r.uuid.startsWith('mock-ca-'),
-                );
-                await AsyncStorage.setItem(
-                  mockKey,
-                  JSON.stringify(filteredMocks),
-                );
-              } else {
-                // Es real, lo degradamos a Passenger (ID '1')
-                const roleUuid = await resolveRoleUuid('passenger');
-                if (!roleUuid) {
-                  throw new Error(
-                    'No se pudo resolver el ID de rol de pasajero.',
-                  );
-                }
-                await updateUserRoles(selectedAssoc.uuid, [roleUuid]);
-
-                // Limpiar metadatos
-                const metaKey = 'gofare_civil_assoc_metadata';
-                const metadataStr = await AsyncStorage.getItem(metaKey);
-                if (metadataStr) {
-                  const metadata = JSON.parse(metadataStr);
-                  delete metadata[selectedAssoc.uuid];
-                  await AsyncStorage.setItem(metaKey, JSON.stringify(metadata));
-                }
               }
+              await updateUserRoles(selectedAssoc.uuid, [roleUuid]);
               Alert.alert('Éxito', 'Rol quitado correctamente.');
               fetchAssociations();
             } catch (err: any) {
@@ -386,6 +365,12 @@ export default function AdminCivilAssociationsScreen() {
     }
   };
 
+  if (loading && !refreshing) {
+    return (
+      <AppLoadingScreen message="Cargando asociaciones civiles..." />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScreenHeader
@@ -470,23 +455,39 @@ export default function AdminCivilAssociationsScreen() {
       </View>
 
       {/* Listado */}
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={tokens.colors.primary} />
-        </View>
-      ) : filteredAssocs.length === 0 ? (
-        <View style={styles.centered}>
-          <Ionicons name="business-outline" size={48} color="#CBD5E1" />
-          <Text style={styles.emptyText}>No hay asociaciones registradas.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredAssocs}
-          keyExtractor={(item) => item.uuid}
-          contentContainerStyle={styles.listContent}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          renderItem={({ item }) => {
+      <FlatList
+        data={filteredAssocs}
+        keyExtractor={(item) => item.uuid}
+        contentContainerStyle={[
+          styles.listContent,
+          filteredAssocs.length === 0 && styles.listContentEmpty,
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+            tintColor={tokens.colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.centered}>
+            <Ionicons name="business-outline" size={48} color="#CBD5E1" />
+            <Text style={styles.emptyText}>No hay asociaciones registradas.</Text>
+            <Text
+              style={{
+                fontSize: 12,
+                color: '#94A3B8',
+                fontFamily: tokens.typography.fontFamily.medium,
+                marginTop: 6,
+                textAlign: 'center',
+              }}
+            >
+              Desliza hacia abajo para actualizar
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => {
             const statusColor =
               item.status === 'approved'
                 ? '#10B981'
@@ -583,7 +584,6 @@ export default function AdminCivilAssociationsScreen() {
             );
           }}
         />
-      )}
 
       {/* Botón Flotante para Registrar */}
       <Pressable style={styles.fab} onPress={handleOpenRegister}>
@@ -1072,7 +1072,11 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
+    paddingBottom: 110,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   card: {
     backgroundColor: '#FFFFFF',

@@ -41,6 +41,15 @@ const isValidDate = (dateStr: string) => {
   );
 };
 
+const parseDate = (dateStr: string): Date | null => {
+  if (!isValidDate(dateStr)) return null;
+  const parts = dateStr.split('/');
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const year = parseInt(parts[2], 10);
+  return new Date(year, month, day);
+};
+
 interface FormFields {
   vehicleMake: string;
   vehicleModel: string;
@@ -50,14 +59,9 @@ interface FormFields {
   capacity: string;
   cooperativeUuid: string;
   tituloPropiedadNumber: string;
-  tituloPropiedadIssuedAt: string;
-  tituloPropiedadExpiresAt: string;
   rcvNumber: string;
   rcvIssuedAt: string;
   rcvExpiresAt: string;
-  revisionTecnicaNumber: string;
-  revisionTecnicaIssuedAt: string;
-  revisionTecnicaExpiresAt: string;
 }
 
 interface FormErrors {
@@ -69,14 +73,9 @@ interface FormErrors {
   capacity?: string;
   cooperativeUuid?: string;
   tituloPropiedadNumber?: string;
-  tituloPropiedadIssuedAt?: string;
-  tituloPropiedadExpiresAt?: string;
   rcvNumber?: string;
   rcvIssuedAt?: string;
   rcvExpiresAt?: string;
-  revisionTecnicaNumber?: string;
-  revisionTecnicaIssuedAt?: string;
-  revisionTecnicaExpiresAt?: string;
 }
 
 export default function RegisterVehicleScreen() {
@@ -98,17 +97,12 @@ export default function RegisterVehicleScreen() {
     vehicleColor: '',
     vehicleYear: '',
     licensePlate: '',
-    capacity: '32',
+    capacity: '',
     cooperativeUuid: '',
     tituloPropiedadNumber: '',
-    tituloPropiedadIssuedAt: '',
-    tituloPropiedadExpiresAt: '',
     rcvNumber: '',
     rcvIssuedAt: '',
     rcvExpiresAt: '',
-    revisionTecnicaNumber: '',
-    revisionTecnicaIssuedAt: '',
-    revisionTecnicaExpiresAt: '',
   });
 
   const [errors, setErrors] = useState<FormErrors>({});
@@ -166,10 +160,16 @@ export default function RegisterVehicleScreen() {
     const newErrors: FormErrors = {};
     if (!form.vehicleMake.trim()) {
       newErrors.vehicleMake = 'La marca del vehículo es requerida';
+    } else if (form.vehicleMake.trim().length < 2) {
+      newErrors.vehicleMake = 'Ingresa una marca válida (mínimo 2 caracteres)';
     }
+
     if (!form.vehicleModel.trim()) {
       newErrors.vehicleModel = 'El modelo del vehículo es requerido';
+    } else if (form.vehicleModel.trim().length < 2) {
+      newErrors.vehicleModel = 'Ingresa un modelo válido (mínimo 2 caracteres)';
     }
+
     if (!form.vehicleColor.trim()) {
       newErrors.vehicleColor = 'El color del vehículo es requerido';
     }
@@ -179,21 +179,32 @@ export default function RegisterVehicleScreen() {
       newErrors.vehicleYear = 'El año del vehículo es requerido';
     } else if (
       Number.isNaN(yearNum) ||
-      yearNum < 1900 ||
+      yearNum < 1960 ||
       yearNum > new Date().getFullYear() + 2
     ) {
-      newErrors.vehicleYear = `El año debe estar entre 1900 y ${new Date().getFullYear() + 2}`;
+      newErrors.vehicleYear = `El año debe estar entre 1960 y ${new Date().getFullYear() + 2}`;
     }
 
+    const cleanPlate = form.licensePlate
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]/g, '');
     if (!form.licensePlate.trim()) {
       newErrors.licensePlate = 'La placa del vehículo es requerida';
+    } else if (cleanPlate.length < 5 || cleanPlate.length > 9) {
+      newErrors.licensePlate =
+        'Ingresa una placa válida (ej. AB123CD o 01A23BC)';
     }
 
     const capacityNum = parseInt(form.capacity, 10);
     if (!form.capacity.trim()) {
       newErrors.capacity = 'La capacidad de pasajeros es requerida';
-    } else if (Number.isNaN(capacityNum) || capacityNum < 1) {
-      newErrors.capacity = 'La capacidad debe ser al menos 1 pasajero';
+    } else if (
+      Number.isNaN(capacityNum) ||
+      capacityNum < 1 ||
+      capacityNum > 150
+    ) {
+      newErrors.capacity = 'La capacidad debe ser entre 1 y 150 pasajeros';
     }
 
     setErrors(newErrors);
@@ -202,51 +213,41 @@ export default function RegisterVehicleScreen() {
 
   const validateStep2 = (): boolean => {
     const newErrors: FormErrors = {};
+
+    // 1. Carnet de Circulación (INTT N° - Documento Permanente)
     if (!form.tituloPropiedadNumber.trim()) {
       newErrors.tituloPropiedadNumber =
-        'El número del título de propiedad es requerido';
-    }
-    if (!form.tituloPropiedadIssuedAt.trim()) {
-      newErrors.tituloPropiedadIssuedAt = 'La fecha de emisión es requerida';
-    } else if (!isValidDate(form.tituloPropiedadIssuedAt)) {
-      newErrors.tituloPropiedadIssuedAt = 'Formato inválido (DD/MM/AAAA)';
-    }
-    if (!form.tituloPropiedadExpiresAt.trim()) {
-      newErrors.tituloPropiedadExpiresAt =
-        'La fecha de expiración es requerida';
-    } else if (!isValidDate(form.tituloPropiedadExpiresAt)) {
-      newErrors.tituloPropiedadExpiresAt = 'Formato inválido (DD/MM/AAAA)';
+        'El INTT N° del carnet de circulación es requerido';
+    } else if (form.tituloPropiedadNumber.trim().length < 4) {
+      newErrors.tituloPropiedadNumber =
+        'Ingresa un código INTT N° válido (ej. A1B2C3D4)';
     }
 
+    // 2. Responsabilidad Civil (RCV)
     if (!form.rcvNumber.trim()) {
       newErrors.rcvNumber =
-        'El número de responsabilidad civil (RCV) es requerido';
-    }
-    if (!form.rcvIssuedAt.trim()) {
-      newErrors.rcvIssuedAt = 'La fecha de emisión es requerida';
-    } else if (!isValidDate(form.rcvIssuedAt)) {
-      newErrors.rcvIssuedAt = 'Formato inválido (DD/MM/AAAA)';
-    }
-    if (!form.rcvExpiresAt.trim()) {
-      newErrors.rcvExpiresAt = 'La fecha de expiración es requerida';
-    } else if (!isValidDate(form.rcvExpiresAt)) {
-      newErrors.rcvExpiresAt = 'Formato inválido (DD/MM/AAAA)';
+        'El número de contrato o póliza de RCV es requerido';
+    } else if (form.rcvNumber.trim().length < 4) {
+      newErrors.rcvNumber =
+        'Ingresa un número de contrato/póliza válido (ej. 000023617 o VIRT-4286-2023)';
     }
 
-    if (!form.revisionTecnicaNumber.trim()) {
-      newErrors.revisionTecnicaNumber =
-        'El número de revisión técnica INTT es requerido';
+    const rcvIssued = parseDate(form.rcvIssuedAt);
+    const rcvExpires = parseDate(form.rcvExpiresAt);
+
+    if (!form.rcvIssuedAt.trim()) {
+      newErrors.rcvIssuedAt = 'La fecha de emisión es requerida';
+    } else if (!rcvIssued) {
+      newErrors.rcvIssuedAt = 'Formato inválido (DD/MM/AAAA)';
     }
-    if (!form.revisionTecnicaIssuedAt.trim()) {
-      newErrors.revisionTecnicaIssuedAt = 'La fecha de emisión es requerida';
-    } else if (!isValidDate(form.revisionTecnicaIssuedAt)) {
-      newErrors.revisionTecnicaIssuedAt = 'Formato inválido (DD/MM/AAAA)';
-    }
-    if (!form.revisionTecnicaExpiresAt.trim()) {
-      newErrors.revisionTecnicaExpiresAt =
-        'La fecha de expiración es requerida';
-    } else if (!isValidDate(form.revisionTecnicaExpiresAt)) {
-      newErrors.revisionTecnicaExpiresAt = 'Formato inválido (DD/MM/AAAA)';
+
+    if (!form.rcvExpiresAt.trim()) {
+      newErrors.rcvExpiresAt = 'La fecha de expiración es requerida';
+    } else if (!rcvExpires) {
+      newErrors.rcvExpiresAt = 'Formato inválido (DD/MM/AAAA)';
+    } else if (rcvIssued && rcvExpires < rcvIssued) {
+      newErrors.rcvExpiresAt =
+        'La fecha de expiración debe ser posterior a la de emisión';
     }
 
     setErrors(newErrors);
@@ -294,7 +295,7 @@ export default function RegisterVehicleScreen() {
         );
       }
 
-      // 2. Registrar los 3 documentos manuales en el backend
+      // 2. Registrar los documentos del vehículo en el backend
       const toYyyyMmDd = (dateStr: string) => {
         const parts = dateStr.trim().split('/');
         if (parts.length !== 3) return dateStr;
@@ -304,9 +305,9 @@ export default function RegisterVehicleScreen() {
       const docTasks = [
         {
           type: 'titulo_propiedad',
-          documentNumber: form.tituloPropiedadNumber.trim(),
-          issuedAt: toYyyyMmDd(form.tituloPropiedadIssuedAt),
-          expiresAt: toYyyyMmDd(form.tituloPropiedadExpiresAt),
+          documentNumber: form.tituloPropiedadNumber.trim().toUpperCase(),
+          issuedAt: undefined,
+          expiresAt: undefined,
           fileUrl: 'https://gofare.app/manual-entry.pdf',
         },
         {
@@ -314,13 +315,6 @@ export default function RegisterVehicleScreen() {
           documentNumber: form.rcvNumber.trim(),
           issuedAt: toYyyyMmDd(form.rcvIssuedAt),
           expiresAt: toYyyyMmDd(form.rcvExpiresAt),
-          fileUrl: 'https://gofare.app/manual-entry.pdf',
-        },
-        {
-          type: 'revision_tecnica_intt',
-          documentNumber: form.revisionTecnicaNumber.trim(),
-          issuedAt: toYyyyMmDd(form.revisionTecnicaIssuedAt),
-          expiresAt: toYyyyMmDd(form.revisionTecnicaExpiresAt),
           fileUrl: 'https://gofare.app/manual-entry.pdf',
         },
       ];
@@ -475,7 +469,7 @@ export default function RegisterVehicleScreen() {
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Ej. Toyota, Encava, Chevrolet"
+                  placeholder="Ej. Encava, Toyota, Chevrolet, Iveco"
                   placeholderTextColor="#A1A1AA"
                   value={form.vehicleMake}
                   onChangeText={(text) => updateField('vehicleMake', text)}
@@ -502,7 +496,7 @@ export default function RegisterVehicleScreen() {
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Ej. Corolla, Coaster, ENT-610"
+                  placeholder="Ej. ENT-610, Coaster, NPR, Daily"
                   placeholderTextColor="#A1A1AA"
                   value={form.vehicleModel}
                   onChangeText={(text) => updateField('vehicleModel', text)}
@@ -529,7 +523,7 @@ export default function RegisterVehicleScreen() {
                 />
                 <TextInput
                   style={styles.input}
-                  placeholder="Ej. AB123CD"
+                  placeholder="Ej. AB123CD o 01A23BC"
                   placeholderTextColor="#A1A1AA"
                   autoCapitalize="characters"
                   value={form.licensePlate}
@@ -786,20 +780,22 @@ export default function RegisterVehicleScreen() {
                 DOCUMENTOS OBLIGATORIOS
               </Text>
 
-              {/* Tarjeta 1: Título de Propiedad */}
+              {/* Tarjeta 1: Carnet de Circulación */}
               <View style={styles.documentSectionCard}>
                 <View style={styles.documentSectionHeader}>
                   <Ionicons
-                    name="document-text-outline"
+                    name="card-outline"
                     size={20}
                     color={tokens.colors.primary}
                   />
                   <Text style={styles.documentSectionTitle}>
-                    Título de Propiedad
+                    Carnet de Circulación
                   </Text>
                 </View>
 
-                <Text style={styles.inputLabelText}>NÚMERO DE TÍTULO</Text>
+                <Text style={styles.inputLabelText}>
+                  INTT N° (CARNET DE CIRCULACIÓN)
+                </Text>
                 <View
                   style={[
                     styles.inputRowCard,
@@ -808,8 +804,9 @@ export default function RegisterVehicleScreen() {
                 >
                   <TextInput
                     style={styles.rowDateInputText}
-                    placeholder="Ej. TP-12345678"
+                    placeholder="Ej. A1B2C3D4"
                     placeholderTextColor="#94A3B8"
+                    autoCapitalize="characters"
                     value={form.tituloPropiedadNumber}
                     onChangeText={(text) =>
                       updateField('tituloPropiedadNumber', text)
@@ -822,86 +819,6 @@ export default function RegisterVehicleScreen() {
                     {errors.tituloPropiedadNumber}
                   </Text>
                 )}
-
-                <View style={styles.rowFields}>
-                  <View style={{ flex: 1, marginRight: 6 }}>
-                    <Text style={styles.inputLabelText}>FECHA EMISIÓN</Text>
-                    <Pressable
-                      style={[
-                        styles.inputRowCard,
-                        errors.tituloPropiedadIssuedAt &&
-                          styles.inputRowCardError,
-                      ]}
-                      onPress={() => openDatePicker('tituloPropiedadIssuedAt')}
-                      disabled={loading}
-                    >
-                      <Ionicons
-                        name="calendar-outline"
-                        size={18}
-                        color={
-                          errors.tituloPropiedadIssuedAt ? '#EF4444' : '#8594AB'
-                        }
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text
-                        style={[
-                          styles.rowDateInputText,
-                          !form.tituloPropiedadIssuedAt &&
-                            styles.placeholderDateText,
-                        ]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {form.tituloPropiedadIssuedAt || 'DD/MM/YYYY'}
-                      </Text>
-                    </Pressable>
-                    {errors.tituloPropiedadIssuedAt && (
-                      <Text style={styles.errorTextSmall}>
-                        {errors.tituloPropiedadIssuedAt}
-                      </Text>
-                    )}
-                  </View>
-
-                  <View style={{ flex: 1, marginLeft: 6 }}>
-                    <Text style={styles.inputLabelText}>FECHA EXPIRACIÓN</Text>
-                    <Pressable
-                      style={[
-                        styles.inputRowCard,
-                        errors.tituloPropiedadExpiresAt &&
-                          styles.inputRowCardError,
-                      ]}
-                      onPress={() => openDatePicker('tituloPropiedadExpiresAt')}
-                      disabled={loading}
-                    >
-                      <Ionicons
-                        name="calendar-outline"
-                        size={18}
-                        color={
-                          errors.tituloPropiedadExpiresAt
-                            ? '#EF4444'
-                            : '#8594AB'
-                        }
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text
-                        style={[
-                          styles.rowDateInputText,
-                          !form.tituloPropiedadExpiresAt &&
-                            styles.placeholderDateText,
-                        ]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {form.tituloPropiedadExpiresAt || 'DD/MM/YYYY'}
-                      </Text>
-                    </Pressable>
-                    {errors.tituloPropiedadExpiresAt && (
-                      <Text style={styles.errorTextSmall}>
-                        {errors.tituloPropiedadExpiresAt}
-                      </Text>
-                    )}
-                  </View>
-                </View>
               </View>
 
               {/* Tarjeta 2: Responsabilidad Civil (RCV) */}
@@ -917,7 +834,9 @@ export default function RegisterVehicleScreen() {
                   </Text>
                 </View>
 
-                <Text style={styles.inputLabelText}>NÚMERO DE RCV</Text>
+                <Text style={styles.inputLabelText}>
+                  N° DE CONTRATO / PÓLIZA DE RCV
+                </Text>
                 <View
                   style={[
                     styles.inputRowCard,
@@ -926,8 +845,9 @@ export default function RegisterVehicleScreen() {
                 >
                   <TextInput
                     style={styles.rowDateInputText}
-                    placeholder="Ej. RCV-998877"
+                    placeholder="Ej. 000023617 o VIRT-4286-2023"
                     placeholderTextColor="#94A3B8"
+                    autoCapitalize="characters"
                     value={form.rcvNumber}
                     onChangeText={(text) => updateField('rcvNumber', text)}
                     editable={!loading}
@@ -1008,124 +928,6 @@ export default function RegisterVehicleScreen() {
                 </View>
               </View>
 
-              {/* Tarjeta 3: Revisión Técnica INTT */}
-              <View style={styles.documentSectionCard}>
-                <View style={styles.documentSectionHeader}>
-                  <Ionicons
-                    name="build-outline"
-                    size={20}
-                    color={tokens.colors.primary}
-                  />
-                  <Text style={styles.documentSectionTitle}>
-                    Revisión Técnica (INTT)
-                  </Text>
-                </View>
-
-                <Text style={styles.inputLabelText}>NÚMERO DE REVISIÓN</Text>
-                <View
-                  style={[
-                    styles.inputRowCard,
-                    errors.revisionTecnicaNumber && styles.inputRowCardError,
-                  ]}
-                >
-                  <TextInput
-                    style={styles.rowDateInputText}
-                    placeholder="Ej. INTT-REV-6655"
-                    placeholderTextColor="#94A3B8"
-                    value={form.revisionTecnicaNumber}
-                    onChangeText={(text) =>
-                      updateField('revisionTecnicaNumber', text)
-                    }
-                    editable={!loading}
-                  />
-                </View>
-                {errors.revisionTecnicaNumber && (
-                  <Text style={styles.errorTextSmall}>
-                    {errors.revisionTecnicaNumber}
-                  </Text>
-                )}
-
-                <View style={styles.rowFields}>
-                  <View style={{ flex: 1, marginRight: 6 }}>
-                    <Text style={styles.inputLabelText}>FECHA EMISIÓN</Text>
-                    <Pressable
-                      style={[
-                        styles.inputRowCard,
-                        errors.revisionTecnicaIssuedAt &&
-                          styles.inputRowCardError,
-                      ]}
-                      onPress={() => openDatePicker('revisionTecnicaIssuedAt')}
-                      disabled={loading}
-                    >
-                      <Ionicons
-                        name="calendar-outline"
-                        size={18}
-                        color={
-                          errors.revisionTecnicaIssuedAt ? '#EF4444' : '#8594AB'
-                        }
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text
-                        style={[
-                          styles.rowDateInputText,
-                          !form.revisionTecnicaIssuedAt &&
-                            styles.placeholderDateText,
-                        ]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {form.revisionTecnicaIssuedAt || 'DD/MM/YYYY'}
-                      </Text>
-                    </Pressable>
-                    {errors.revisionTecnicaIssuedAt && (
-                      <Text style={styles.errorTextSmall}>
-                        {errors.revisionTecnicaIssuedAt}
-                      </Text>
-                    )}
-                  </View>
-
-                  <View style={{ flex: 1, marginLeft: 6 }}>
-                    <Text style={styles.inputLabelText}>FECHA EXPIRACIÓN</Text>
-                    <Pressable
-                      style={[
-                        styles.inputRowCard,
-                        errors.revisionTecnicaExpiresAt &&
-                          styles.inputRowCardError,
-                      ]}
-                      onPress={() => openDatePicker('revisionTecnicaExpiresAt')}
-                      disabled={loading}
-                    >
-                      <Ionicons
-                        name="calendar-outline"
-                        size={18}
-                        color={
-                          errors.revisionTecnicaExpiresAt
-                            ? '#EF4444'
-                            : '#8594AB'
-                        }
-                        style={{ marginRight: 8 }}
-                      />
-                      <Text
-                        style={[
-                          styles.rowDateInputText,
-                          !form.revisionTecnicaExpiresAt &&
-                            styles.placeholderDateText,
-                        ]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {form.revisionTecnicaExpiresAt || 'DD/MM/YYYY'}
-                      </Text>
-                    </Pressable>
-                    {errors.revisionTecnicaExpiresAt && (
-                      <Text style={styles.errorTextSmall}>
-                        {errors.revisionTecnicaExpiresAt}
-                      </Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-
               {/* Botones de Navegación del Paso 2 */}
               <View style={styles.buttonRow}>
                 <Pressable
@@ -1190,7 +992,9 @@ export default function RegisterVehicleScreen() {
                       );
                       const year = tempDate.getFullYear();
                       const formatted = `${day}/${month}/${year}`;
-                      updateField(activeDateField!, formatted);
+                      if (activeDateField) {
+                        updateField(activeDateField, formatted);
+                      }
                       setActiveDateField(null);
                     }}
                   >

@@ -89,7 +89,13 @@ export default function OnboardingScreen() {
           const isAdmin = roles.some(
             (r: any) => r.name === 'platform_admin' || r.name === 'admin',
           );
-          const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+          const isOwner =
+            roles.some(
+              (r: any) =>
+                r.name === 'transport_owner' || r.name === 'civil_association',
+            ) ||
+            (freshProfile as any).transportOwner != null ||
+            (freshProfile as any).transport_owner != null;
           const isDriver = roles.some((r: any) => r.name === 'driver');
 
           if (isAdmin || isOwner || isDriver) {
@@ -139,14 +145,17 @@ export default function OnboardingScreen() {
 
           const backendName =
             freshProfile.displayName ||
-            `${freshProfile.firstName || ''} ${freshProfile.lastName || ''}`.trim();
+            (freshProfile as any).display_name ||
+            `${freshProfile.firstName || (freshProfile as any).first_name || ''} ${freshProfile.lastName || (freshProfile as any).last_name || ''}`.trim();
 
           if (backendName && backendName !== 'Usuario Invitado') {
             setFullName(backendName);
           }
 
-          if (freshProfile.nationalId) {
-            const rawId = freshProfile.nationalId.trim();
+          const rawNationalId =
+            freshProfile.nationalId || (freshProfile as any).national_id;
+          if (rawNationalId) {
+            const rawId = String(rawNationalId).trim();
             if (rawId !== 'V-00000000' && rawId !== '00000000') {
               if (rawId.startsWith('E-') || rawId.startsWith('e-')) {
                 setNationality('E');
@@ -157,11 +166,11 @@ export default function OnboardingScreen() {
               }
             }
           }
-          if (
-            freshProfile.phoneNumber &&
-            freshProfile.phoneNumber !== '+584120000000'
-          ) {
-            setPhoneNumber(freshProfile.phoneNumber);
+
+          const rawPhone =
+            freshProfile.phoneNumber || (freshProfile as any).phone_number;
+          if (rawPhone && rawPhone !== '+584120000000') {
+            setPhoneNumber(vePhoneFromE164(rawPhone));
             setHasPhone(true);
           }
         }
