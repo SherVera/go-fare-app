@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
   formatUserProfileName,
   getBackendProfile,
@@ -172,22 +173,7 @@ export default function DriverProfileScreen() {
   };
 
   if (loading) {
-    return (
-      <SafeAreaView style={[styles.container, styles.center]} edges={['top']}>
-        <StatusBar style="dark" />
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-        <Text
-          style={{
-            marginTop: 14,
-            fontSize: 15,
-            fontWeight: '600',
-            color: tokens.colors.mutedGray,
-          }}
-        >
-          Cargando perfil de usuario...
-        </Text>
-      </SafeAreaView>
-    );
+    return <AppLoadingScreen message="Cargando perfil del conductor..." />;
   }
 
   return (

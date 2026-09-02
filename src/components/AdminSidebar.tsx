@@ -123,7 +123,7 @@ export function AdminSidebar() {
         },
         {
           id: 'owner-requests',
-          label: 'Solicitudes de Propietarios',
+          label: 'Solicitudes de Afiliación',
           icon: 'file-tray-full',
           route: '/admin/owner-requests',
         },

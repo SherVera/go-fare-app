@@ -21,6 +21,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import type { MockDriver, MockVehicle } from '@/interfaces';
 import {
   createBackendInviteCode,
@@ -112,10 +113,11 @@ export default function VehicleOwnerDrivers() {
           id: inv.driver.id,
           name:
             inv.driver.displayName ||
-            `${inv.driver.firstName} ${inv.driver.lastName}`.trim() ||
+            `${inv.driver.firstName || ''} ${inv.driver.lastName || ''}`.trim() ||
             'Conductor sin nombre',
           nationalId: inv.driver.nationalId || 'Sin cédula',
-          phone: inv.driver.phoneNumber || 'Sin teléfono',
+          phone: inv.driver.phoneNumber || inv.driver.phone || 'Sin teléfono',
+          email: inv.driver.email || '',
           status: 'active',
         }));
       setDrivers(realDrivers);
@@ -248,7 +250,9 @@ Tu código de invitación único es: *${code}*`;
     if (!term) return true;
     return (
       d.name.toLowerCase().includes(term) ||
-      d.nationalId.toLowerCase().includes(term)
+      d.nationalId.toLowerCase().includes(term) ||
+      (d.email && d.email.toLowerCase().includes(term)) ||
+      (d.phone && d.phone.toLowerCase().includes(term))
     );
   });
 
@@ -262,11 +266,7 @@ Tu código de invitación único es: *${code}*`;
   });
 
   if (loading) {
-    return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
-    );
+    return <AppLoadingScreen message="Cargando directorio de conductores..." />;
   }
 
   return (
@@ -347,7 +347,7 @@ Tu código de invitación único es: *${code}*`;
           style={styles.searchInput}
           placeholder={
             activeTab === 'active'
-              ? 'Buscar conductor por nombre o cédula...'
+              ? 'Buscar conductor por nombre, cédula o correo...'
               : 'Buscar invitación por teléfono o código...'
           }
           placeholderTextColor="#A1A1AA"
@@ -397,7 +397,8 @@ Tu código de invitación único es: *${code}*`;
 
             return (
               <View style={styles.driverCard}>
-                <View style={styles.driverMainRow}>
+                {/* 1. Header con Avatar, Nombre y Badge de Estado */}
+                <View style={styles.driverHeader}>
                   <View style={styles.driverAvatar}>
                     <Text style={styles.driverAvatarText}>
                       {item.name
@@ -407,13 +408,12 @@ Tu código de invitación único es: *${code}*`;
                         .substring(0, 2)}
                     </Text>
                   </View>
-                  <View style={styles.driverDetails}>
-                    <Text style={styles.driverName}>{item.name}</Text>
-                    <Text style={styles.driverMeta}>
-                      Cédula: {item.nationalId}
+                  <View style={styles.driverHeaderInfo}>
+                    <Text style={styles.driverName} numberOfLines={1}>
+                      {item.name}
                     </Text>
-                    <Text style={styles.driverMeta}>
-                      Teléfono: {item.phone}
+                    <Text style={styles.driverSubRole}>
+                      Conductor Registrado
                     </Text>
                   </View>
                   <View style={styles.statusPill}>
@@ -422,20 +422,68 @@ Tu código de invitación único es: *${code}*`;
                   </View>
                 </View>
 
-                <View style={styles.divider} />
+                {/* 2. Caja de Metadatos estructurados */}
+                <View style={styles.metaContainer}>
+                  <View style={styles.metaRow}>
+                    <View style={styles.metaIconBox}>
+                      <Ionicons name="card-outline" size={13} color="#64748B" />
+                    </View>
+                    <Text style={styles.metaLabel}>Cédula:</Text>
+                    <Text style={styles.metaValue}>{item.nationalId}</Text>
+                  </View>
 
-                <View style={styles.assignmentRow}>
+                  <View style={styles.metaRow}>
+                    <View style={styles.metaIconBox}>
+                      <Ionicons name="call-outline" size={13} color="#64748B" />
+                    </View>
+                    <Text style={styles.metaLabel}>Teléfono:</Text>
+                    <Text style={styles.metaValue}>{item.phone}</Text>
+                  </View>
+
+                  {item.email ? (
+                    <View style={styles.metaRow}>
+                      <View style={styles.metaIconBox}>
+                        <Ionicons
+                          name="mail-outline"
+                          size={13}
+                          color="#64748B"
+                        />
+                      </View>
+                      <Text style={styles.metaLabel}>Correo:</Text>
+                      <Text
+                        style={styles.metaValue}
+                        numberOfLines={1}
+                        ellipsizeMode="middle"
+                      >
+                        {item.email}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* 3. Banner inferior de Asignación / Estado */}
+                <View
+                  style={[
+                    styles.assignmentBanner,
+                    assignment
+                      ? styles.bannerAssigned
+                      : styles.bannerUnassigned,
+                  ]}
+                >
                   <Ionicons
-                    name={assignment ? 'bus-outline' : 'alert-circle-outline'}
-                    size={16}
-                    color={assignment ? tokens.colors.primary : '#D97706'}
+                    name={assignment ? 'bus' : 'time-outline'}
+                    size={15}
+                    color={assignment ? '#059669' : '#D97706'}
                     style={{ marginRight: 6 }}
                   />
                   <Text
                     style={[
                       styles.assignmentText,
-                      assignment ? { color: '#1E293B' } : { color: '#D97706' },
+                      assignment
+                        ? styles.assignmentTextAssigned
+                        : styles.assignmentTextUnassigned,
                     ]}
+                    numberOfLines={1}
                   >
                     {assignment
                       ? `Operando: ${assignment}`
@@ -486,27 +534,30 @@ Tu código de invitación único es: *${code}*`;
               },
             );
 
+            const isUsed = Boolean(
+              item.used ||
+                item.usedAt ||
+                item.used_at ||
+                item.driver ||
+                item.driverId ||
+                item.driver_id,
+            );
+            const isRevoked = Boolean(item.revokedAt || item.revoked_at);
+
             return (
               <View style={styles.driverCard}>
-                <View style={styles.driverMainRow}>
-                  <View
-                    style={[
-                      styles.driverAvatar,
-                      { backgroundColor: '#F0FDF4' },
-                    ]}
-                  >
+                <View style={styles.driverHeader}>
+                  <View style={[styles.driverAvatar, styles.whatsappAvatar]}>
                     <Ionicons name="logo-whatsapp" size={20} color="#10B981" />
                   </View>
-                  <View style={styles.driverDetails}>
-                    <Text style={styles.driverName}>{item.invitedPhone}</Text>
-                    <Text style={styles.driverMeta}>
-                      Código:{' '}
-                      <Text style={styles.codeHighlight}>{item.code}</Text>
+                  <View style={styles.driverHeaderInfo}>
+                    <Text style={styles.driverName} numberOfLines={1}>
+                      {item.invitedPhone}
                     </Text>
-                    <Text style={styles.driverMeta}>Enviado: {dateStr}</Text>
+                    <Text style={styles.driverSubRole}>Enviado: {dateStr}</Text>
                   </View>
 
-                  {item.used ? (
+                  {isUsed ? (
                     <View
                       style={[
                         styles.statusPill,
@@ -520,7 +571,24 @@ Tu código de invitación único es: *${code}*`;
                         ]}
                       />
                       <Text style={[styles.activeText, { color: '#065F46' }]}>
-                        Canjeado
+                        Usado
+                      </Text>
+                    </View>
+                  ) : isRevoked ? (
+                    <View
+                      style={[
+                        styles.statusPill,
+                        { backgroundColor: '#FEE2E2' },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.activeDot,
+                          { backgroundColor: '#EF4444' },
+                        ]}
+                      />
+                      <Text style={[styles.activeText, { color: '#991B1B' }]}>
+                        Revocado
                       </Text>
                     </View>
                   ) : (
@@ -541,6 +609,14 @@ Tu código de invitación único es: *${code}*`;
                       </Text>
                     </View>
                   )}
+                </View>
+
+                {/* Código de Invitación Card Box */}
+                <View style={styles.inviteCodeBox}>
+                  <Text style={styles.inviteCodeLabel}>CÓDIGO DE ENLACE</Text>
+                  <View style={styles.codeBadge}>
+                    <Text style={styles.codeBadgeText}>{item.code}</Text>
+                  </View>
                 </View>
               </View>
             );
@@ -757,6 +833,7 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 24,
     paddingTop: 12,
+    flexGrow: 1,
   },
   emptyState: {
     alignItems: 'center',
@@ -780,53 +857,149 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
-    marginBottom: 16,
-    shadowColor: '#8594AB',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#1E293B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
     elevation: 2,
   },
-  driverMainRow: {
+  driverHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 12,
   },
   driverAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: '#E6F4FE',
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+  },
+  whatsappAvatar: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#D1FAE5',
   },
   driverAvatarText: {
     fontSize: 16,
     fontFamily: tokens.typography.fontFamily.bold,
     color: tokens.colors.primary,
   },
-  driverDetails: {
+  driverHeaderInfo: {
     flex: 1,
+    marginRight: 8,
   },
   driverName: {
-    fontSize: 15,
+    fontSize: 15.5,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#18243E',
+    color: '#0F172A',
     marginBottom: 2,
   },
-  driverMeta: {
-    fontSize: 12.5,
+  driverSubRole: {
+    fontSize: 11.5,
     fontFamily: tokens.typography.fontFamily.medium,
-    color: '#8594AB',
-    marginBottom: 1,
+    color: '#64748B',
   },
-  codeHighlight: {
+  metaContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 7,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  metaIconBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  metaLabel: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    width: 58,
+  },
+  metaValue: {
+    flex: 1,
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+  },
+  assignmentBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  bannerAssigned: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+  },
+  bannerUnassigned: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  assignmentText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+  },
+  assignmentTextAssigned: {
+    color: '#065F46',
+  },
+  assignmentTextUnassigned: {
+    color: '#B45309',
+  },
+  inviteCodeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  inviteCodeLabel: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  codeBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  codeBadgeText: {
+    fontSize: 13,
     fontFamily: tokens.typography.fontFamily.black,
     color: tokens.colors.primary,
-    backgroundColor: '#F0FDFA',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 4,
+    letterSpacing: 1,
   },
   statusPill: {
     flexDirection: 'row',
@@ -848,19 +1021,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#065F46',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#F1F5F9',
-    marginVertical: 12,
-  },
-  assignmentRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  assignmentText: {
-    fontSize: 13,
-    fontFamily: tokens.typography.fontFamily.medium,
   },
   fab: {
     position: 'absolute',

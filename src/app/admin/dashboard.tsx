@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   RefreshControl,
@@ -13,9 +12,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
   clearBackendJwt,
-  getAllCivilAssociations,
   getAllDocuments,
   getAllOwnerRequests,
   getAllTransportUnits,
@@ -40,23 +39,30 @@ export default function AdminDashboardScreen() {
   });
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
 
-  const loadDashboardData = useCallback(async () => {
-    setLoading(true);
+  const loadDashboardData = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
     try {
-      const [users, units, docs, ownerReqs, civils] = await Promise.all([
+      // Optimizamos ejecutando en paralelo solo los endpoints primarios estrictamente necesarios
+      const [users, units, docs, ownerReqs] = await Promise.all([
         getAllUsers().catch(() => []),
         getAllTransportUnits().catch(() => []),
         getAllDocuments().catch(() => []),
         getAllOwnerRequests().catch(() => []),
-        getAllCivilAssociations().catch(() => []),
       ]);
 
-      // Calcular estadísticas
+      const safeUsers = Array.isArray(users) ? users : [];
+      const safeUnits = Array.isArray(units) ? units : [];
+      const safeDocs = Array.isArray(docs) ? docs : [];
+      const safeOwnerReqs = Array.isArray(ownerReqs) ? ownerReqs : [];
+
+      // Calcular todas las métricas de usuarios en una sola pasada O(N)
       let passengerCount = 0;
       let driverCount = 0;
       let ownerCount = 0;
+      let civilCount = 0;
 
-      for (const u of users) {
+      for (const u of safeUsers) {
+        if (!u) continue;
         const roles = (u as any).roles || [];
         const isOwner = roles.some((r: any) => r.name === 'transport_owner');
         const isDriver = roles.some((r: any) => r.name === 'driver');
@@ -66,32 +72,34 @@ export default function AdminDashboardScreen() {
         );
 
         if (isAdmin) continue;
+        if (isCivil) civilCount++;
         if (isOwner) ownerCount++;
         else if (isDriver) driverCount++;
-        else if (isCivil) continue;
         else passengerCount++;
       }
 
-      const pendingCount = docs.filter(
-        (d: any) => d.status === 'pending_review',
+      const pendingCount = safeDocs.filter(
+        (d: any) => d && d.status === 'pending_review',
       ).length;
 
-      const pendingOwnersCount = ownerReqs.filter(
-        (r: any) => r.status === 'pending',
+      const pendingOwnersCount = safeOwnerReqs.filter(
+        (r: any) =>
+          r && (r.status === 'pending' || r.status === 'pending_review'),
       ).length;
 
       setStats({
         passengers: passengerCount,
         drivers: driverCount,
         owners: ownerCount,
-        units: units.length,
+        units: safeUnits.length,
         pendingDocs: pendingCount,
         pendingOwners: pendingOwnersCount,
-        civilAssociations: civils.length,
+        civilAssociations: civilCount,
       });
 
       // Ordenar por fecha de creación (descendente) y tomar los 3 más recientes
-      const sortedUsers = [...users]
+      const sortedUsers = [...safeUsers]
+        .filter((u) => u?.createdAt)
         .sort(
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -101,10 +109,6 @@ export default function AdminDashboardScreen() {
       setRecentUsers(sortedUsers);
     } catch (err) {
       console.warn('[AdminDashboard] Error al cargar datos:', err);
-      Alert.alert(
-        'Error',
-        'No se pudieron sincronizar las estadísticas del servidor.',
-      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -113,12 +117,18 @@ export default function AdminDashboardScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadDashboardData();
+    await loadDashboardData(true);
   }, [loadDashboardData]);
 
   useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardData();
+    }, [loadDashboardData]),
+  );
 
   const _handleLogout = () => {
     Alert.alert(
@@ -142,14 +152,9 @@ export default function AdminDashboardScreen() {
     );
   };
 
-  if (loading) {
+  if (loading && !refreshing) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-        <Text style={styles.loadingText}>
-          Sincronizando consola de administración...
-        </Text>
-      </SafeAreaView>
+      <AppLoadingScreen message="Sincronizando consola de administración..." />
     );
   }
 

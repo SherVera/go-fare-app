@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,7 +19,6 @@ import {
   clearGoFareToken,
   createBackendUser,
   createFareAccount,
-  getCooperatives,
   loginWithFirebaseToken,
   registerWithEmail,
   resolveRoleUuid,
@@ -41,27 +40,6 @@ export default function RegisterVehicleOwnerScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Datos del Propietario/Comercio
-  const [businessName, setBusinessName] = useState('');
-  const [ownerIdNumber, setOwnerIdNumber] = useState('');
-  const [cooperatives, setCooperatives] = useState<any[]>([]);
-  const [selectedCooperativeUuid, setSelectedCooperativeUuid] = useState('');
-  const [showCoopDropdown, setShowCoopDropdown] = useState(false);
-  const [searchText, setSearchText] = useState('');
-
-  // Cargar lista de cooperativas al iniciar
-  React.useEffect(() => {
-    const loadCooperatives = async () => {
-      try {
-        const list = await getCooperatives();
-        setCooperatives(list || []);
-      } catch (err) {
-        console.warn('[RegisterVehicleOwner] Error loading cooperatives:', err);
-      }
-    };
-    loadCooperatives();
-  }, []);
-
   // Estados de control
   const [loading, setLoading] = useState(false);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
@@ -73,8 +51,6 @@ export default function RegisterVehicleOwnerScreen() {
     phoneNumber?: string;
     email?: string;
     password?: string;
-    businessName?: string;
-    ownerIdNumber?: string;
   }>({});
 
   const handleBack = () => {
@@ -93,9 +69,6 @@ export default function RegisterVehicleOwnerScreen() {
     const trimmedPassword = password.trim();
     const trimmedPhoneNumber = phoneNumber.trim();
 
-    const _trimmedBusinessName = businessName.trim();
-    const _trimmedOwnerIdNumber = ownerIdNumber.trim();
-
     // ── Validaciones Datos de Usuario ──
     if (trimmedFullName.length < 3) {
       newErrors.fullName = 'El nombre debe tener al menos 3 caracteres.';
@@ -111,12 +84,6 @@ export default function RegisterVehicleOwnerScreen() {
     }
     if (trimmedPassword.length < 6) {
       newErrors.password = 'La contraseña debe tener al menos 6 caracteres.';
-    }
-
-    // ── Validaciones Datos de Propietario/Comercio ──
-    if (!selectedCooperativeUuid) {
-      newErrors.businessName =
-        'Debes seleccionar una cooperativa o agencia registrada.';
     }
 
     setErrors(newErrors);
@@ -227,8 +194,8 @@ export default function RegisterVehicleOwnerScreen() {
       // 4. Subir la solicitud de afiliación de dueño de vehículo
       try {
         await submitVehicleOwnerRequest({
-          businessName: businessName.trim(),
-          idNumber: ownerIdNumber.trim(),
+          businessName: fullName.trim(),
+          idNumber: idNumber.trim(),
         });
       } catch (requestError: any) {
         console.error(
@@ -350,10 +317,10 @@ export default function RegisterVehicleOwnerScreen() {
                 Tu solicitud de registro como Dueño de Vehículo ha sido enviada
                 con éxito.
                 {'\n\n'}
-                El administrador del sistema revisará y verificará tus datos
-                comerciales. Una vez aprobada la solicitud, se habilitará tu
-                cuenta y recibirás tus credenciales para acceder a tu panel de
-                dueño de vehículo.
+                El administrador del sistema revisará y verificará tus datos .
+                Una vez aprobada la solicitud, se habilitará tu cuenta y
+                recibirás tus credenciales para acceder a tu panel de dueño de
+                vehículo.
               </Text>
             </View>
 
@@ -372,10 +339,6 @@ export default function RegisterVehicleOwnerScreen() {
                 style={{ marginLeft: 10 }}
               />
             </Pressable>
-
-            <Text style={styles.footerLegal}>
-              CARACAS MOVE • REGISTRO DE SOCIO
-            </Text>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -569,151 +532,11 @@ export default function RegisterVehicleOwnerScreen() {
             <Text style={styles.errorText}>{errors.password}</Text>
           )}
 
-          {/* ───── SECCIÓN 2: DATOS DEL ASOCIADO / NEGOCIO ───── */}
-          <Text style={[styles.sectionDividerText, { marginTop: 24 }]}>
-            2. DATOS DE AFILIACIÓN COMERCIAL
-          </Text>
-          <View style={styles.sectionLine} />
-
-          {/* Seleccionar Cooperativa / Agencia */}
-          <Text style={styles.inputLabel}>
-            SELECCIONA TU COOPERATIVA / AGENCIA
-          </Text>
-          <Pressable
-            style={[
-              styles.dropdownButton,
-              errors.businessName && styles.dropdownButtonError,
-            ]}
-            onPress={() => {
-              const nextState = !showCoopDropdown;
-              setShowCoopDropdown(nextState);
-              if (nextState) setSearchText('');
-            }}
-            disabled={loading}
-          >
-            <Ionicons
-              name="business-outline"
-              size={20}
-              color={errors.businessName ? '#EF4444' : '#3072ffe7'}
-            />
-            <View style={styles.divider} />
-            <Text
-              style={[
-                styles.dropdownButtonText,
-                !selectedCooperativeUuid && { color: '#B8C4D4' },
-              ]}
-            >
-              {selectedCooperativeUuid
-                ? `${businessName} (${ownerIdNumber})`
-                : 'Selecciona una cooperativa registrada...'}
-            </Text>
-            <Ionicons
-              name={showCoopDropdown ? 'chevron-up' : 'chevron-down'}
-              size={20}
-              color="#8594AB"
-            />
-          </Pressable>
-          {errors.businessName && (
-            <Text style={styles.errorText}>{errors.businessName}</Text>
-          )}
-
-          {showCoopDropdown && (
-            <View style={styles.dropdownContainer}>
-              {/* Buscador / Combobox */}
-              <View style={styles.searchInputContainer}>
-                <Ionicons
-                  name="search-outline"
-                  size={18}
-                  color="#8594AB"
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Buscar cooperativa por nombre o RIF..."
-                  placeholderTextColor="#A1A1AA"
-                  value={searchText}
-                  onChangeText={setSearchText}
-                  autoCapitalize="none"
-                  editable={!loading}
-                />
-                {searchText.length > 0 && (
-                  <Pressable onPress={() => setSearchText('')} hitSlop={10}>
-                    <Ionicons name="close-circle" size={18} color="#A1A1AA" />
-                  </Pressable>
-                )}
-              </View>
-
-              <ScrollView
-                style={styles.dropdownScroll}
-                nestedScrollEnabled
-                keyboardShouldPersistTaps="handled"
-              >
-                {/* Lista filtrada de cooperativas */}
-                {cooperatives
-                  .filter((coop) => {
-                    const term = searchText.trim().toLowerCase();
-                    if (!term) return true;
-                    return (
-                      coop.name.toLowerCase().includes(term) ||
-                      coop.rif.toLowerCase().includes(term)
-                    );
-                  })
-                  .map((coop) => (
-                    <Pressable
-                      key={coop.uuid}
-                      style={[
-                        styles.dropdownItem,
-                        selectedCooperativeUuid === coop.uuid &&
-                          styles.dropdownItemActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedCooperativeUuid(coop.uuid);
-                        setBusinessName(coop.name);
-                        setOwnerIdNumber(coop.rif);
-                        setShowCoopDropdown(false);
-                        if (errors.businessName) {
-                          setErrors((prev) => ({
-                            ...prev,
-                            businessName: undefined,
-                          }));
-                        }
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.dropdownItemText,
-                          selectedCooperativeUuid === coop.uuid &&
-                            styles.dropdownItemTextActive,
-                        ]}
-                      >
-                        {coop.name} ({coop.rif})
-                      </Text>
-                    </Pressable>
-                  ))}
-
-                {/* Mensaje de no resultados */}
-                {cooperatives.filter((coop) => {
-                  const term = searchText.trim().toLowerCase();
-                  if (!term) return true;
-                  return (
-                    coop.name.toLowerCase().includes(term) ||
-                    coop.rif.toLowerCase().includes(term)
-                  );
-                }).length === 0 && (
-                  <View style={styles.noResultsContainer}>
-                    <Text style={styles.noResultsText}>
-                      No se encontraron cooperativas
-                    </Text>
-                  </View>
-                )}
-              </ScrollView>
-            </View>
-          )}
-
           {/* Botón de Envío */}
           <Pressable
             style={({ pressed }) => [
               styles.cta,
+              { marginTop: 28 },
               pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] },
               loading && { opacity: 0.7 },
             ]}
@@ -736,7 +559,7 @@ export default function RegisterVehicleOwnerScreen() {
           </Pressable>
 
           <Text style={styles.footerLegal}>
-            CARACAS MOVE • REGISTRO DE SOCIO
+            CARACAS MOVE • REGISTRO DE DUEÑO
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

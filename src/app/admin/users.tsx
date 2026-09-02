@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
   deleteUser,
@@ -132,6 +133,12 @@ export default function AdminUsersScreen() {
     fetchUsers();
   }, [fetchUsers]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchUsers();
+    }, [fetchUsers]),
+  );
+
   useEffect(() => {
     if (
       role &&
@@ -249,6 +256,10 @@ export default function AdminUsersScreen() {
     );
   };
 
+  if (loading && !refreshing) {
+    return <AppLoadingScreen message="Cargando usuarios registrados..." />;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScreenHeader title="Gestionar Usuarios" onMenu={() => setIsOpen(true)} />
@@ -308,113 +319,126 @@ export default function AdminUsersScreen() {
       </View>
 
       {/* Listado de usuarios */}
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={tokens.colors.primary} />
-        </View>
-      ) : filteredUsers.length === 0 ? (
-        <View style={styles.centered}>
-          <Ionicons name="people-outline" size={48} color="#CBD5E1" />
-          <Text style={styles.emptyText}>No se encontraron usuarios.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredUsers}
-          keyExtractor={(item) => item.uuid}
-          contentContainerStyle={styles.listContent}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          renderItem={({ item }) => {
-            const roles = item.roles || [];
-            const isOwner = roles.some(
-              (r: any) => r.name === 'transport_owner',
-            );
-            const isDriver = roles.some((r: any) => r.name === 'driver');
-            const isCivil = roles.some(
-              (r: any) => r.name === 'civil_association',
-            );
-            const roleText = isOwner
-              ? 'Socio'
-              : isDriver
-                ? 'Conductor'
-                : isCivil
-                  ? 'Asoc. Civil'
-                  : 'Pasajero';
-            const roleColor = isOwner
-              ? '#8B5CF6'
-              : isDriver
-                ? '#10B981'
-                : isCivil
-                  ? '#F59E0B'
-                  : '#3B82F6';
+      <FlatList
+        data={filteredUsers}
+        keyExtractor={(item) => item.uuid}
+        contentContainerStyle={[
+          styles.listContent,
+          filteredUsers.length === 0 && styles.listContentEmpty,
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+            tintColor={tokens.colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.centered}>
+            <Ionicons name="people-outline" size={48} color="#CBD5E1" />
+            <Text style={styles.emptyText}>No se encontraron usuarios.</Text>
+            <Text
+              style={{
+                fontSize: 12,
+                color: '#94A3B8',
+                fontFamily: tokens.typography.fontFamily.medium,
+                marginTop: 6,
+                textAlign: 'center',
+              }}
+            >
+              Desliza hacia abajo para actualizar
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const roles = item.roles || [];
+          const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+          const isDriver = roles.some((r: any) => r.name === 'driver');
+          const isCivil = roles.some(
+            (r: any) => r.name === 'civil_association',
+          );
+          const roleText = isOwner
+            ? 'Socio'
+            : isDriver
+              ? 'Conductor'
+              : isCivil
+                ? 'Asoc. Civil'
+                : 'Pasajero';
+          const roleColor = isOwner
+            ? '#8B5CF6'
+            : isDriver
+              ? '#10B981'
+              : isCivil
+                ? '#F59E0B'
+                : '#3B82F6';
 
-            return (
-              <Pressable
-                style={styles.userCard}
-                onPress={() => handleUserSelect(item)}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {(item.displayName || item.firstName || 'U')
-                        .charAt(0)
-                        .toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.userMeta}>
-                    <Text style={styles.userName} numberOfLines={1}>
-                      {item.displayName ||
-                        `${item.firstName || ''} ${item.lastName || ''}`}
-                    </Text>
-                    <Text style={styles.userEmail} numberOfLines={1}>
-                      {item.email || 'Sin correo electrónico'}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.roleBadge,
-                      { backgroundColor: `${roleColor}12` },
-                    ]}
-                  >
-                    <Text style={[styles.roleBadgeText, { color: roleColor }]}>
-                      {roleText}
-                    </Text>
-                  </View>
+          return (
+            <Pressable
+              style={styles.userCard}
+              onPress={() => handleUserSelect(item)}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {(item.displayName || item.firstName || 'U')
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Text>
                 </View>
+                <View style={styles.userMeta}>
+                  <Text style={styles.userName} numberOfLines={1}>
+                    {item.displayName ||
+                      `${item.firstName || ''} ${item.lastName || ''}`}
+                  </Text>
+                  <Text style={styles.userEmail} numberOfLines={1}>
+                    {item.email || 'Sin correo electrónico'}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.roleBadge,
+                    { backgroundColor: `${roleColor}12` },
+                  ]}
+                >
+                  <Text style={[styles.roleBadgeText, { color: roleColor }]}>
+                    {roleText}
+                  </Text>
+                </View>
+              </View>
 
-                <View style={styles.cardBody}>
-                  {item.nationalId && (
-                    <View style={styles.bodyDetail}>
-                      <Ionicons
-                        name="card-outline"
-                        size={14}
-                        color="#64748B"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.detailText}>
-                        Cédula: {item.nationalId}
-                      </Text>
-                    </View>
-                  )}
-                  {item.phoneNumber && (
-                    <View style={styles.bodyDetail}>
-                      <Ionicons
-                        name="call-outline"
-                        size={14}
-                        color="#64748B"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.detailText}>
-                        Teléfono: {item.phoneNumber}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </Pressable>
-            );
-          }}
-        />
-      )}
+              <View style={styles.cardBody}>
+                {item.nationalId && (
+                  <View style={styles.bodyDetail}>
+                    <Ionicons
+                      name="card-outline"
+                      size={14}
+                      color="#64748B"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.detailText}>
+                      Cédula: {item.nationalId}
+                    </Text>
+                  </View>
+                )}
+                {item.phoneNumber && (
+                  <View style={styles.bodyDetail}>
+                    <Ionicons
+                      name="call-outline"
+                      size={14}
+                      color="#64748B"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.detailText}>
+                      Teléfono: {item.phoneNumber}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </Pressable>
+          );
+        }}
+      />
 
       {/* Modal de Acciones */}
       <Modal
@@ -555,7 +579,11 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 110,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   userCard: {
     backgroundColor: '#FFFFFF',

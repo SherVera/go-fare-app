@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
   getCurrentRates,
@@ -61,6 +63,7 @@ export default function AdminRatesScreen() {
   const { setIsOpen } = useAdminSidebar();
 
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [updatingFare, setUpdatingFare] = useState(false);
   const [updatingBcv, setUpdatingBcv] = useState(false);
   const [fetchingExternal, setFetchingExternal] = useState(false);
@@ -119,13 +122,16 @@ export default function AdminRatesScreen() {
     setBcvRateDate(formatted);
   };
 
-  const fetchRates = useCallback(async () => {
-    setLoading(true);
+  const fetchRates = useCallback(async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
     try {
-      // 1. Obtener tasas del sistema
       const data = await getCurrentRates();
-      setCurrentRates(data);
-      setNewFareValue(data.fareUsdValue.toFixed(2));
+      setCurrentRates({
+        fareUsdValue: data.fareUsdValue ?? 0.25,
+        bcvRate: data.bcvRate ?? 40.0,
+        bcvRateDate: data.bcvRateDate ?? getLocalDateString(),
+      });
+      setNewFareValue('');
       setNewBcvRate('');
       setBcvRateDate(formatDateToDdMmYyyy(getLocalDateString()));
     } catch (err) {
@@ -133,12 +139,24 @@ export default function AdminRatesScreen() {
       Alert.alert('Error', 'No se pudieron sincronizar las tasas vigentes.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchRates(true);
+  }, [fetchRates]);
 
   useEffect(() => {
     fetchRates();
   }, [fetchRates]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRates();
+    }, [fetchRates]),
+  );
 
   const handleUpdateFare = async () => {
     const parsed = parseFloat(newFareValue);
@@ -220,17 +238,7 @@ export default function AdminRatesScreen() {
     updatingBcv || !newBcvRate.trim() || isDuplicateRate;
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ScreenHeader title="Tasas y Tarifas" onMenu={() => setIsOpen(true)} />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={tokens.colors.primary} />
-          <Text style={styles.loadingText}>
-            Sincronizando tasas vigentes...
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <AppLoadingScreen message="Sincronizando tasas vigentes..." />;
   }
 
   return (
@@ -284,7 +292,17 @@ export default function AdminRatesScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[tokens.colors.primary]}
+              tintColor={tokens.colors.primary}
+            />
+          }
+        >
           {/* SECCIÓN 1: PRECIO DEL FARE */}
           {activeTab === 'fare' && (
             <View style={styles.tabSection}>

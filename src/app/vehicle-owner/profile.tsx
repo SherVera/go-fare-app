@@ -13,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
   getBackendInviteCodes,
   getBackendProfile,
@@ -159,9 +160,7 @@ export default function VehicleOwnerProfile() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color={tokens.colors.primary} />
-      </View>
+      <AppLoadingScreen message="Cargando perfil de dueño de vehículo..." />
     );
   }
 

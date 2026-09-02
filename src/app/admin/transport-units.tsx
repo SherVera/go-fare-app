@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -8,6 +7,7 @@ import {
   FlatList,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
+import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import {
   approveVehicle,
@@ -30,7 +31,6 @@ import {
 import { tokens } from '@/theme/tokens';
 
 export default function AdminTransportUnitsScreen() {
-  const _router = useRouter();
   const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,6 +43,16 @@ export default function AdminTransportUnitsScreen() {
   const [selectedUnit, setSelectedUnit] = useState<any | null>(null);
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>(
+    {},
+  );
+
+  const toggleExpand = (uuid: string) => {
+    setExpandedUnits((prev) => ({
+      ...prev,
+      [uuid]: !prev[uuid],
+    }));
+  };
 
   const applyFilters = useCallback(
     (allUnits: any[], query: string, tab: typeof activeTab) => {
@@ -50,9 +60,17 @@ export default function AdminTransportUnitsScreen() {
 
       // Filter by status tab
       if (tab === 'active') {
-        result = result.filter((u) => u.isActive === true);
+        result = result.filter(
+          (u) => u.isActive === true || u.status === 'active',
+        );
       } else if (tab === 'inactive') {
-        result = result.filter((u) => u.isActive === false);
+        result = result.filter(
+          (u) =>
+            u.isActive === false ||
+            u.status === 'inactive' ||
+            u.status === 'pending_review' ||
+            u.status === 'pending',
+        );
       }
 
       // Filter by search query
@@ -63,13 +81,18 @@ export default function AdminTransportUnitsScreen() {
           const brand = (u.brand || '').toLowerCase();
           const model = (u.model || '').toLowerCase();
           const invite = (u.inviteCode || '').toLowerCase();
-          const owner = (u.owner?.displayName || '').toLowerCase();
+          const ownerName = (
+            u.owner?.displayName ||
+            `${u.owner?.firstName || ''} ${u.owner?.lastName || ''}`
+          )
+            .trim()
+            .toLowerCase();
           return (
             plate.includes(q) ||
             brand.includes(q) ||
             model.includes(q) ||
             invite.includes(q) ||
-            owner.includes(q)
+            ownerName.includes(q)
           );
         });
       }
@@ -83,9 +106,26 @@ export default function AdminTransportUnitsScreen() {
     async (isRefresh = false) => {
       if (!isRefresh) setLoading(true);
       try {
-        const res = await getAllTransportUnits();
-        setUnits(res);
-        applyFilters(res, search, activeTab);
+        const [res, allDocs] = await Promise.all([
+          getAllTransportUnits().catch(() => []),
+          getAllDocuments().catch(() => []),
+        ]);
+        const safeDocs = Array.isArray(allDocs) ? allDocs : [];
+        const unitsWithDocs = (Array.isArray(res) ? res : []).map((u: any) => {
+          const vehicleDocs = safeDocs.filter(
+            (doc: any) =>
+              doc.vehicle?.uuid === u.uuid ||
+              doc.vehicleUuid === u.uuid ||
+              doc.vehicleId === u.uuid ||
+              (doc.vehicle && doc.vehicle.plate === u.plate),
+          );
+          return {
+            ...u,
+            documents: vehicleDocs,
+          };
+        });
+        setUnits(unitsWithDocs);
+        applyFilters(unitsWithDocs, search, activeTab);
       } catch (err) {
         console.warn('[AdminUnits] Error fetching units:', err);
         Alert.alert(
@@ -109,6 +149,12 @@ export default function AdminTransportUnitsScreen() {
     fetchUnits();
   }, [fetchUnits]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchUnits();
+    }, [fetchUnits]),
+  );
+
   const handleSearchChange = (text: string) => {
     setSearch(text);
     applyFilters(units, text, activeTab);
@@ -125,81 +171,25 @@ export default function AdminTransportUnitsScreen() {
       setSelectedUnit(null);
       setIsDetailModalVisible(true);
 
-      // 1. Obtener detalles técnicos de la unidad
-      const detail = await getVehicleDetail(item.uuid);
-
-      // 2. Obtener todos los documentos y filtrar por este vehículo
-      const allDocs = await getAllDocuments();
-      let vehicleDocs = allDocs.filter(
-        (doc: any) =>
-          doc.vehicle?.uuid === item.uuid ||
-          doc.vehicleUuid === item.uuid ||
-          doc.vehicleId === item.uuid,
-      );
-
-      // Si no tiene documentos en caché local, los generamos dinámicamente para pruebas sin modificar backend
-      if (vehicleDocs.length === 0) {
-        vehicleDocs = [
-          {
-            uuid: `mock-doc-tp-${item.uuid}`,
-            type: 'titulo_propiedad',
-            documentNumber: `TP-${item.plate || '9999'}`,
-            fileUrl: 'https://gofare.app/manual-entry.pdf',
-            status: item.isActive ? 'verified' : 'pending_review',
-            vehicleUuid: item.uuid,
-            vehicle: { uuid: item.uuid },
-          },
-          {
-            uuid: `mock-doc-rcv-${item.uuid}`,
-            type: 'seguro_responsabilidad_civil',
-            documentNumber: `RCV-${item.plate || '9999'}`,
-            fileUrl: 'https://gofare.app/manual-entry.pdf',
-            status: item.isActive ? 'verified' : 'pending_review',
-            vehicleUuid: item.uuid,
-            vehicle: { uuid: item.uuid },
-          },
-          {
-            uuid: `mock-doc-rev-${item.uuid}`,
-            type: 'revision_tecnica_intt',
-            documentNumber: `INTT-${item.plate || '9999'}`,
-            fileUrl: 'https://gofare.app/manual-entry.pdf',
-            status: item.isActive ? 'verified' : 'pending_review',
-            vehicleUuid: item.uuid,
-            vehicle: { uuid: item.uuid },
-          },
-        ];
-
-        // Persistir en AsyncStorage para que reflejen cambios en la UI de Documentos del Admin
-        try {
-          const cached = await AsyncStorage.getItem('mock_admin_documents');
-          const docs = cached ? JSON.parse(cached) : [];
-          const filteredDocs = docs.filter(
-            (d: any) => !d.uuid.includes(item.uuid),
-          );
-          await AsyncStorage.setItem(
-            'mock_admin_documents',
-            JSON.stringify([...filteredDocs, ...vehicleDocs]),
-          );
-        } catch (_) {}
-      }
+      const detail = await getVehicleDetail(item.uuid).catch(() => null);
 
       setSelectedUnit({
         ...item,
-        ...detail,
-        documents: vehicleDocs,
+        ...(detail || {}),
+        documents: item.documents || [],
       });
     } catch (err) {
       console.warn('[AdminUnits] Error loading details:', err);
       setSelectedUnit({
         ...item,
-        documents: [],
+        documents: item.documents || [],
       });
     } finally {
       setDetailLoading(false);
     }
   };
 
-  const executeReject = async (doc: any, reason: string) => {
+  const executeRejectDocument = async (doc: any, reason: string) => {
     try {
       setDetailLoading(true);
       await rejectDocument(doc.uuid, reason);
@@ -208,29 +198,15 @@ export default function AdminTransportUnitsScreen() {
       // Actualizar estado local
       setSelectedUnit((prev: any) => {
         if (!prev) return prev;
-        const updatedDocs = prev.documents.map((d: any) =>
+        const updatedDocs = (prev.documents || []).map((d: any) =>
           d.uuid === doc.uuid
             ? { ...d, status: 'rejected', rejectionReason: reason }
             : d,
         );
         return { ...prev, documents: updatedDocs };
       });
-
-      // Actualizar AsyncStorage
-      try {
-        const cached = await AsyncStorage.getItem('mock_admin_documents');
-        const docs = cached ? JSON.parse(cached) : [];
-        const updated = docs.map((d: any) =>
-          d.uuid === doc.uuid
-            ? { ...d, status: 'rejected', rejectionReason: reason }
-            : d,
-        );
-        await AsyncStorage.setItem(
-          'mock_admin_documents',
-          JSON.stringify(updated),
-        );
-      } catch (_) {}
-    } catch (_err: any) {
+      fetchUnits();
+    } catch {
       Alert.alert('Error', 'No se pudo rechazar el documento.');
     } finally {
       setDetailLoading(false);
@@ -250,7 +226,7 @@ export default function AdminTransportUnitsScreen() {
       'Gestionar Documento',
       `¿Qué acción deseas tomar para el documento "${
         doc.type === 'titulo_propiedad'
-          ? 'Título de Propiedad'
+          ? 'Carnet de Circulación'
           : doc.type === 'seguro_responsabilidad_civil'
             ? 'Responsabilidad Civil (RCV)'
             : 'Revisión Técnica (INTT)'
@@ -269,7 +245,7 @@ export default function AdminTransportUnitsScreen() {
                 {
                   text: 'Documento no legible',
                   onPress: () =>
-                    executeReject(
+                    executeRejectDocument(
                       doc,
                       'El documento adjunto no es legible o es borroso.',
                     ),
@@ -277,7 +253,7 @@ export default function AdminTransportUnitsScreen() {
                 {
                   text: 'Datos no coinciden',
                   onPress: () =>
-                    executeReject(
+                    executeRejectDocument(
                       doc,
                       'Los datos del documento no coinciden con el registro.',
                     ),
@@ -285,7 +261,7 @@ export default function AdminTransportUnitsScreen() {
                 {
                   text: 'Documento vencido',
                   onPress: () =>
-                    executeReject(
+                    executeRejectDocument(
                       doc,
                       'El documento ha expirado o no está vigente.',
                     ),
@@ -305,30 +281,16 @@ export default function AdminTransportUnitsScreen() {
                 'El documento ha sido verificado y aprobado.',
               );
 
-              // Actualizar estado local
+              // Actualizar estado local en memoria
               setSelectedUnit((prev: any) => {
                 if (!prev) return prev;
-                const updatedDocs = prev.documents.map((d: any) =>
+                const updatedDocs = (prev.documents || []).map((d: any) =>
                   d.uuid === doc.uuid ? { ...d, status: 'verified' } : d,
                 );
                 return { ...prev, documents: updatedDocs };
               });
-
-              // Actualizar AsyncStorage
-              try {
-                const cached = await AsyncStorage.getItem(
-                  'mock_admin_documents',
-                );
-                const docs = cached ? JSON.parse(cached) : [];
-                const updated = docs.map((d: any) =>
-                  d.uuid === doc.uuid ? { ...d, status: 'verified' } : d,
-                );
-                await AsyncStorage.setItem(
-                  'mock_admin_documents',
-                  JSON.stringify(updated),
-                );
-              } catch (_) {}
-            } catch (_err: any) {
+              fetchUnits();
+            } catch {
               Alert.alert('Error', 'No se pudo aprobar el documento.');
             } finally {
               setDetailLoading(false);
@@ -339,49 +301,181 @@ export default function AdminTransportUnitsScreen() {
     );
   };
 
-  const executeApproveFromModal = async (
-    vehicleUuid: string,
-    plate: string,
-  ) => {
+  const executeApproveVehicle = async (targetUnit: any) => {
+    if (!targetUnit) return;
     try {
+      setLoading(true);
       setDetailLoading(true);
-      await approveVehicle(vehicleUuid);
+
+      // 1. Aprobar el vehículo en el backend
+      await approveVehicle(targetUnit.uuid);
+
+      // 2. Obtener documentos vinculados (desde el estado o API)
+      let docsToApprove = targetUnit.documents || [];
+      if (!docsToApprove.length) {
+        const allDocs = await getAllDocuments().catch(() => []);
+        docsToApprove = (Array.isArray(allDocs) ? allDocs : []).filter(
+          (doc: any) =>
+            doc.vehicle?.uuid === targetUnit.uuid ||
+            doc.vehicleUuid === targetUnit.uuid ||
+            doc.vehicleId === targetUnit.uuid ||
+            (doc.vehicle &&
+              doc.vehicle.plate ===
+                (targetUnit.plate || targetUnit.licensePlate)),
+        );
+      }
+
+      // 3. Aprobar todos los documentos pendientes asociados al vehículo
+      const pendingDocs = docsToApprove.filter(
+        (d: any) => d.status === 'pending_review' || d.status === 'pending',
+      );
+
+      if (pendingDocs.length > 0) {
+        await Promise.all(
+          pendingDocs.map((doc: any) =>
+            verifyDocument(doc.uuid).catch((e) =>
+              console.warn(`[AdminUnits] Error approving doc ${doc.uuid}:`, e),
+            ),
+          ),
+        );
+      }
+
       setIsDetailModalVisible(false);
-      Alert.alert('Éxito', `Unidad ${plate} aprobada con éxito.`);
+      Alert.alert(
+        'Unidad Aprobada',
+        `La unidad ${targetUnit.plate || targetUnit.licensePlate} y sus documentos adjuntos han sido aprobados con éxito.`,
+      );
       await fetchUnits();
     } catch (err: any) {
+      console.warn('[AdminUnits] Error approving vehicle:', err);
       Alert.alert('Error', err.message || 'No se pudo aprobar la unidad.');
     } finally {
+      setLoading(false);
       setDetailLoading(false);
     }
   };
 
-  const executeRejectFromModal = async (vehicleUuid: string, plate: string) => {
+  const executeRejectVehicle = async (targetUnit: any, reason: string) => {
+    if (!targetUnit) return;
     try {
+      setLoading(true);
       setDetailLoading(true);
-      await rejectVehicle(vehicleUuid);
+
+      // 1. Rechazar el vehículo en el backend
+      await rejectVehicle(targetUnit.uuid);
+
+      // 2. Obtener documentos vinculados
+      let docsToReject = targetUnit.documents || [];
+      if (!docsToReject.length) {
+        const allDocs = await getAllDocuments().catch(() => []);
+        docsToReject = (Array.isArray(allDocs) ? allDocs : []).filter(
+          (doc: any) =>
+            doc.vehicle?.uuid === targetUnit.uuid ||
+            doc.vehicleUuid === targetUnit.uuid ||
+            doc.vehicleId === targetUnit.uuid ||
+            (doc.vehicle &&
+              doc.vehicle.plate ===
+                (targetUnit.plate || targetUnit.licensePlate)),
+        );
+      }
+
+      // 3. Rechazar todos los documentos asociados al vehículo
+      const activeOrPendingDocs = docsToReject.filter(
+        (d: any) => d.status !== 'rejected',
+      );
+
+      if (activeOrPendingDocs.length > 0) {
+        await Promise.all(
+          activeOrPendingDocs.map((doc: any) =>
+            rejectDocument(doc.uuid, reason).catch((e) =>
+              console.warn(`[AdminUnits] Error rejecting doc ${doc.uuid}:`, e),
+            ),
+          ),
+        );
+      }
+
       setIsDetailModalVisible(false);
-      Alert.alert('Éxito', `Unidad ${plate} rechazada con éxito.`);
+      Alert.alert(
+        'Unidad Rechazada',
+        `La unidad ${targetUnit.plate || targetUnit.licensePlate} y sus documentos adjuntos han sido rechazados.`,
+      );
       await fetchUnits();
     } catch (err: any) {
+      console.warn('[AdminUnits] Error rejecting vehicle:', err);
       Alert.alert('Error', err.message || 'No se pudo rechazar la unidad.');
     } finally {
+      setLoading(false);
       setDetailLoading(false);
     }
   };
 
-  const handleApproveUnit = async (item: any) => {
-    await handleShowDetails(item);
+  const handleApproveUnit = (item: any) => {
+    const plate = item.plate || item.licensePlate;
+    Alert.alert(
+      'Aprobar Unidad',
+      `¿Deseas aprobar la unidad ${plate}?\n\nAl aprobar la unidad, también se verificarán y aprobarán automáticamente todos sus documentos adjuntos (Carnet de Circulación, RCV, etc.).`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Aprobar Unidad y Recaudos',
+          onPress: () => executeApproveVehicle(item),
+        },
+      ],
+    );
   };
 
-  const handleRejectUnit = async (item: any) => {
-    await handleShowDetails(item);
+  const handleRejectUnit = (item: any) => {
+    const plate = item.plate || item.licensePlate;
+    Alert.alert(
+      'Rechazar Unidad',
+      `¿Deseas rechazar la unidad ${plate}?\n\nAl rechazarla, se rechazarán también sus documentos adjuntos.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Continuar con Rechazo',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Motivo de Rechazo',
+              'Selecciona la razón para rechazar la unidad y sus recaudos:',
+              [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Documentos no legibles / incompletos',
+                  onPress: () =>
+                    executeRejectVehicle(
+                      item,
+                      'Documentos adjuntos no legibles o incompletos.',
+                    ),
+                },
+                {
+                  text: 'Datos no coinciden',
+                  onPress: () =>
+                    executeRejectVehicle(
+                      item,
+                      'Los datos registrados no coinciden con los recaudos.',
+                    ),
+                },
+                {
+                  text: 'Documentación vencida',
+                  onPress: () =>
+                    executeRejectVehicle(
+                      item,
+                      'Los documentos del vehículo no se encuentran vigentes.',
+                    ),
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   const handleDeactivateUnit = async (item: any) => {
     Alert.alert(
       'Desactivar Unidad',
-      `¿Estás seguro de que deseas desactivar la unidad ${item.plate}? Cambiará su estado a Pendiente por aprobar.`,
+      `¿Estás seguro de que deseas desactivar la unidad ${item.plate}? Cambiará su estado a Pendiente.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -409,6 +503,10 @@ export default function AdminTransportUnitsScreen() {
       ],
     );
   };
+
+  if (loading && !refreshing) {
+    return <AppLoadingScreen message="Cargando unidades de transporte..." />;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -485,80 +583,95 @@ export default function AdminTransportUnitsScreen() {
       </View>
 
       {/* List */}
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={tokens.colors.primary} />
-        </View>
-      ) : filteredUnits.length === 0 ? (
-        <View style={styles.centered}>
-          <Ionicons name="bus-outline" size={48} color="#CBD5E1" />
-          <Text style={styles.emptyText}>
-            No se encontraron unidades de transporte.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredUnits}
-          keyExtractor={(item) => item.uuid}
-          contentContainerStyle={styles.listContent}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          renderItem={({ item }) => {
-            const statusColor = item.isActive ? '#10B981' : '#F59E0B';
-            const statusText = item.isActive
-              ? 'Activa'
-              : 'Pendiente por aprobar';
+      <FlatList
+        data={filteredUnits}
+        keyExtractor={(item) => item.uuid}
+        contentContainerStyle={[
+          styles.listContent,
+          filteredUnits.length === 0 && styles.listContentEmpty,
+        ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[tokens.colors.primary]}
+            tintColor={tokens.colors.primary}
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.centered}>
+            <Ionicons name="bus-outline" size={48} color="#CBD5E1" />
+            <Text style={styles.emptyText}>
+              No se encontraron unidades de transporte.
+            </Text>
+            <Text
+              style={{
+                fontSize: 12,
+                color: '#94A3B8',
+                fontFamily: tokens.typography.fontFamily.medium,
+                marginTop: 6,
+                textAlign: 'center',
+              }}
+            >
+              Desliza hacia abajo para actualizar
+            </Text>
+          </View>
+        }
+        renderItem={({ item }) => {
+          const statusColor = item.isActive ? '#10B981' : '#F59E0B';
+          const statusText = item.isActive ? 'Activa' : 'Pendiente';
 
-            return (
-              <View style={styles.unitCard}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons
-                      name="bus"
-                      size={22}
-                      color={tokens.colors.primary}
-                    />
-                  </View>
-                  <View style={styles.meta}>
-                    <Text style={styles.plateText}>{item.plate}</Text>
-                    <Text style={styles.brandText}>
-                      {item.brand} {item.model}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: `${statusColor}12` },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.statusDot,
-                        { backgroundColor: statusColor },
-                      ]}
-                    />
-                    <Text
-                      style={[styles.statusBadgeText, { color: statusColor }]}
-                    >
-                      {statusText}
-                    </Text>
-                  </View>
+          return (
+            <View style={styles.unitCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.iconCircle}>
+                  <Ionicons
+                    name="bus"
+                    size={22}
+                    color={tokens.colors.primary}
+                  />
                 </View>
+                <View style={styles.meta}>
+                  <Text style={styles.plateText} numberOfLines={1}>
+                    {item.brand} {item.model}
+                  </Text>
+                  <Text style={styles.brandText}>{item.plate}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: `${statusColor}12` },
+                  ]}
+                >
+                  <View
+                    style={[styles.statusDot, { backgroundColor: statusColor }]}
+                  />
+                  <Text
+                    style={[styles.statusBadgeText, { color: statusColor }]}
+                  >
+                    {statusText}
+                  </Text>
+                </View>
+              </View>
 
-                {/* Socio Details */}
-                <View style={styles.detailBox}>
-                  <Text style={styles.detailBoxTitle}>SOCIO RESPONSABLE</Text>
-                  <View style={styles.detailRow}>
-                    <Ionicons
-                      name="person-outline"
-                      size={14}
-                      color="#64748B"
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={styles.detailVal}>
-                      {item.owner?.displayName || 'Dueño GoFare'}
-                    </Text>
-                  </View>
+              {/* Socio Details */}
+              <View style={styles.detailBox}>
+                <Text style={styles.detailBoxTitle}>SOCIO RESPONSABLE</Text>
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="person-outline"
+                    size={14}
+                    color="#64748B"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.detailVal}>
+                    {item.owner?.displayName ||
+                      (item.owner?.firstName
+                        ? `${item.owner.firstName} ${item.owner.lastName || ''}`.trim()
+                        : 'No asignado')}
+                  </Text>
+                </View>
+                {item.owner?.email ? (
                   <View style={styles.detailRow}>
                     <Ionicons
                       name="mail-outline"
@@ -566,97 +679,239 @@ export default function AdminTransportUnitsScreen() {
                       color="#64748B"
                       style={{ marginRight: 6 }}
                     />
-                    <Text style={styles.detailVal}>
-                      {item.owner?.email || 'Sin correo'}
-                    </Text>
+                    <Text style={styles.detailVal}>{item.owner.email}</Text>
                   </View>
-                </View>
+                ) : null}
+              </View>
 
-                {/* Invite Code */}
-                <View style={styles.codeContainer}>
-                  <Text style={styles.codeLabel}>
-                    CÓDIGO DE INVITACIÓN CONDUCTOR:
+              {/* Desplegable de Datos Técnicos del Vehículo */}
+              <Pressable
+                style={styles.collapseToggle}
+                onPress={() => toggleExpand(item.uuid)}
+              >
+                <View style={styles.collapseToggleLeft}>
+                  <Ionicons
+                    name="car-sport-outline"
+                    size={15}
+                    color={tokens.colors.primary}
+                  />
+                  <Text style={styles.collapseToggleText}>
+                    {expandedUnits[item.uuid]
+                      ? 'Ocultar datos del vehículo'
+                      : 'Ver datos del vehículo'}
                   </Text>
-                  <View style={styles.codeBadge}>
-                    <Ionicons
-                      name="key-outline"
-                      size={14}
-                      color="#D97706"
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={styles.codeValue}>{item.inviteCode}</Text>
+                </View>
+                <Ionicons
+                  name={
+                    expandedUnits[item.uuid] ? 'chevron-up' : 'chevron-down'
+                  }
+                  size={16}
+                  color="#64748B"
+                />
+              </Pressable>
+
+              {expandedUnits[item.uuid] && (
+                <View style={styles.expandedSpecsContainer}>
+                  <View style={styles.specGrid}>
+                    <View style={styles.specItem}>
+                      <Text style={styles.specLabel}>AÑO</Text>
+                      <Text style={styles.specVal}>{item.year || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.specItem}>
+                      <Text style={styles.specLabel}>COLOR</Text>
+                      <Text style={styles.specVal}>{item.color || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.specItem}>
+                      <Text style={styles.specLabel}>CAPACIDAD</Text>
+                      <Text style={styles.specVal}>
+                        {item.capacity ? `${item.capacity} pas.` : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.specItem}>
+                      <Text style={styles.specLabel}>LÍNEA / ASOC.</Text>
+                      <Text style={styles.specVal} numberOfLines={1}>
+                        {item.civilAssociation?.name || 'Particular / Ninguna'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {item.inviteCode ? (
+                    <View style={styles.codeContainerInside}>
+                      <Text style={styles.codeLabel}>
+                        CÓDIGO DE INVITACIÓN CONDUCTOR:
+                      </Text>
+                      <View style={styles.codeBadge}>
+                        <Ionicons
+                          name="key-outline"
+                          size={14}
+                          color="#D97706"
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={styles.codeValue}>{item.inviteCode}</Text>
+                      </View>
+                    </View>
+                  ) : null}
+
+                  {/* Documentos del Vehículo */}
+                  <View style={styles.cardDocsSection}>
+                    <Text style={styles.cardDocsTitle}>
+                      DOCUMENTOS DEL VEHÍCULO
+                    </Text>
+                    {item.documents && item.documents.length > 0 ? (
+                      item.documents.map((doc: any) => {
+                        const isPending =
+                          doc.status === 'pending_review' ||
+                          doc.status === 'pending';
+                        const isVerified = doc.status === 'verified';
+                        const badgeColor = isVerified
+                          ? '#059669'
+                          : isPending
+                            ? '#D97706'
+                            : '#DC2626';
+                        const badgeBg = isVerified
+                          ? '#ECFDF5'
+                          : isPending
+                            ? '#FEF3C7'
+                            : '#FEF2F2';
+                        const statusLabel = isVerified
+                          ? 'Aprobado'
+                          : isPending
+                            ? 'Pendiente'
+                            : 'Rechazado';
+
+                        return (
+                          <Pressable
+                            key={doc.uuid}
+                            style={({ pressed }) => [
+                              styles.cardDocItem,
+                              pressed && { opacity: 0.7 },
+                            ]}
+                            onPress={() => handleManageDocument(doc)}
+                          >
+                            <View style={styles.cardDocLeft}>
+                              <Ionicons
+                                name={
+                                  doc.type === 'titulo_propiedad' ||
+                                  doc.type === 'carnet_circulacion'
+                                    ? 'document-text-outline'
+                                    : doc.type ===
+                                        'seguro_responsabilidad_civil'
+                                      ? 'shield-checkmark-outline'
+                                      : 'newspaper-outline'
+                                }
+                                size={18}
+                                color={tokens.colors.primary}
+                              />
+                              <View style={styles.cardDocMeta}>
+                                <Text style={styles.cardDocName}>
+                                  {doc.type === 'titulo_propiedad' ||
+                                  doc.type === 'carnet_circulacion'
+                                    ? 'Carnet de Circulación'
+                                    : doc.type ===
+                                        'seguro_responsabilidad_civil'
+                                      ? 'Responsabilidad Civil (RCV)'
+                                      : 'Revisión Técnica (INTT)'}
+                                </Text>
+                                <Text style={styles.cardDocNumber}>
+                                  Nº: {doc.documentNumber || 'Sin número'}
+                                </Text>
+                              </View>
+                            </View>
+                            <View
+                              style={[
+                                styles.cardDocBadge,
+                                { backgroundColor: badgeBg },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.cardDocBadgeText,
+                                  { color: badgeColor },
+                                ]}
+                              >
+                                {statusLabel}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })
+                    ) : (
+                      <Text style={styles.noDocsText}>
+                        Sin documentos adjuntos
+                      </Text>
+                    )}
                   </View>
                 </View>
+              )}
 
-                {/* Acciones */}
-                <View style={styles.cardActions}>
-                  <Pressable
-                    style={styles.actionButton}
-                    onPress={() => handleShowDetails(item)}
-                  >
-                    <Ionicons
-                      name="eye-outline"
-                      size={16}
-                      color={tokens.colors.primary}
-                    />
-                    <Text style={styles.actionButtonText}>Detalles</Text>
-                  </Pressable>
+              {/* Acciones */}
+              <View style={styles.cardActions}>
+                <Pressable
+                  style={styles.actionButton}
+                  onPress={() => handleShowDetails(item)}
+                >
+                  <Ionicons
+                    name="eye-outline"
+                    size={16}
+                    color={tokens.colors.primary}
+                  />
+                  <Text style={styles.actionButtonText}>Detalles</Text>
+                </Pressable>
 
-                  {!item.isActive && (
-                    <>
-                      <Pressable
-                        style={[styles.actionButton, styles.approveButton]}
-                        onPress={() => handleApproveUnit(item)}
-                      >
-                        <Ionicons
-                          name="checkmark-circle-outline"
-                          size={16}
-                          color="#059669"
-                        />
-                        <Text
-                          style={[styles.actionButtonText, styles.approveText]}
-                        >
-                          Aprobar
-                        </Text>
-                      </Pressable>
-
-                      <Pressable
-                        style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleRejectUnit(item)}
-                      >
-                        <Ionicons
-                          name="close-circle-outline"
-                          size={16}
-                          color="#DC2626"
-                        />
-                        <Text
-                          style={[styles.actionButtonText, styles.rejectText]}
-                        >
-                          Rechazar
-                        </Text>
-                      </Pressable>
-                    </>
-                  )}
-
-                  {item.isActive && (
+                {!item.isActive && (
+                  <>
                     <Pressable
-                      style={[styles.actionButton, styles.deactivateButton]}
-                      onPress={() => handleDeactivateUnit(item)}
+                      style={[styles.actionButton, styles.approveButton]}
+                      onPress={() => handleApproveUnit(item)}
                     >
-                      <Ionicons name="ban-outline" size={16} color="#64748B" />
+                      <Ionicons
+                        name="checkmark-circle-outline"
+                        size={16}
+                        color="#059669"
+                      />
                       <Text
-                        style={[styles.actionButtonText, styles.deactivateText]}
+                        style={[styles.actionButtonText, styles.approveText]}
                       >
-                        Desactivar
+                        Aprobar
                       </Text>
                     </Pressable>
-                  )}
-                </View>
+
+                    <Pressable
+                      style={[styles.actionButton, styles.rejectButton]}
+                      onPress={() => handleRejectUnit(item)}
+                    >
+                      <Ionicons
+                        name="close-circle-outline"
+                        size={16}
+                        color="#DC2626"
+                      />
+                      <Text
+                        style={[styles.actionButtonText, styles.rejectText]}
+                      >
+                        Rechazar
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+
+                {item.isActive && (
+                  <Pressable
+                    style={[styles.actionButton, styles.deactivateButton]}
+                    onPress={() => handleDeactivateUnit(item)}
+                  >
+                    <Ionicons name="ban-outline" size={16} color="#64748B" />
+                    <Text
+                      style={[styles.actionButtonText, styles.deactivateText]}
+                    >
+                      Desactivar
+                    </Text>
+                  </Pressable>
+                )}
               </View>
-            );
-          }}
-        />
-      )}
+            </View>
+          );
+        }}
+      />
 
       {/* Modal de Detalles de la Unidad */}
       <Modal
@@ -695,11 +950,11 @@ export default function AdminTransportUnitsScreen() {
                     <Ionicons name="bus" size={40} color="#FFFFFF" />
                   </View>
                   <Text style={styles.modalHeroPlate}>
-                    {selectedUnit.plate || selectedUnit.licensePlate}
-                  </Text>
-                  <Text style={styles.modalHeroBrand}>
                     {selectedUnit.brand || selectedUnit.vehicleMake}{' '}
                     {selectedUnit.model || selectedUnit.vehicleModel}
+                  </Text>
+                  <Text style={styles.modalHeroBrand}>
+                    {selectedUnit.plate || selectedUnit.licensePlate}
                   </Text>
 
                   {/* Badge de Estado */}
@@ -731,9 +986,7 @@ export default function AdminTransportUnitsScreen() {
                         },
                       ]}
                     >
-                      {selectedUnit.isActive
-                        ? 'Activa'
-                        : 'Pendiente por aprobar'}
+                      {selectedUnit.isActive ? 'Activa' : 'Pendiente'}
                     </Text>
                   </View>
                 </View>
@@ -791,43 +1044,6 @@ export default function AdminTransportUnitsScreen() {
                   </View>
                 </View>
 
-                {/* Conductor Asignado */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>
-                    CONDUCTOR ASIGNADO
-                  </Text>
-                  {selectedUnit.assignedDriver ? (
-                    <>
-                      <View style={styles.infoRow}>
-                        <Ionicons name="card" size={16} color="#64748B" />
-                        <Text style={styles.infoText}>
-                          {selectedUnit.assignedDriver.name}
-                        </Text>
-                      </View>
-                      <View style={styles.infoRow}>
-                        <Ionicons
-                          name="document-text"
-                          size={16}
-                          color="#64748B"
-                        />
-                        <Text style={styles.infoText}>
-                          Cédula: {selectedUnit.assignedDriver.nationalId}
-                        </Text>
-                      </View>
-                      <View style={styles.infoRow}>
-                        <Ionicons name="call" size={16} color="#64748B" />
-                        <Text style={styles.infoText}>
-                          Teléfono: {selectedUnit.assignedDriver.phone}
-                        </Text>
-                      </View>
-                    </>
-                  ) : (
-                    <Text style={styles.noDriverText}>
-                      Sin conductor asignado
-                    </Text>
-                  )}
-                </View>
-
                 {/* Documentos del Vehículo */}
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>
@@ -862,7 +1078,7 @@ export default function AdminTransportUnitsScreen() {
                           <View style={styles.docMeta}>
                             <Text style={styles.docTypeName}>
                               {doc.type === 'titulo_propiedad'
-                                ? 'Título de Propiedad'
+                                ? 'Carnet de Circulación'
                                 : doc.type === 'seguro_responsabilidad_civil'
                                   ? 'Responsabilidad Civil (RCV)'
                                   : 'Revisión Técnica (INTT)'}
@@ -929,12 +1145,7 @@ export default function AdminTransportUnitsScreen() {
               <View style={styles.modalActionRow}>
                 <Pressable
                   style={[styles.modalActionBtn, styles.modalRejectBtn]}
-                  onPress={() =>
-                    executeRejectFromModal(
-                      selectedUnit.uuid,
-                      selectedUnit.plate || selectedUnit.licensePlate,
-                    )
-                  }
+                  onPress={() => handleRejectUnit(selectedUnit)}
                 >
                   <Ionicons
                     name="close-circle-outline"
@@ -950,12 +1161,7 @@ export default function AdminTransportUnitsScreen() {
 
                 <Pressable
                   style={[styles.modalActionBtn, styles.modalApproveBtn]}
-                  onPress={() =>
-                    executeApproveFromModal(
-                      selectedUnit.uuid,
-                      selectedUnit.plate || selectedUnit.licensePlate,
-                    )
-                  }
+                  onPress={() => handleApproveUnit(selectedUnit)}
                 >
                   <Ionicons
                     name="checkmark-circle-outline"
@@ -1039,7 +1245,11 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 40,
+    paddingBottom: 110,
+  },
+  listContentEmpty: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   unitCard: {
     backgroundColor: '#FFFFFF',
@@ -1120,6 +1330,127 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#334155',
+  },
+  collapseToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginTop: 10,
+  },
+  collapseToggleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  collapseToggleText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+    marginLeft: 8,
+  },
+  expandedSpecsContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  specGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  specItem: {
+    width: '48%',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  specLabel: {
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#94A3B8',
+    letterSpacing: 0.5,
+  },
+  specVal: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+    marginTop: 2,
+  },
+  codeContainerInside: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 10,
+  },
+  cardDocsSection: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingTop: 10,
+  },
+  cardDocsTitle: {
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#94A3B8',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+  },
+  cardDocItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 6,
+  },
+  cardDocLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  cardDocMeta: {
+    marginLeft: 8,
+    flex: 1,
+  },
+  cardDocName: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E293B',
+  },
+  cardDocNumber: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  cardDocBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 7,
+    borderRadius: 6,
+  },
+  cardDocBadgeText: {
+    fontSize: 9,
+    fontFamily: tokens.typography.fontFamily.bold,
+  },
+  noDocsText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+    paddingVertical: 4,
   },
   codeContainer: {
     marginTop: 14,
