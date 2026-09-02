@@ -266,9 +266,7 @@ Tu código de invitación único es: *${code}*`;
   });
 
   if (loading) {
-    return (
-      <AppLoadingScreen message="Cargando directorio de conductores..." />
-    );
+    return <AppLoadingScreen message="Cargando directorio de conductores..." />;
   }
 
   return (
@@ -414,7 +412,9 @@ Tu código de invitación único es: *${code}*`;
                     <Text style={styles.driverName} numberOfLines={1}>
                       {item.name}
                     </Text>
-                    <Text style={styles.driverSubRole}>Conductor Registrado</Text>
+                    <Text style={styles.driverSubRole}>
+                      Conductor Registrado
+                    </Text>
                   </View>
                   <View style={styles.statusPill}>
                     <View style={styles.activeDot} />
@@ -443,7 +443,11 @@ Tu código de invitación único es: *${code}*`;
                   {item.email ? (
                     <View style={styles.metaRow}>
                       <View style={styles.metaIconBox}>
-                        <Ionicons name="mail-outline" size={13} color="#64748B" />
+                        <Ionicons
+                          name="mail-outline"
+                          size={13}
+                          color="#64748B"
+                        />
                       </View>
                       <Text style={styles.metaLabel}>Correo:</Text>
                       <Text
@@ -461,7 +465,9 @@ Tu código de invitación único es: *${code}*`;
                 <View
                   style={[
                     styles.assignmentBanner,
-                    assignment ? styles.bannerAssigned : styles.bannerUnassigned,
+                    assignment
+                      ? styles.bannerAssigned
+                      : styles.bannerUnassigned,
                   ]}
                 >
                   <Ionicons
@@ -530,11 +536,11 @@ Tu código de invitación único es: *${code}*`;
 
             const isUsed = Boolean(
               item.used ||
-              item.usedAt ||
-              item.used_at ||
-              item.driver ||
-              item.driverId ||
-              item.driver_id,
+                item.usedAt ||
+                item.used_at ||
+                item.driver ||
+                item.driverId ||
+                item.driver_id,
             );
             const isRevoked = Boolean(item.revokedAt || item.revoked_at);
 
@@ -548,9 +554,7 @@ Tu código de invitación único es: *${code}*`;
                     <Text style={styles.driverName} numberOfLines={1}>
                       {item.invitedPhone}
                     </Text>
-                    <Text style={styles.driverSubRole}>
-                      Enviado: {dateStr}
-                    </Text>
+                    <Text style={styles.driverSubRole}>Enviado: {dateStr}</Text>
                   </View>
 
                   {isUsed ? (

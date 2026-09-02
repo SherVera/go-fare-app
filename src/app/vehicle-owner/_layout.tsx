@@ -28,8 +28,7 @@ export default function VehicleOwnerLayout() {
       }
 
       const ownerObj =
-        (profile as any)?.transportOwner ||
-        (profile as any)?.transport_owner;
+        (profile as any)?.transportOwner || (profile as any)?.transport_owner;
       const status =
         ownerObj?.status ||
         (profile as any)?.ownerStatus ||

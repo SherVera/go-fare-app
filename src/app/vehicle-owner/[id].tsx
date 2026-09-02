@@ -92,35 +92,38 @@ export default function VehicleDetailsScreen() {
   }, []);
 
   // Cargar datos del vehículo y documentos desde el backend
-  const loadVehicle = useCallback(async (isRefresh = false) => {
-    try {
-      if (!isRefresh) setLoading(true);
-      if (!id) return;
-      const [found, allDocs] = await Promise.all([
-        getVehicleDetail(id),
-        getAllDocuments().catch(() => []),
-      ]);
-      if (found) {
-        const vehicleDocs = (Array.isArray(allDocs) ? allDocs : []).filter(
-          (d: any) =>
-            d.vehicle?.uuid === found.uuid ||
-            d.vehicleUuid === found.uuid ||
-            d.vehicleId === found.uuid ||
-            (d.vehicle && d.vehicle.plate === found.licensePlate),
-        );
-        setVehicle({
-          ...found,
-          documents:
-            vehicleDocs.length > 0 ? vehicleDocs : found.documents || [],
-        });
+  const loadVehicle = useCallback(
+    async (isRefresh = false) => {
+      try {
+        if (!isRefresh) setLoading(true);
+        if (!id) return;
+        const [found, allDocs] = await Promise.all([
+          getVehicleDetail(id),
+          getAllDocuments().catch(() => []),
+        ]);
+        if (found) {
+          const vehicleDocs = (Array.isArray(allDocs) ? allDocs : []).filter(
+            (d: any) =>
+              d.vehicle?.uuid === found.uuid ||
+              d.vehicleUuid === found.uuid ||
+              d.vehicleId === found.uuid ||
+              (d.vehicle && d.vehicle.plate === found.licensePlate),
+          );
+          setVehicle({
+            ...found,
+            documents:
+              vehicleDocs.length > 0 ? vehicleDocs : found.documents || [],
+          });
+        }
+      } catch (err) {
+        console.warn('[Details] Error loading vehicle details:', err);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    } catch (err) {
-      console.warn('[Details] Error loading vehicle details:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [id]);
+    },
+    [id],
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -267,9 +270,7 @@ export default function VehicleDetailsScreen() {
   };
 
   if (loading && !refreshing) {
-    return (
-      <AppLoadingScreen message="Cargando detalles de la unidad..." />
-    );
+    return <AppLoadingScreen message="Cargando detalles de la unidad..." />;
   }
 
   if (!vehicle) {
@@ -375,7 +376,9 @@ export default function VehicleDetailsScreen() {
             <View style={styles.specBox}>
               <Text style={styles.specLabel}>CAPACIDAD</Text>
               <Text style={styles.specValue}>
-                {vehicle.capacity ? `${vehicle.capacity} pasajeros` : 'No especificada'}
+                {vehicle.capacity
+                  ? `${vehicle.capacity} pasajeros`
+                  : 'No especificada'}
               </Text>
             </View>
           </View>
@@ -456,7 +459,9 @@ export default function VehicleDetailsScreen() {
 
         {/* ── ALERTA DE DOCUMENTOS RECHAZADOS ── */}
         {(isRejected ||
-          (vehicle.documents || []).some((d: any) => d.status === 'rejected')) && (
+          (vehicle.documents || []).some(
+            (d: any) => d.status === 'rejected',
+          )) && (
           <View style={styles.rejectedBanner}>
             <View style={styles.rejectedHeader}>
               <Ionicons
@@ -511,10 +516,7 @@ export default function VehicleDetailsScreen() {
                   : 'Rechazado';
 
               return (
-                <View
-                  key={doc.uuid || `doc-${idx}`}
-                  style={styles.docItemCard}
-                >
+                <View key={doc.uuid || `doc-${idx}`} style={styles.docItemCard}>
                   <View style={styles.docItemMainRow}>
                     <View style={styles.docItemLeft}>
                       <View style={styles.docIconCircle}>

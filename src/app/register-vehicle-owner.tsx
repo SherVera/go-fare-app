@@ -317,10 +317,10 @@ export default function RegisterVehicleOwnerScreen() {
                 Tu solicitud de registro como Dueño de Vehículo ha sido enviada
                 con éxito.
                 {'\n\n'}
-                El administrador del sistema revisará y verificará tus datos
-                . Una vez aprobada la solicitud, se habilitará tu
-                cuenta y recibirás tus credenciales para acceder a tu panel de
-                dueño de vehículo.
+                El administrador del sistema revisará y verificará tus datos .
+                Una vez aprobada la solicitud, se habilitará tu cuenta y
+                recibirás tus credenciales para acceder a tu panel de dueño de
+                vehículo.
               </Text>
             </View>
 
@@ -339,8 +339,6 @@ export default function RegisterVehicleOwnerScreen() {
                 style={{ marginLeft: 10 }}
               />
             </Pressable>
-
-            
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

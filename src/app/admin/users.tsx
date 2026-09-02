@@ -257,9 +257,7 @@ export default function AdminUsersScreen() {
   };
 
   if (loading && !refreshing) {
-    return (
-      <AppLoadingScreen message="Cargando usuarios registrados..." />
-    );
+    return <AppLoadingScreen message="Cargando usuarios registrados..." />;
   }
 
   return (
@@ -354,95 +352,93 @@ export default function AdminUsersScreen() {
           </View>
         }
         renderItem={({ item }) => {
-            const roles = item.roles || [];
-            const isOwner = roles.some(
-              (r: any) => r.name === 'transport_owner',
-            );
-            const isDriver = roles.some((r: any) => r.name === 'driver');
-            const isCivil = roles.some(
-              (r: any) => r.name === 'civil_association',
-            );
-            const roleText = isOwner
-              ? 'Socio'
-              : isDriver
-                ? 'Conductor'
-                : isCivil
-                  ? 'Asoc. Civil'
-                  : 'Pasajero';
-            const roleColor = isOwner
-              ? '#8B5CF6'
-              : isDriver
-                ? '#10B981'
-                : isCivil
-                  ? '#F59E0B'
-                  : '#3B82F6';
+          const roles = item.roles || [];
+          const isOwner = roles.some((r: any) => r.name === 'transport_owner');
+          const isDriver = roles.some((r: any) => r.name === 'driver');
+          const isCivil = roles.some(
+            (r: any) => r.name === 'civil_association',
+          );
+          const roleText = isOwner
+            ? 'Socio'
+            : isDriver
+              ? 'Conductor'
+              : isCivil
+                ? 'Asoc. Civil'
+                : 'Pasajero';
+          const roleColor = isOwner
+            ? '#8B5CF6'
+            : isDriver
+              ? '#10B981'
+              : isCivil
+                ? '#F59E0B'
+                : '#3B82F6';
 
-            return (
-              <Pressable
-                style={styles.userCard}
-                onPress={() => handleUserSelect(item)}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {(item.displayName || item.firstName || 'U')
-                        .charAt(0)
-                        .toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.userMeta}>
-                    <Text style={styles.userName} numberOfLines={1}>
-                      {item.displayName ||
-                        `${item.firstName || ''} ${item.lastName || ''}`}
-                    </Text>
-                    <Text style={styles.userEmail} numberOfLines={1}>
-                      {item.email || 'Sin correo electrónico'}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.roleBadge,
-                      { backgroundColor: `${roleColor}12` },
-                    ]}
-                  >
-                    <Text style={[styles.roleBadgeText, { color: roleColor }]}>
-                      {roleText}
-                    </Text>
-                  </View>
+          return (
+            <Pressable
+              style={styles.userCard}
+              onPress={() => handleUserSelect(item)}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {(item.displayName || item.firstName || 'U')
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Text>
                 </View>
+                <View style={styles.userMeta}>
+                  <Text style={styles.userName} numberOfLines={1}>
+                    {item.displayName ||
+                      `${item.firstName || ''} ${item.lastName || ''}`}
+                  </Text>
+                  <Text style={styles.userEmail} numberOfLines={1}>
+                    {item.email || 'Sin correo electrónico'}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.roleBadge,
+                    { backgroundColor: `${roleColor}12` },
+                  ]}
+                >
+                  <Text style={[styles.roleBadgeText, { color: roleColor }]}>
+                    {roleText}
+                  </Text>
+                </View>
+              </View>
 
-                <View style={styles.cardBody}>
-                  {item.nationalId && (
-                    <View style={styles.bodyDetail}>
-                      <Ionicons
-                        name="card-outline"
-                        size={14}
-                        color="#64748B"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.detailText}>
-                        Cédula: {item.nationalId}
-                      </Text>
-                    </View>
-                  )}
-                  {item.phoneNumber && (
-                    <View style={styles.bodyDetail}>
-                      <Ionicons
-                        name="call-outline"
-                        size={14}
-                        color="#64748B"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.detailText}>
-                        Teléfono: {item.phoneNumber}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </Pressable>
-            );
-          }}
-        />
+              <View style={styles.cardBody}>
+                {item.nationalId && (
+                  <View style={styles.bodyDetail}>
+                    <Ionicons
+                      name="card-outline"
+                      size={14}
+                      color="#64748B"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.detailText}>
+                      Cédula: {item.nationalId}
+                    </Text>
+                  </View>
+                )}
+                {item.phoneNumber && (
+                  <View style={styles.bodyDetail}>
+                    <Ionicons
+                      name="call-outline"
+                      size={14}
+                      color="#64748B"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.detailText}>
+                      Teléfono: {item.phoneNumber}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </Pressable>
+          );
+        }}
+      />
 
       {/* Modal de Acciones */}
       <Modal

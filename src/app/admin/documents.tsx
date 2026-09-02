@@ -120,7 +120,9 @@ export default function AdminDocumentsScreen() {
   const [category, setCategory] = useState<'vehicles' | 'users'>('vehicles');
 
   // Estado del filtro: 'pending' | 'verified' | 'rejected'
-  const [activeTab, setActiveTab] = useState<'pending' | 'verified' | 'rejected'>('pending');
+  const [activeTab, setActiveTab] = useState<
+    'pending' | 'verified' | 'rejected'
+  >('pending');
 
   // Estado para el modal de rechazo
   const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
@@ -134,7 +136,10 @@ export default function AdminDocumentsScreen() {
       setDocuments(allDocs);
     } catch (err) {
       console.warn('[AdminDocs] Error loading documents:', err);
-      Alert.alert('Error', 'No se pudieron sincronizar los documentos legales.');
+      Alert.alert(
+        'Error',
+        'No se pudieron sincronizar los documentos legales.',
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -174,7 +179,11 @@ export default function AdminDocumentsScreen() {
     filteredByStatus
       .filter((d) => Boolean(d.vehicle || isVehicleDocType(d.type)))
       .forEach((d) => {
-        const vKey = d.vehicle?.uuid || d.vehicle?.plate || d.vehicleId || `veh-owner-${d.owner?.uuid || 'unassigned'}`;
+        const vKey =
+          d.vehicle?.uuid ||
+          d.vehicle?.plate ||
+          d.vehicleId ||
+          `veh-owner-${d.owner?.uuid || 'unassigned'}`;
         if (!map.has(vKey)) {
           map.set(vKey, {
             key: vKey,
@@ -185,7 +194,10 @@ export default function AdminDocumentsScreen() {
               year: d.vehicle?.year,
               color: d.vehicle?.color,
             },
-            owner: d.owner || { displayName: 'Socio GoFare', email: 'Sin correo' },
+            owner: d.owner || {
+              displayName: 'Socio GoFare',
+              email: 'Sin correo',
+            },
             documents: [],
           });
         }
@@ -229,7 +241,9 @@ export default function AdminDocumentsScreen() {
     };
     const targetStatus = statusMap[activeTab];
     return documents.filter(
-      (d) => (Boolean(d.vehicle) || isVehicleDocType(d.type)) && d.status === targetStatus,
+      (d) =>
+        (Boolean(d.vehicle) || isVehicleDocType(d.type)) &&
+        d.status === targetStatus,
     ).length;
   }, [documents, activeTab]);
 
@@ -241,7 +255,8 @@ export default function AdminDocumentsScreen() {
     };
     const targetStatus = statusMap[activeTab];
     return documents.filter(
-      (d) => !d.vehicle && !isVehicleDocType(d.type) && d.status === targetStatus,
+      (d) =>
+        !d.vehicle && !isVehicleDocType(d.type) && d.status === targetStatus,
     ).length;
   }, [documents, activeTab]);
 
@@ -257,11 +272,17 @@ export default function AdminDocumentsScreen() {
             setLoading(true);
             try {
               await verifyDocument(doc.uuid);
-              Alert.alert('Éxito', 'El documento ha sido verificado y aprobado.');
+              Alert.alert(
+                'Éxito',
+                'El documento ha sido verificado y aprobado.',
+              );
               await fetchDocuments(true);
             } catch (err: any) {
               console.warn('[AdminDocs] Error verifying doc:', err);
-              Alert.alert('Error', err.message || 'No se pudo aprobar el documento.');
+              Alert.alert(
+                'Error',
+                err.message || 'No se pudo aprobar el documento.',
+              );
             } finally {
               setLoading(false);
             }
@@ -281,7 +302,10 @@ export default function AdminDocumentsScreen() {
     const finalReason = (reasonOverride || rejectReason).trim();
     if (!selectedDoc) return;
     if (finalReason.length < 3) {
-      Alert.alert('Advertencia', 'Por favor selecciona o ingresa un motivo de rechazo.');
+      Alert.alert(
+        'Advertencia',
+        'Por favor selecciona o ingresa un motivo de rechazo.',
+      );
       return;
     }
 
@@ -300,9 +324,7 @@ export default function AdminDocumentsScreen() {
   };
 
   if (loading && !refreshing) {
-    return (
-      <AppLoadingScreen message="Cargando recaudos y documentos..." />
-    );
+    return <AppLoadingScreen message="Cargando recaudos y documentos..." />;
   }
 
   return (
@@ -474,170 +496,177 @@ export default function AdminDocumentsScreen() {
             </View>
           }
           renderItem={({ item }) => {
-              return (
-                <View style={styles.groupCard}>
-                  {/* Encabezado de la Unidad */}
-                  <View style={styles.groupHeader}>
-                    <View style={styles.groupHeaderIcon}>
-                      <Ionicons name="bus" size={20} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.groupHeaderMeta}>
-                      <Text style={styles.groupHeaderTitle}>
-                        {item.vehicle?.brand || item.vehicle?.model
-                          ? `${item.vehicle.brand || ''} ${item.vehicle.model || ''}`.trim()
-                          : 'Unidad de Transporte'}
-                      </Text>
-                      <Text style={styles.groupHeaderSubtitle}>
-                        {item.vehicle?.plate || 'Sin Placa'}
-                      </Text>
-                    </View>
-                    <View style={styles.docCountPill}>
-                      <Text style={styles.docCountPillText}>
-                        {item.documents.length}{' '}
-                        {item.documents.length === 1 ? 'documento' : 'documentos'}
-                      </Text>
-                    </View>
+            return (
+              <View style={styles.groupCard}>
+                {/* Encabezado de la Unidad */}
+                <View style={styles.groupHeader}>
+                  <View style={styles.groupHeaderIcon}>
+                    <Ionicons name="bus" size={20} color="#FFFFFF" />
                   </View>
-
-                  {/* Socio Responsable */}
-                  <View style={styles.ownerRowInside}>
-                    <Ionicons
-                      name="person-circle-outline"
-                      size={16}
-                      color="#64748B"
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={styles.ownerRowText} numberOfLines={1}>
-                      Propietario:{' '}
-                      <Text style={{ fontFamily: tokens.typography.fontFamily.bold, color: '#1E293B' }}>
-                        {item.owner?.displayName || 'Socio GoFare'}
-                      </Text>{' '}
-                      ({item.owner?.email || 'Sin correo'})
+                  <View style={styles.groupHeaderMeta}>
+                    <Text style={styles.groupHeaderTitle}>
+                      {item.vehicle?.brand || item.vehicle?.model
+                        ? `${item.vehicle.brand || ''} ${item.vehicle.model || ''}`.trim()
+                        : 'Unidad de Transporte'}
+                    </Text>
+                    <Text style={styles.groupHeaderSubtitle}>
+                      {item.vehicle?.plate || 'Sin Placa'}
                     </Text>
                   </View>
-
-                  <View style={styles.divider} />
-
-                  {/* Lista de Documentos de este Vehículo */}
-                  <View style={styles.docsListBlock}>
-                    <Text style={styles.docsSectionMiniTitle}>
-                      DOCUMENTOS DE LA UNIDAD
+                  <View style={styles.docCountPill}>
+                    <Text style={styles.docCountPillText}>
+                      {item.documents.length}{' '}
+                      {item.documents.length === 1 ? 'documento' : 'documentos'}
                     </Text>
-                    {item.documents.map((doc) => {
-                      const isVerified = doc.status === 'verified';
-                      const isRejected = doc.status === 'rejected';
-                      const isPending = doc.status === 'pending_review' || doc.status === 'pending';
-
-                      const dateStr = doc.createdAt
-                        ? new Date(doc.createdAt).toLocaleDateString('es-ES', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })
-                        : '';
-
-                      return (
-                        <View key={doc.uuid} style={styles.docItemInsideCard}>
-                          <View style={styles.docItemMain}>
-                            <View style={styles.docItemIconCircle}>
-                              <Ionicons
-                                name={getDocTypeIcon(doc.type)}
-                                size={20}
-                                color={tokens.colors.primary}
-                              />
-                            </View>
-                            <View style={styles.docItemMeta}>
-                              <Text style={styles.docItemName}>
-                                {getDocTypeLabel(doc.type)}
-                              </Text>
-                              <Text style={styles.docItemNumber}>
-                                Nro: {doc.documentNumber || 'Sin número'}
-                              </Text>
-                              {dateStr ? (
-                                <Text style={styles.docItemDate}>
-                                  Registrado: {dateStr}
-                                </Text>
-                              ) : null}
-                            </View>
-
-                            {/* Badge de Estado */}
-                            <View
-                              style={[
-                                styles.statusBadgeMini,
-                                isVerified && styles.badgeVerified,
-                                isRejected && styles.badgeRejected,
-                                isPending && styles.badgePending,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.statusBadgeMiniText,
-                                  isVerified && { color: '#059669' },
-                                  isRejected && { color: '#DC2626' },
-                                  isPending && { color: '#D97706' },
-                                ]}
-                              >
-                                {isVerified
-                                  ? 'Aprobado'
-                                  : isRejected
-                                    ? 'Rechazado'
-                                    : 'Pendiente'}
-                              </Text>
-                            </View>
-                          </View>
-
-                          {/* Motivo de Rechazo si aplica */}
-                          {isRejected && doc.rejectionReason && (
-                            <View style={styles.rejectionReasonCard}>
-                              <Text style={styles.rejectionReasonTitle}>
-                                MOTIVO DE RECHAZO:
-                              </Text>
-                              <Text style={styles.rejectionReasonText}>
-                                {doc.rejectionReason}
-                              </Text>
-                            </View>
-                          )}
-
-                          {/* Botones de Acción */}
-                          {isPending && (
-                            <View style={styles.itemActionRow}>
-                              <Pressable
-                                style={styles.itemRejectBtn}
-                                onPress={() => handleRejectInit(doc)}
-                              >
-                                <Ionicons
-                                  name="close-circle-outline"
-                                  size={16}
-                                  color="#EF4444"
-                                />
-                                <Text style={styles.itemRejectBtnText}>
-                                  Rechazar
-                                </Text>
-                              </Pressable>
-
-                              <Pressable
-                                style={styles.itemApproveBtn}
-                                onPress={() => handleApprove(doc)}
-                              >
-                                <Ionicons
-                                  name="checkmark-circle-outline"
-                                  size={16}
-                                  color="#FFFFFF"
-                                />
-                                <Text style={styles.itemApproveBtnText}>
-                                  Aprobar
-                                </Text>
-                              </Pressable>
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })}
                   </View>
                 </View>
-              );
-            }}
-          />
+
+                {/* Socio Responsable */}
+                <View style={styles.ownerRowInside}>
+                  <Ionicons
+                    name="person-circle-outline"
+                    size={16}
+                    color="#64748B"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.ownerRowText} numberOfLines={1}>
+                    Propietario:{' '}
+                    <Text
+                      style={{
+                        fontFamily: tokens.typography.fontFamily.bold,
+                        color: '#1E293B',
+                      }}
+                    >
+                      {item.owner?.displayName || 'Socio GoFare'}
+                    </Text>{' '}
+                    ({item.owner?.email || 'Sin correo'})
+                  </Text>
+                </View>
+
+                <View style={styles.divider} />
+
+                {/* Lista de Documentos de este Vehículo */}
+                <View style={styles.docsListBlock}>
+                  <Text style={styles.docsSectionMiniTitle}>
+                    DOCUMENTOS DE LA UNIDAD
+                  </Text>
+                  {item.documents.map((doc) => {
+                    const isVerified = doc.status === 'verified';
+                    const isRejected = doc.status === 'rejected';
+                    const isPending =
+                      doc.status === 'pending_review' ||
+                      doc.status === 'pending';
+
+                    const dateStr = doc.createdAt
+                      ? new Date(doc.createdAt).toLocaleDateString('es-ES', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : '';
+
+                    return (
+                      <View key={doc.uuid} style={styles.docItemInsideCard}>
+                        <View style={styles.docItemMain}>
+                          <View style={styles.docItemIconCircle}>
+                            <Ionicons
+                              name={getDocTypeIcon(doc.type)}
+                              size={20}
+                              color={tokens.colors.primary}
+                            />
+                          </View>
+                          <View style={styles.docItemMeta}>
+                            <Text style={styles.docItemName}>
+                              {getDocTypeLabel(doc.type)}
+                            </Text>
+                            <Text style={styles.docItemNumber}>
+                              Nro: {doc.documentNumber || 'Sin número'}
+                            </Text>
+                            {dateStr ? (
+                              <Text style={styles.docItemDate}>
+                                Registrado: {dateStr}
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          {/* Badge de Estado */}
+                          <View
+                            style={[
+                              styles.statusBadgeMini,
+                              isVerified && styles.badgeVerified,
+                              isRejected && styles.badgeRejected,
+                              isPending && styles.badgePending,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.statusBadgeMiniText,
+                                isVerified && { color: '#059669' },
+                                isRejected && { color: '#DC2626' },
+                                isPending && { color: '#D97706' },
+                              ]}
+                            >
+                              {isVerified
+                                ? 'Aprobado'
+                                : isRejected
+                                  ? 'Rechazado'
+                                  : 'Pendiente'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Motivo de Rechazo si aplica */}
+                        {isRejected && doc.rejectionReason && (
+                          <View style={styles.rejectionReasonCard}>
+                            <Text style={styles.rejectionReasonTitle}>
+                              MOTIVO DE RECHAZO:
+                            </Text>
+                            <Text style={styles.rejectionReasonText}>
+                              {doc.rejectionReason}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Botones de Acción */}
+                        {isPending && (
+                          <View style={styles.itemActionRow}>
+                            <Pressable
+                              style={styles.itemRejectBtn}
+                              onPress={() => handleRejectInit(doc)}
+                            >
+                              <Ionicons
+                                name="close-circle-outline"
+                                size={16}
+                                color="#EF4444"
+                              />
+                              <Text style={styles.itemRejectBtnText}>
+                                Rechazar
+                              </Text>
+                            </Pressable>
+
+                            <Pressable
+                              style={styles.itemApproveBtn}
+                              onPress={() => handleApprove(doc)}
+                            >
+                              <Ionicons
+                                name="checkmark-circle-outline"
+                                size={16}
+                                color="#FFFFFF"
+                              />
+                              <Text style={styles.itemApproveBtnText}>
+                                Aprobar
+                              </Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          }}
+        />
       ) : (
         /* ── CATEGORÍA: DOCUMENTOS DE USUARIO ── */
         <FlatList
@@ -675,151 +704,160 @@ export default function AdminDocumentsScreen() {
             </View>
           }
           renderItem={({ item }) => {
-              return (
-                <View style={styles.groupCard}>
-                  {/* Encabezado del Usuario */}
-                  <View style={styles.groupHeader}>
-                    <View style={[styles.groupHeaderIcon, { backgroundColor: '#3B82F6' }]}>
-                      <Ionicons name="person" size={20} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.groupHeaderMeta}>
-                      <Text style={styles.groupHeaderTitle}>
-                        {item.owner?.displayName || 'Usuario GoFare'}
-                      </Text>
-                      <Text style={styles.groupHeaderSubtitle}>
-                        {item.owner?.email || item.owner?.phoneNumber || 'Conductor / Socio'}
-                      </Text>
-                    </View>
-                    <View style={styles.docCountPill}>
-                      <Text style={styles.docCountPillText}>
-                        {item.documents.length}{' '}
-                        {item.documents.length === 1 ? 'documento' : 'documentos'}
-                      </Text>
-                    </View>
+            return (
+              <View style={styles.groupCard}>
+                {/* Encabezado del Usuario */}
+                <View style={styles.groupHeader}>
+                  <View
+                    style={[
+                      styles.groupHeaderIcon,
+                      { backgroundColor: '#3B82F6' },
+                    ]}
+                  >
+                    <Ionicons name="person" size={20} color="#FFFFFF" />
                   </View>
-
-                  <View style={styles.divider} />
-
-                  {/* Lista de Documentos del Usuario */}
-                  <View style={styles.docsListBlock}>
-                    <Text style={styles.docsSectionMiniTitle}>
-                      DOCUMENTOS PERSONALES
+                  <View style={styles.groupHeaderMeta}>
+                    <Text style={styles.groupHeaderTitle}>
+                      {item.owner?.displayName || 'Usuario GoFare'}
                     </Text>
-                    {item.documents.map((doc) => {
-                      const isVerified = doc.status === 'verified';
-                      const isRejected = doc.status === 'rejected';
-                      const isPending = doc.status === 'pending_review' || doc.status === 'pending';
-
-                      const dateStr = doc.createdAt
-                        ? new Date(doc.createdAt).toLocaleDateString('es-ES', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })
-                        : '';
-
-                      return (
-                        <View key={doc.uuid} style={styles.docItemInsideCard}>
-                          <View style={styles.docItemMain}>
-                            <View style={styles.docItemIconCircle}>
-                              <Ionicons
-                                name={getDocTypeIcon(doc.type)}
-                                size={20}
-                                color={tokens.colors.primary}
-                              />
-                            </View>
-                            <View style={styles.docItemMeta}>
-                              <Text style={styles.docItemName}>
-                                {getDocTypeLabel(doc.type)}
-                              </Text>
-                              <Text style={styles.docItemNumber}>
-                                Nro: {doc.documentNumber || 'Sin número'}
-                              </Text>
-                              {dateStr ? (
-                                <Text style={styles.docItemDate}>
-                                  Registrado: {dateStr}
-                                </Text>
-                              ) : null}
-                            </View>
-
-                            {/* Badge de Estado */}
-                            <View
-                              style={[
-                                styles.statusBadgeMini,
-                                isVerified && styles.badgeVerified,
-                                isRejected && styles.badgeRejected,
-                                isPending && styles.badgePending,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.statusBadgeMiniText,
-                                  isVerified && { color: '#059669' },
-                                  isRejected && { color: '#DC2626' },
-                                  isPending && { color: '#D97706' },
-                                ]}
-                              >
-                                {isVerified
-                                  ? 'Aprobado'
-                                  : isRejected
-                                    ? 'Rechazado'
-                                    : 'Pendiente'}
-                              </Text>
-                            </View>
-                          </View>
-
-                          {/* Motivo de Rechazo si aplica */}
-                          {isRejected && doc.rejectionReason && (
-                            <View style={styles.rejectionReasonCard}>
-                              <Text style={styles.rejectionReasonTitle}>
-                                MOTIVO DE RECHAZO:
-                              </Text>
-                              <Text style={styles.rejectionReasonText}>
-                                {doc.rejectionReason}
-                              </Text>
-                            </View>
-                          )}
-
-                          {/* Botones de Acción */}
-                          {isPending && (
-                            <View style={styles.itemActionRow}>
-                              <Pressable
-                                style={styles.itemRejectBtn}
-                                onPress={() => handleRejectInit(doc)}
-                              >
-                                <Ionicons
-                                  name="close-circle-outline"
-                                  size={16}
-                                  color="#EF4444"
-                                />
-                                <Text style={styles.itemRejectBtnText}>
-                                  Rechazar
-                                </Text>
-                              </Pressable>
-
-                              <Pressable
-                                style={styles.itemApproveBtn}
-                                onPress={() => handleApprove(doc)}
-                              >
-                                <Ionicons
-                                  name="checkmark-circle-outline"
-                                  size={16}
-                                  color="#FFFFFF"
-                                />
-                                <Text style={styles.itemApproveBtnText}>
-                                  Aprobar
-                                </Text>
-                              </Pressable>
-                            </View>
-                          )}
-                        </View>
-                      );
-                    })}
+                    <Text style={styles.groupHeaderSubtitle}>
+                      {item.owner?.email ||
+                        item.owner?.phoneNumber ||
+                        'Conductor / Socio'}
+                    </Text>
+                  </View>
+                  <View style={styles.docCountPill}>
+                    <Text style={styles.docCountPillText}>
+                      {item.documents.length}{' '}
+                      {item.documents.length === 1 ? 'documento' : 'documentos'}
+                    </Text>
                   </View>
                 </View>
-              );
-            }}
-          />
+
+                <View style={styles.divider} />
+
+                {/* Lista de Documentos del Usuario */}
+                <View style={styles.docsListBlock}>
+                  <Text style={styles.docsSectionMiniTitle}>
+                    DOCUMENTOS PERSONALES
+                  </Text>
+                  {item.documents.map((doc) => {
+                    const isVerified = doc.status === 'verified';
+                    const isRejected = doc.status === 'rejected';
+                    const isPending =
+                      doc.status === 'pending_review' ||
+                      doc.status === 'pending';
+
+                    const dateStr = doc.createdAt
+                      ? new Date(doc.createdAt).toLocaleDateString('es-ES', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : '';
+
+                    return (
+                      <View key={doc.uuid} style={styles.docItemInsideCard}>
+                        <View style={styles.docItemMain}>
+                          <View style={styles.docItemIconCircle}>
+                            <Ionicons
+                              name={getDocTypeIcon(doc.type)}
+                              size={20}
+                              color={tokens.colors.primary}
+                            />
+                          </View>
+                          <View style={styles.docItemMeta}>
+                            <Text style={styles.docItemName}>
+                              {getDocTypeLabel(doc.type)}
+                            </Text>
+                            <Text style={styles.docItemNumber}>
+                              Nro: {doc.documentNumber || 'Sin número'}
+                            </Text>
+                            {dateStr ? (
+                              <Text style={styles.docItemDate}>
+                                Registrado: {dateStr}
+                              </Text>
+                            ) : null}
+                          </View>
+
+                          {/* Badge de Estado */}
+                          <View
+                            style={[
+                              styles.statusBadgeMini,
+                              isVerified && styles.badgeVerified,
+                              isRejected && styles.badgeRejected,
+                              isPending && styles.badgePending,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.statusBadgeMiniText,
+                                isVerified && { color: '#059669' },
+                                isRejected && { color: '#DC2626' },
+                                isPending && { color: '#D97706' },
+                              ]}
+                            >
+                              {isVerified
+                                ? 'Aprobado'
+                                : isRejected
+                                  ? 'Rechazado'
+                                  : 'Pendiente'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Motivo de Rechazo si aplica */}
+                        {isRejected && doc.rejectionReason && (
+                          <View style={styles.rejectionReasonCard}>
+                            <Text style={styles.rejectionReasonTitle}>
+                              MOTIVO DE RECHAZO:
+                            </Text>
+                            <Text style={styles.rejectionReasonText}>
+                              {doc.rejectionReason}
+                            </Text>
+                          </View>
+                        )}
+
+                        {/* Botones de Acción */}
+                        {isPending && (
+                          <View style={styles.itemActionRow}>
+                            <Pressable
+                              style={styles.itemRejectBtn}
+                              onPress={() => handleRejectInit(doc)}
+                            >
+                              <Ionicons
+                                name="close-circle-outline"
+                                size={16}
+                                color="#EF4444"
+                              />
+                              <Text style={styles.itemRejectBtnText}>
+                                Rechazar
+                              </Text>
+                            </Pressable>
+
+                            <Pressable
+                              style={styles.itemApproveBtn}
+                              onPress={() => handleApprove(doc)}
+                            >
+                              <Ionicons
+                                name="checkmark-circle-outline"
+                                size={16}
+                                color="#FFFFFF"
+                              />
+                              <Text style={styles.itemApproveBtnText}>
+                                Aprobar
+                              </Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          }}
+        />
       )}
 
       {/* ── 4. MODAL DE RECHAZO CON MOTIVOS RÁPIDOS ── */}
@@ -843,7 +881,8 @@ export default function AdminDocumentsScreen() {
             </View>
 
             <Text style={styles.modalSubtitle}>
-              Selecciona o escribe el motivo por el cual rechazas este documento:
+              Selecciona o escribe el motivo por el cual rechazas este
+              documento:
             </Text>
 
             {/* Motivos Rápidos */}
@@ -867,7 +906,9 @@ export default function AdminDocumentsScreen() {
               <Pressable
                 style={styles.quickReasonChip}
                 onPress={() =>
-                  handleRejectConfirm('El documento ha expirado o no está vigente.')
+                  handleRejectConfirm(
+                    'El documento ha expirado o no está vigente.',
+                  )
                 }
               >
                 <Text style={styles.quickReasonText}>Documento Vencido</Text>
@@ -896,7 +937,9 @@ export default function AdminDocumentsScreen() {
                 style={styles.modalRejectConfirmBtn}
                 onPress={() => handleRejectConfirm()}
               >
-                <Text style={styles.modalRejectConfirmText}>Confirmar Rechazo</Text>
+                <Text style={styles.modalRejectConfirmText}>
+                  Confirmar Rechazo
+                </Text>
               </Pressable>
             </View>
           </View>

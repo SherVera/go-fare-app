@@ -30,7 +30,9 @@ export default function AdminOwnerRequestsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
-  const [activeRole, setActiveRole] = useState<'all' | 'owner' | 'driver'>('all');
+  const [activeRole, setActiveRole] = useState<'all' | 'owner' | 'driver'>(
+    'all',
+  );
   const [activeTab, setActiveTab] = useState<
     'pending' | 'approved' | 'rejected'
   >('pending');
@@ -187,9 +189,7 @@ export default function AdminOwnerRequestsScreen() {
   };
 
   if (loading && !refreshing) {
-    return (
-      <AppLoadingScreen message="Cargando solicitudes de afiliación..." />
-    );
+    return <AppLoadingScreen message="Cargando solicitudes de afiliación..." />;
   }
 
   return (
@@ -284,10 +284,7 @@ export default function AdminOwnerRequestsScreen() {
           autoCorrect={false}
         />
         {searchQuery.length > 0 && (
-          <Pressable
-            onPress={() => setSearchQuery('')}
-            style={styles.clearBtn}
-          >
+          <Pressable onPress={() => setSearchQuery('')} style={styles.clearBtn}>
             <Ionicons name="close-circle" size={18} color="#94A3B8" />
           </Pressable>
         )}
@@ -425,7 +422,9 @@ export default function AdminOwnerRequestsScreen() {
                   </View>
                   <Text style={styles.userEmail}>{item.email}</Text>
                 </View>
-                {dateStr ? <Text style={styles.dateText}>{dateStr}</Text> : null}
+                {dateStr ? (
+                  <Text style={styles.dateText}>{dateStr}</Text>
+                ) : null}
               </View>
 
               {/* Detalles de Usuario */}
@@ -436,9 +435,7 @@ export default function AdminOwnerRequestsScreen() {
                   </Text>
                 )}
                 {item.phoneNumber && (
-                  <Text style={styles.detailText}>
-                    Tel: {item.phoneNumber}
-                  </Text>
+                  <Text style={styles.detailText}>Tel: {item.phoneNumber}</Text>
                 )}
               </View>
 
@@ -479,7 +476,13 @@ export default function AdminOwnerRequestsScreen() {
               {/* Motivo de rechazo */}
               {isRejected && (
                 <View style={styles.rejectionCard}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      marginBottom: 4,
+                    }}
+                  >
                     <Ionicons
                       name="close-circle"
                       size={15}
@@ -491,7 +494,8 @@ export default function AdminOwnerRequestsScreen() {
                     </Text>
                   </View>
                   <Text style={styles.rejectionText}>
-                    {item.rejectionReason || 'No cumple con los requisitos establecidos.'}
+                    {item.rejectionReason ||
+                      'No cumple con los requisitos establecidos.'}
                   </Text>
                 </View>
               )}

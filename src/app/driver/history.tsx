@@ -236,9 +236,7 @@ export default function DriverHistoryScreen() {
   };
 
   if (loading && !refreshing) {
-    return (
-      <AppLoadingScreen message="Cargando historial de viajes..." />
-    );
+    return <AppLoadingScreen message="Cargando historial de viajes..." />;
   }
 
   return (

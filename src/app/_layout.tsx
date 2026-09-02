@@ -365,226 +365,225 @@ export default function RootLayout() {
         }
         return;
       }
-        let backendUser: any = null;
+      let backendUser: any = null;
+      try {
+        const response = await syncWithBackend(currentUser);
+        backendUser = response.user;
+      } catch (err) {
+        console.warn('[backend] token refresh failed:', err);
+      }
+
+      if (backendUser) {
+        backendUser.nationalId =
+          backendUser.nationalId || (backendUser as any).national_id;
+        backendUser.phoneNumber =
+          backendUser.phoneNumber || (backendUser as any).phone_number;
+        backendUser.firstName =
+          backendUser.firstName || (backendUser as any).first_name;
+        backendUser.lastName =
+          backendUser.lastName || (backendUser as any).last_name;
+        backendUser.displayName =
+          backendUser.displayName ||
+          (backendUser as any).display_name ||
+          `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim();
+      }
+
+      let role = null;
+      let ownerProfile: any =
+        (backendUser as any)?.transportOwner ||
+        (backendUser as any)?.transport_owner ||
+        null;
+
+      if (backendUser) {
+        const roles = (backendUser as any).roles || [];
+        const isAdmin = roles.some((r: any) => {
+          const name = (r?.name || r?.role || r?.code || r || '')
+            .toString()
+            .toLowerCase();
+          return name === 'platform_admin' || name === 'admin';
+        });
+        const isOwner =
+          roles.some((r: any) => {
+            const name = (r?.name || r?.role || r?.code || r || '')
+              .toString()
+              .toLowerCase();
+            return (
+              name === 'transport_owner' ||
+              name === 'vehicle_owner' ||
+              name === 'owner' ||
+              name === 'civil_association'
+            );
+          }) ||
+          ownerProfile != null ||
+          (backendUser as any).role === 'transport_owner';
+
+        const isDriver = roles.some((r: any) => {
+          const name = (r?.name || r?.role || r?.code || r || '')
+            .toString()
+            .toLowerCase();
+          return name === 'driver' || name === 'conductor';
+        });
+
+        role = isAdmin
+          ? 'platform_admin'
+          : isOwner
+            ? 'transport_owner'
+            : isDriver
+              ? 'driver'
+              : null;
+      }
+
+      // Si aún no detectamos rol privilegiado, verificar si existe perfil de dueño en backend
+      if (!role || role === 'passenger') {
         try {
-          const response = await syncWithBackend(currentUser);
-          backendUser = response.user;
-        } catch (err) {
-          console.warn('[backend] token refresh failed:', err);
-        }
-
-        if (backendUser) {
-          backendUser.nationalId =
-            backendUser.nationalId || (backendUser as any).national_id;
-          backendUser.phoneNumber =
-            backendUser.phoneNumber || (backendUser as any).phone_number;
-          backendUser.firstName =
-            backendUser.firstName || (backendUser as any).first_name;
-          backendUser.lastName =
-            backendUser.lastName || (backendUser as any).last_name;
-          backendUser.displayName =
-            backendUser.displayName ||
-            (backendUser as any).display_name ||
-            `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim();
-        }
-
-        let role = null;
-        let ownerProfile: any =
-          (backendUser as any)?.transportOwner ||
-          (backendUser as any)?.transport_owner ||
-          null;
-
-        if (backendUser) {
-          const roles = (backendUser as any).roles || [];
-          const isAdmin = roles.some((r: any) => {
-            const name = (r?.name || r?.role || r?.code || r || '')
-              .toString()
-              .toLowerCase();
-            return name === 'platform_admin' || name === 'admin';
-          });
-          const isOwner =
-            roles.some((r: any) => {
-              const name = (r?.name || r?.role || r?.code || r || '')
-                .toString()
-                .toLowerCase();
-              return (
-                name === 'transport_owner' ||
-                name === 'vehicle_owner' ||
-                name === 'owner' ||
-                name === 'civil_association'
-              );
-            }) ||
-            ownerProfile != null ||
-            (backendUser as any).role === 'transport_owner';
-
-          const isDriver = roles.some((r: any) => {
-            const name = (r?.name || r?.role || r?.code || r || '')
-              .toString()
-              .toLowerCase();
-            return name === 'driver' || name === 'conductor';
-          });
-
-          role = isAdmin
-            ? 'platform_admin'
-            : isOwner
-              ? 'transport_owner'
-              : isDriver
-                ? 'driver'
-                : null;
-        }
-
-        // Si aún no detectamos rol privilegiado, verificar si existe perfil de dueño en backend
-        if (!role || role === 'passenger') {
-          try {
-            const ownerRes = await getMyTransportOwnerProfile();
-            if (ownerRes && (ownerRes.uuid || ownerRes.id || ownerRes.status)) {
-              ownerProfile = ownerRes;
-              role = 'transport_owner';
-            }
-          } catch (_) {}
-        }
-
-        if (!role) {
-          role = await SecureStore.getItemAsync('user_role');
-        }
-
-        // Si el backend devuelve 'passenger' o null, verificar Firebase Custom Claims.
-        if (!role || role === 'passenger') {
-          try {
-            const idTokenResult = await currentUser.getIdTokenResult(false);
-            const claimRole = (idTokenResult.claims as any)?.role as
-              | string
-              | undefined;
-            const PRIVILEGED_ROLES = [
-              'platform_admin',
-              'admin',
-              'transport_owner',
-              'vehicle_owner',
-              'driver',
-              'conductor',
-            ];
-            if (claimRole && PRIVILEGED_ROLES.includes(claimRole.toLowerCase())) {
-              role = claimRole.toLowerCase();
-            }
-          } catch (claimErr) {
-            console.warn('[Layout] Error al leer custom claims:', claimErr);
+          const ownerRes = await getMyTransportOwnerProfile();
+          if (ownerRes && (ownerRes.uuid || ownerRes.id || ownerRes.status)) {
+            ownerProfile = ownerRes;
+            role = 'transport_owner';
           }
-        }
+        } catch (_) {}
+      }
 
-        if (!backendUser && !role) {
-          console.warn(
-            '[Layout] No backend user and no cached role. Sincronización fallida y sin sesión previa cacheada.',
+      if (!role) {
+        role = await SecureStore.getItemAsync('user_role');
+      }
+
+      // Si el backend devuelve 'passenger' o null, verificar Firebase Custom Claims.
+      if (!role || role === 'passenger') {
+        try {
+          const idTokenResult = await currentUser.getIdTokenResult(false);
+          const claimRole = (idTokenResult.claims as any)?.role as
+            | string
+            | undefined;
+          const PRIVILEGED_ROLES = [
+            'platform_admin',
+            'admin',
+            'transport_owner',
+            'vehicle_owner',
+            'driver',
+            'conductor',
+          ];
+          if (claimRole && PRIVILEGED_ROLES.includes(claimRole.toLowerCase())) {
+            role = claimRole.toLowerCase();
+          }
+        } catch (claimErr) {
+          console.warn('[Layout] Error al leer custom claims:', claimErr);
+        }
+      }
+
+      if (!backendUser && !role) {
+        console.warn(
+          '[Layout] No backend user and no cached role. Sincronización fallida y sin sesión previa cacheada.',
+        );
+        await clearBackendJwt();
+        try {
+          await sigOutAccount();
+        } catch {}
+        if (!cancelled) setPhase('signed_out');
+        return;
+      }
+
+      const finalRole = role || 'passenger';
+      await SecureStore.setItemAsync('user_role', finalRole);
+      if (!cancelled) {
+        setUserRole(finalRole);
+      }
+
+      let complete = false;
+      if (
+        finalRole === 'driver' ||
+        finalRole === 'transport_owner' ||
+        finalRole === 'platform_admin' ||
+        finalRole === 'admin'
+      ) {
+        complete = true;
+      } else {
+        // Cargar caché local para completar datos
+        let cachedData: any = null;
+        try {
+          const cached = await AsyncStorage.getItem(
+            'gofare_cached_user_profile',
           );
-          await clearBackendJwt();
-          try {
-            await sigOutAccount();
-          } catch {}
-          if (!cancelled) setPhase('signed_out');
-          return;
+          if (cached) {
+            cachedData = JSON.parse(cached);
+          }
+        } catch (cacheErr) {
+          console.warn(
+            '[Layout] Error al cargar caché del perfil para onboarding check:',
+            cacheErr,
+          );
         }
 
-        const finalRole = role || 'passenger';
-        await SecureStore.setItemAsync('user_role', finalRole);
-        if (!cancelled) {
-          setUserRole(finalRole);
+        let userToCheck = backendUser;
+        if (!userToCheck) {
+          userToCheck = cachedData;
+        } else if (cachedData && backendUser) {
+          userToCheck = {
+            ...cachedData,
+            ...backendUser,
+            displayName:
+              backendUser.displayName ||
+              backendUser.display_name ||
+              cachedData.displayName ||
+              '',
+            firstName:
+              backendUser.firstName ||
+              backendUser.first_name ||
+              cachedData.firstName ||
+              '',
+            lastName:
+              backendUser.lastName ||
+              backendUser.last_name ||
+              cachedData.lastName ||
+              '',
+            nationalId:
+              backendUser.nationalId ||
+              backendUser.national_id ||
+              cachedData.nationalId ||
+              cachedData.idNumber ||
+              '',
+            phoneNumber:
+              backendUser.phoneNumber ||
+              backendUser.phone_number ||
+              cachedData.phoneNumber ||
+              '',
+          };
         }
 
-        let complete = false;
-        if (
-          finalRole === 'driver' ||
-          finalRole === 'transport_owner' ||
-          finalRole === 'platform_admin' ||
-          finalRole === 'admin'
-        ) {
-          complete = true;
+        if (userToCheck) {
+          const checkObj = userToCheck as any;
+          const name = (
+            checkObj.displayName ||
+            checkObj.display_name ||
+            `${checkObj.firstName || checkObj.first_name || ''} ${checkObj.lastName || checkObj.last_name || ''}`.trim() ||
+            checkObj.fullName ||
+            ''
+          ).trim();
+          const nameOk = name.length >= 3;
+
+          const rawId =
+            checkObj.nationalId ||
+            checkObj.national_id ||
+            checkObj.idNumber ||
+            '';
+          const cleanId =
+            typeof rawId === 'string'
+              ? rawId.replace(/^[VEve]-/, '').trim()
+              : '';
+          const idOk = /^\d{5,10}$/.test(cleanId);
+
+          const phone = checkObj.phoneNumber || checkObj.phone_number || '';
+          const phoneOk = /^((04|02)\d{9}|\+\d{10,15})$/.test(phone.trim());
+
+          complete = Boolean(nameOk && idOk && phoneOk);
         } else {
-          // Cargar caché local para completar datos
-          let cachedData: any = null;
-          try {
-            const cached = await AsyncStorage.getItem(
-              'gofare_cached_user_profile',
-            );
-            if (cached) {
-              cachedData = JSON.parse(cached);
-            }
-          } catch (cacheErr) {
-            console.warn(
-              '[Layout] Error al cargar caché del perfil para onboarding check:',
-              cacheErr,
-            );
-          }
-
-          let userToCheck = backendUser;
-          if (!userToCheck) {
-            userToCheck = cachedData;
-          } else if (cachedData && backendUser) {
-            userToCheck = {
-              ...cachedData,
-              ...backendUser,
-              displayName:
-                backendUser.displayName ||
-                backendUser.display_name ||
-                cachedData.displayName ||
-                '',
-              firstName:
-                backendUser.firstName ||
-                backendUser.first_name ||
-                cachedData.firstName ||
-                '',
-              lastName:
-                backendUser.lastName ||
-                backendUser.last_name ||
-                cachedData.lastName ||
-                '',
-              nationalId:
-                backendUser.nationalId ||
-                backendUser.national_id ||
-                cachedData.nationalId ||
-                cachedData.idNumber ||
-                '',
-              phoneNumber:
-                backendUser.phoneNumber ||
-                backendUser.phone_number ||
-                cachedData.phoneNumber ||
-                '',
-            };
-          }
-
-          if (userToCheck) {
-            const checkObj = userToCheck as any;
-            const name = (
-              checkObj.displayName ||
-              checkObj.display_name ||
-              `${checkObj.firstName || checkObj.first_name || ''} ${checkObj.lastName || checkObj.last_name || ''}`.trim() ||
-              checkObj.fullName ||
-              ''
-            ).trim();
-            const nameOk = name.length >= 3;
-
-            const rawId =
-              checkObj.nationalId ||
-              checkObj.national_id ||
-              checkObj.idNumber ||
-              '';
-            const cleanId =
-              typeof rawId === 'string'
-                ? rawId.replace(/^[VEve]-/, '').trim()
-                : '';
-            const idOk = /^\d{5,10}$/.test(cleanId);
-
-            const phone =
-              checkObj.phoneNumber || checkObj.phone_number || '';
-            const phoneOk = /^((04|02)\d{9}|\+\d{10,15})$/.test(phone.trim());
-
-            complete = Boolean(nameOk && idOk && phoneOk);
-          } else {
-            complete = true;
-          }
+          complete = true;
         }
+      }
 
-        if (cancelled) return;
-        setPhase(complete ? 'signed_in' : 'needs_onboarding');
-      };
+      if (cancelled) return;
+      setPhase(complete ? 'signed_in' : 'needs_onboarding');
+    };
 
     registerAuthSessionResolver(applyPhase);
 

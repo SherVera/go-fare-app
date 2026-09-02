@@ -194,9 +194,7 @@ export default function VehicleOwnerDashboard() {
   };
 
   if (loading && !refreshing) {
-    return (
-      <AppLoadingScreen message="Cargando panel de unidades..." />
-    );
+    return <AppLoadingScreen message="Cargando panel de unidades..." />;
   }
 
   return (

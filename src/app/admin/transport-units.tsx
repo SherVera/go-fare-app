@@ -43,7 +43,9 @@ export default function AdminTransportUnitsScreen() {
   const [selectedUnit, setSelectedUnit] = useState<any | null>(null);
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
+  const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>(
+    {},
+  );
 
   const toggleExpand = (uuid: string) => {
     setExpandedUnits((prev) => ({
@@ -317,7 +319,9 @@ export default function AdminTransportUnitsScreen() {
             doc.vehicle?.uuid === targetUnit.uuid ||
             doc.vehicleUuid === targetUnit.uuid ||
             doc.vehicleId === targetUnit.uuid ||
-            (doc.vehicle && doc.vehicle.plate === (targetUnit.plate || targetUnit.licensePlate)),
+            (doc.vehicle &&
+              doc.vehicle.plate ===
+                (targetUnit.plate || targetUnit.licensePlate)),
         );
       }
 
@@ -369,7 +373,9 @@ export default function AdminTransportUnitsScreen() {
             doc.vehicle?.uuid === targetUnit.uuid ||
             doc.vehicleUuid === targetUnit.uuid ||
             doc.vehicleId === targetUnit.uuid ||
-            (doc.vehicle && doc.vehicle.plate === (targetUnit.plate || targetUnit.licensePlate)),
+            (doc.vehicle &&
+              doc.vehicle.plate ===
+                (targetUnit.plate || targetUnit.licensePlate)),
         );
       }
 
@@ -499,9 +505,7 @@ export default function AdminTransportUnitsScreen() {
   };
 
   if (loading && !refreshing) {
-    return (
-      <AppLoadingScreen message="Cargando unidades de transporte..." />
-    );
+    return <AppLoadingScreen message="Cargando unidades de transporte..." />;
   }
 
   return (
@@ -613,310 +617,301 @@ export default function AdminTransportUnitsScreen() {
             </Text>
           </View>
         }
-          renderItem={({ item }) => {
-            const statusColor = item.isActive ? '#10B981' : '#F59E0B';
-            const statusText = item.isActive ? 'Activa' : 'Pendiente';
+        renderItem={({ item }) => {
+          const statusColor = item.isActive ? '#10B981' : '#F59E0B';
+          const statusText = item.isActive ? 'Activa' : 'Pendiente';
 
-            return (
-              <View style={styles.unitCard}>
-                <View style={styles.cardHeader}>
-                  <View style={styles.iconCircle}>
-                    <Ionicons
-                      name="bus"
-                      size={22}
-                      color={tokens.colors.primary}
-                    />
-                  </View>
-                  <View style={styles.meta}>
-                    <Text style={styles.plateText} numberOfLines={1}>
-                      {item.brand} {item.model}
-                    </Text>
-                    <Text style={styles.brandText}>{item.plate}</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: `${statusColor}12` },
-                    ]}
-                  >
-                    <View
-                      style={[
-                        styles.statusDot,
-                        { backgroundColor: statusColor },
-                      ]}
-                    />
-                    <Text
-                      style={[styles.statusBadgeText, { color: statusColor }]}
-                    >
-                      {statusText}
-                    </Text>
-                  </View>
+          return (
+            <View style={styles.unitCard}>
+              <View style={styles.cardHeader}>
+                <View style={styles.iconCircle}>
+                  <Ionicons
+                    name="bus"
+                    size={22}
+                    color={tokens.colors.primary}
+                  />
                 </View>
+                <View style={styles.meta}>
+                  <Text style={styles.plateText} numberOfLines={1}>
+                    {item.brand} {item.model}
+                  </Text>
+                  <Text style={styles.brandText}>{item.plate}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: `${statusColor}12` },
+                  ]}
+                >
+                  <View
+                    style={[styles.statusDot, { backgroundColor: statusColor }]}
+                  />
+                  <Text
+                    style={[styles.statusBadgeText, { color: statusColor }]}
+                  >
+                    {statusText}
+                  </Text>
+                </View>
+              </View>
 
-                {/* Socio Details */}
-                <View style={styles.detailBox}>
-                  <Text style={styles.detailBoxTitle}>SOCIO RESPONSABLE</Text>
+              {/* Socio Details */}
+              <View style={styles.detailBox}>
+                <Text style={styles.detailBoxTitle}>SOCIO RESPONSABLE</Text>
+                <View style={styles.detailRow}>
+                  <Ionicons
+                    name="person-outline"
+                    size={14}
+                    color="#64748B"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.detailVal}>
+                    {item.owner?.displayName ||
+                      (item.owner?.firstName
+                        ? `${item.owner.firstName} ${item.owner.lastName || ''}`.trim()
+                        : 'No asignado')}
+                  </Text>
+                </View>
+                {item.owner?.email ? (
                   <View style={styles.detailRow}>
                     <Ionicons
-                      name="person-outline"
+                      name="mail-outline"
                       size={14}
                       color="#64748B"
                       style={{ marginRight: 6 }}
                     />
-                    <Text style={styles.detailVal}>
-                      {item.owner?.displayName ||
-                        (item.owner?.firstName
-                          ? `${item.owner.firstName} ${item.owner.lastName || ''}`.trim()
-                          : 'No asignado')}
-                    </Text>
+                    <Text style={styles.detailVal}>{item.owner.email}</Text>
                   </View>
-                  {item.owner?.email ? (
-                    <View style={styles.detailRow}>
-                      <Ionicons
-                        name="mail-outline"
-                        size={14}
-                        color="#64748B"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.detailVal}>{item.owner.email}</Text>
+                ) : null}
+              </View>
+
+              {/* Desplegable de Datos Técnicos del Vehículo */}
+              <Pressable
+                style={styles.collapseToggle}
+                onPress={() => toggleExpand(item.uuid)}
+              >
+                <View style={styles.collapseToggleLeft}>
+                  <Ionicons
+                    name="car-sport-outline"
+                    size={15}
+                    color={tokens.colors.primary}
+                  />
+                  <Text style={styles.collapseToggleText}>
+                    {expandedUnits[item.uuid]
+                      ? 'Ocultar datos del vehículo'
+                      : 'Ver datos del vehículo'}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={
+                    expandedUnits[item.uuid] ? 'chevron-up' : 'chevron-down'
+                  }
+                  size={16}
+                  color="#64748B"
+                />
+              </Pressable>
+
+              {expandedUnits[item.uuid] && (
+                <View style={styles.expandedSpecsContainer}>
+                  <View style={styles.specGrid}>
+                    <View style={styles.specItem}>
+                      <Text style={styles.specLabel}>AÑO</Text>
+                      <Text style={styles.specVal}>{item.year || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.specItem}>
+                      <Text style={styles.specLabel}>COLOR</Text>
+                      <Text style={styles.specVal}>{item.color || 'N/A'}</Text>
+                    </View>
+                    <View style={styles.specItem}>
+                      <Text style={styles.specLabel}>CAPACIDAD</Text>
+                      <Text style={styles.specVal}>
+                        {item.capacity ? `${item.capacity} pas.` : 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.specItem}>
+                      <Text style={styles.specLabel}>LÍNEA / ASOC.</Text>
+                      <Text style={styles.specVal} numberOfLines={1}>
+                        {item.civilAssociation?.name || 'Particular / Ninguna'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {item.inviteCode ? (
+                    <View style={styles.codeContainerInside}>
+                      <Text style={styles.codeLabel}>
+                        CÓDIGO DE INVITACIÓN CONDUCTOR:
+                      </Text>
+                      <View style={styles.codeBadge}>
+                        <Ionicons
+                          name="key-outline"
+                          size={14}
+                          color="#D97706"
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={styles.codeValue}>{item.inviteCode}</Text>
+                      </View>
                     </View>
                   ) : null}
-                </View>
 
-                {/* Desplegable de Datos Técnicos del Vehículo */}
-                <Pressable
-                  style={styles.collapseToggle}
-                  onPress={() => toggleExpand(item.uuid)}
-                >
-                  <View style={styles.collapseToggleLeft}>
-                    <Ionicons
-                      name="car-sport-outline"
-                      size={15}
-                      color={tokens.colors.primary}
-                    />
-                    <Text style={styles.collapseToggleText}>
-                      {expandedUnits[item.uuid]
-                        ? 'Ocultar datos del vehículo'
-                        : 'Ver datos del vehículo'}
+                  {/* Documentos del Vehículo */}
+                  <View style={styles.cardDocsSection}>
+                    <Text style={styles.cardDocsTitle}>
+                      DOCUMENTOS DEL VEHÍCULO
                     </Text>
-                  </View>
-                  <Ionicons
-                    name={
-                      expandedUnits[item.uuid] ? 'chevron-up' : 'chevron-down'
-                    }
-                    size={16}
-                    color="#64748B"
-                  />
-                </Pressable>
+                    {item.documents && item.documents.length > 0 ? (
+                      item.documents.map((doc: any) => {
+                        const isPending =
+                          doc.status === 'pending_review' ||
+                          doc.status === 'pending';
+                        const isVerified = doc.status === 'verified';
+                        const badgeColor = isVerified
+                          ? '#059669'
+                          : isPending
+                            ? '#D97706'
+                            : '#DC2626';
+                        const badgeBg = isVerified
+                          ? '#ECFDF5'
+                          : isPending
+                            ? '#FEF3C7'
+                            : '#FEF2F2';
+                        const statusLabel = isVerified
+                          ? 'Aprobado'
+                          : isPending
+                            ? 'Pendiente'
+                            : 'Rechazado';
 
-                {expandedUnits[item.uuid] && (
-                  <View style={styles.expandedSpecsContainer}>
-                    <View style={styles.specGrid}>
-                      <View style={styles.specItem}>
-                        <Text style={styles.specLabel}>AÑO</Text>
-                        <Text style={styles.specVal}>
-                          {item.year || 'N/A'}
-                        </Text>
-                      </View>
-                      <View style={styles.specItem}>
-                        <Text style={styles.specLabel}>COLOR</Text>
-                        <Text style={styles.specVal}>
-                          {item.color || 'N/A'}
-                        </Text>
-                      </View>
-                      <View style={styles.specItem}>
-                        <Text style={styles.specLabel}>CAPACIDAD</Text>
-                        <Text style={styles.specVal}>
-                          {item.capacity ? `${item.capacity} pas.` : 'N/A'}
-                        </Text>
-                      </View>
-                      <View style={styles.specItem}>
-                        <Text style={styles.specLabel}>LÍNEA / ASOC.</Text>
-                        <Text style={styles.specVal} numberOfLines={1}>
-                          {item.civilAssociation?.name || 'Particular / Ninguna'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    {item.inviteCode ? (
-                      <View style={styles.codeContainerInside}>
-                        <Text style={styles.codeLabel}>
-                          CÓDIGO DE INVITACIÓN CONDUCTOR:
-                        </Text>
-                        <View style={styles.codeBadge}>
-                          <Ionicons
-                            name="key-outline"
-                            size={14}
-                            color="#D97706"
-                            style={{ marginRight: 6 }}
-                          />
-                          <Text style={styles.codeValue}>
-                            {item.inviteCode}
-                          </Text>
-                        </View>
-                      </View>
-                    ) : null}
-
-                    {/* Documentos del Vehículo */}
-                    <View style={styles.cardDocsSection}>
-                      <Text style={styles.cardDocsTitle}>
-                        DOCUMENTOS DEL VEHÍCULO
-                      </Text>
-                      {item.documents && item.documents.length > 0 ? (
-                        item.documents.map((doc: any) => {
-                          const isPending =
-                            doc.status === 'pending_review' ||
-                            doc.status === 'pending';
-                          const isVerified = doc.status === 'verified';
-                          const badgeColor = isVerified
-                            ? '#059669'
-                            : isPending
-                              ? '#D97706'
-                              : '#DC2626';
-                          const badgeBg = isVerified
-                            ? '#ECFDF5'
-                            : isPending
-                              ? '#FEF3C7'
-                              : '#FEF2F2';
-                          const statusLabel = isVerified
-                            ? 'Aprobado'
-                            : isPending
-                              ? 'Pendiente'
-                              : 'Rechazado';
-
-                          return (
-                            <Pressable
-                              key={doc.uuid}
-                              style={({ pressed }) => [
-                                styles.cardDocItem,
-                                pressed && { opacity: 0.7 },
-                              ]}
-                              onPress={() => handleManageDocument(doc)}
-                            >
-                              <View style={styles.cardDocLeft}>
-                                <Ionicons
-                                  name={
-                                    doc.type === 'titulo_propiedad' ||
-                                    doc.type === 'carnet_circulacion'
-                                      ? 'document-text-outline'
-                                      : doc.type ===
-                                          'seguro_responsabilidad_civil'
-                                        ? 'shield-checkmark-outline'
-                                        : 'newspaper-outline'
-                                  }
-                                  size={18}
-                                  color={tokens.colors.primary}
-                                />
-                                <View style={styles.cardDocMeta}>
-                                  <Text style={styles.cardDocName}>
-                                    {doc.type === 'titulo_propiedad' ||
-                                    doc.type === 'carnet_circulacion'
-                                      ? 'Carnet de Circulación'
-                                      : doc.type ===
-                                          'seguro_responsabilidad_civil'
-                                        ? 'Responsabilidad Civil (RCV)'
-                                        : 'Revisión Técnica (INTT)'}
-                                  </Text>
-                                  <Text style={styles.cardDocNumber}>
-                                    Nº: {doc.documentNumber || 'Sin número'}
-                                  </Text>
-                                </View>
-                              </View>
-                              <View
-                                style={[
-                                  styles.cardDocBadge,
-                                  { backgroundColor: badgeBg },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.cardDocBadgeText,
-                                    { color: badgeColor },
-                                  ]}
-                                >
-                                  {statusLabel}
+                        return (
+                          <Pressable
+                            key={doc.uuid}
+                            style={({ pressed }) => [
+                              styles.cardDocItem,
+                              pressed && { opacity: 0.7 },
+                            ]}
+                            onPress={() => handleManageDocument(doc)}
+                          >
+                            <View style={styles.cardDocLeft}>
+                              <Ionicons
+                                name={
+                                  doc.type === 'titulo_propiedad' ||
+                                  doc.type === 'carnet_circulacion'
+                                    ? 'document-text-outline'
+                                    : doc.type ===
+                                        'seguro_responsabilidad_civil'
+                                      ? 'shield-checkmark-outline'
+                                      : 'newspaper-outline'
+                                }
+                                size={18}
+                                color={tokens.colors.primary}
+                              />
+                              <View style={styles.cardDocMeta}>
+                                <Text style={styles.cardDocName}>
+                                  {doc.type === 'titulo_propiedad' ||
+                                  doc.type === 'carnet_circulacion'
+                                    ? 'Carnet de Circulación'
+                                    : doc.type ===
+                                        'seguro_responsabilidad_civil'
+                                      ? 'Responsabilidad Civil (RCV)'
+                                      : 'Revisión Técnica (INTT)'}
+                                </Text>
+                                <Text style={styles.cardDocNumber}>
+                                  Nº: {doc.documentNumber || 'Sin número'}
                                 </Text>
                               </View>
-                            </Pressable>
-                          );
-                        })
-                      ) : (
-                        <Text style={styles.noDocsText}>
-                          Sin documentos adjuntos
-                        </Text>
-                      )}
-                    </View>
+                            </View>
+                            <View
+                              style={[
+                                styles.cardDocBadge,
+                                { backgroundColor: badgeBg },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.cardDocBadgeText,
+                                  { color: badgeColor },
+                                ]}
+                              >
+                                {statusLabel}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })
+                    ) : (
+                      <Text style={styles.noDocsText}>
+                        Sin documentos adjuntos
+                      </Text>
+                    )}
                   </View>
-                )}
+                </View>
+              )}
 
-                {/* Acciones */}
-                <View style={styles.cardActions}>
-                  <Pressable
-                    style={styles.actionButton}
-                    onPress={() => handleShowDetails(item)}
-                  >
-                    <Ionicons
-                      name="eye-outline"
-                      size={16}
-                      color={tokens.colors.primary}
-                    />
-                    <Text style={styles.actionButtonText}>Detalles</Text>
-                  </Pressable>
+              {/* Acciones */}
+              <View style={styles.cardActions}>
+                <Pressable
+                  style={styles.actionButton}
+                  onPress={() => handleShowDetails(item)}
+                >
+                  <Ionicons
+                    name="eye-outline"
+                    size={16}
+                    color={tokens.colors.primary}
+                  />
+                  <Text style={styles.actionButtonText}>Detalles</Text>
+                </Pressable>
 
-                  {!item.isActive && (
-                    <>
-                      <Pressable
-                        style={[styles.actionButton, styles.approveButton]}
-                        onPress={() => handleApproveUnit(item)}
-                      >
-                        <Ionicons
-                          name="checkmark-circle-outline"
-                          size={16}
-                          color="#059669"
-                        />
-                        <Text
-                          style={[styles.actionButtonText, styles.approveText]}
-                        >
-                          Aprobar
-                        </Text>
-                      </Pressable>
-
-                      <Pressable
-                        style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleRejectUnit(item)}
-                      >
-                        <Ionicons
-                          name="close-circle-outline"
-                          size={16}
-                          color="#DC2626"
-                        />
-                        <Text
-                          style={[styles.actionButtonText, styles.rejectText]}
-                        >
-                          Rechazar
-                        </Text>
-                      </Pressable>
-                    </>
-                  )}
-
-                  {item.isActive && (
+                {!item.isActive && (
+                  <>
                     <Pressable
-                      style={[styles.actionButton, styles.deactivateButton]}
-                      onPress={() => handleDeactivateUnit(item)}
+                      style={[styles.actionButton, styles.approveButton]}
+                      onPress={() => handleApproveUnit(item)}
                     >
-                      <Ionicons name="ban-outline" size={16} color="#64748B" />
+                      <Ionicons
+                        name="checkmark-circle-outline"
+                        size={16}
+                        color="#059669"
+                      />
                       <Text
-                        style={[styles.actionButtonText, styles.deactivateText]}
+                        style={[styles.actionButtonText, styles.approveText]}
                       >
-                        Desactivar
+                        Aprobar
                       </Text>
                     </Pressable>
-                  )}
-                </View>
+
+                    <Pressable
+                      style={[styles.actionButton, styles.rejectButton]}
+                      onPress={() => handleRejectUnit(item)}
+                    >
+                      <Ionicons
+                        name="close-circle-outline"
+                        size={16}
+                        color="#DC2626"
+                      />
+                      <Text
+                        style={[styles.actionButtonText, styles.rejectText]}
+                      >
+                        Rechazar
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+
+                {item.isActive && (
+                  <Pressable
+                    style={[styles.actionButton, styles.deactivateButton]}
+                    onPress={() => handleDeactivateUnit(item)}
+                  >
+                    <Ionicons name="ban-outline" size={16} color="#64748B" />
+                    <Text
+                      style={[styles.actionButtonText, styles.deactivateText]}
+                    >
+                      Desactivar
+                    </Text>
+                  </Pressable>
+                )}
               </View>
-            );
-          }}
-        />
+            </View>
+          );
+        }}
+      />
 
       {/* Modal de Detalles de la Unidad */}
       <Modal

@@ -173,9 +173,7 @@ export default function DriverProfileScreen() {
   };
 
   if (loading) {
-    return (
-      <AppLoadingScreen message="Cargando perfil del conductor..." />
-    );
+    return <AppLoadingScreen message="Cargando perfil del conductor..." />;
   }
 
   return (

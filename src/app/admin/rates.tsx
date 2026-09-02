@@ -238,9 +238,7 @@ export default function AdminRatesScreen() {
     updatingBcv || !newBcvRate.trim() || isDuplicateRate;
 
   if (loading) {
-    return (
-      <AppLoadingScreen message="Sincronizando tasas vigentes..." />
-    );
+    return <AppLoadingScreen message="Sincronizando tasas vigentes..." />;
   }
 
   return (

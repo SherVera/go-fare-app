@@ -366,9 +366,7 @@ export default function AdminCivilAssociationsScreen() {
   };
 
   if (loading && !refreshing) {
-    return (
-      <AppLoadingScreen message="Cargando asociaciones civiles..." />
-    );
+    return <AppLoadingScreen message="Cargando asociaciones civiles..." />;
   }
 
   return (
@@ -473,7 +471,9 @@ export default function AdminCivilAssociationsScreen() {
         ListEmptyComponent={
           <View style={styles.centered}>
             <Ionicons name="business-outline" size={48} color="#CBD5E1" />
-            <Text style={styles.emptyText}>No hay asociaciones registradas.</Text>
+            <Text style={styles.emptyText}>
+              No hay asociaciones registradas.
+            </Text>
             <Text
               style={{
                 fontSize: 12,
@@ -488,102 +488,102 @@ export default function AdminCivilAssociationsScreen() {
           </View>
         }
         renderItem={({ item }) => {
-            const statusColor =
-              item.status === 'approved'
-                ? '#10B981'
-                : item.status === 'pending_review'
-                  ? '#EA580C'
-                  : item.status === 'rejected'
-                    ? '#EF4444'
-                    : '#64748B';
-            const statusLabel =
-              item.status === 'approved'
-                ? 'Aprobado'
-                : item.status === 'pending_review'
-                  ? 'Pendiente'
-                  : item.status === 'rejected'
-                    ? 'Rechazado'
-                    : 'Suspendido';
+          const statusColor =
+            item.status === 'approved'
+              ? '#10B981'
+              : item.status === 'pending_review'
+                ? '#EA580C'
+                : item.status === 'rejected'
+                  ? '#EF4444'
+                  : '#64748B';
+          const statusLabel =
+            item.status === 'approved'
+              ? 'Aprobado'
+              : item.status === 'pending_review'
+                ? 'Pendiente'
+                : item.status === 'rejected'
+                  ? 'Rechazado'
+                  : 'Suspendido';
 
-            return (
-              <Pressable
-                style={styles.card}
-                onPress={() => handleOpenDetails(item)}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {(item.displayName || item.firstName || 'C')
-                        .charAt(0)
-                        .toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={styles.meta}>
-                    <Text style={styles.name} numberOfLines={1}>
-                      {item.displayName ||
-                        `${item.firstName || ''} ${item.lastName || ''}`}
-                    </Text>
-                    <Text style={styles.subtext} numberOfLines={1}>
-                      {item.email}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: `${statusColor}12` },
-                    ]}
-                  >
-                    <Text
-                      style={[styles.statusBadgeText, { color: statusColor }]}
-                    >
-                      {statusLabel}
-                    </Text>
-                  </View>
+          return (
+            <Pressable
+              style={styles.card}
+              onPress={() => handleOpenDetails(item)}
+            >
+              <View style={styles.cardHeader}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {(item.displayName || item.firstName || 'C')
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Text>
                 </View>
+                <View style={styles.meta}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {item.displayName ||
+                      `${item.firstName || ''} ${item.lastName || ''}`}
+                  </Text>
+                  <Text style={styles.subtext} numberOfLines={1}>
+                    {item.email}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    { backgroundColor: `${statusColor}12` },
+                  ]}
+                >
+                  <Text
+                    style={[styles.statusBadgeText, { color: statusColor }]}
+                  >
+                    {statusLabel}
+                  </Text>
+                </View>
+              </View>
 
-                <View style={styles.cardBody}>
+              <View style={styles.cardBody}>
+                <View style={styles.detail}>
+                  <Ionicons
+                    name="briefcase-outline"
+                    size={14}
+                    color="#64748B"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.detailText}>
+                    Cargo: {item.position || 'Representante'}
+                  </Text>
+                </View>
+                {item.nationalId && (
                   <View style={styles.detail}>
                     <Ionicons
-                      name="briefcase-outline"
+                      name="card-outline"
                       size={14}
                       color="#64748B"
                       style={{ marginRight: 6 }}
                     />
                     <Text style={styles.detailText}>
-                      Cargo: {item.position || 'Representante'}
+                      Cédula: {item.nationalId}
                     </Text>
                   </View>
-                  {item.nationalId && (
-                    <View style={styles.detail}>
-                      <Ionicons
-                        name="card-outline"
-                        size={14}
-                        color="#64748B"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.detailText}>
-                        Cédula: {item.nationalId}
-                      </Text>
-                    </View>
-                  )}
-                  {item.phoneNumber && (
-                    <View style={styles.detail}>
-                      <Ionicons
-                        name="call-outline"
-                        size={14}
-                        color="#64748B"
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.detailText}>
-                        Telf: {item.phoneNumber}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </Pressable>
-            );
-          }}
-        />
+                )}
+                {item.phoneNumber && (
+                  <View style={styles.detail}>
+                    <Ionicons
+                      name="call-outline"
+                      size={14}
+                      color="#64748B"
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={styles.detailText}>
+                      Telf: {item.phoneNumber}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </Pressable>
+          );
+        }}
+      />
 
       {/* Botón Flotante para Registrar */}
       <Pressable style={styles.fab} onPress={handleOpenRegister}>

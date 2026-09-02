@@ -58,7 +58,9 @@ export function PendingApprovalScreen({
     try {
       setChecking(true);
       const ownerProfile = await getMyTransportOwnerProfile();
-      const profile = ownerProfile ? null : await getBackendProfile().catch(() => null);
+      const profile = ownerProfile
+        ? null
+        : await getBackendProfile().catch(() => null);
 
       const status =
         ownerProfile?.status ||
@@ -119,10 +121,7 @@ export function PendingApprovalScreen({
       >
         <ScreenHeader title="Solicitud Enviada" onBack={handleSignOut} />
         <ScrollView
-          contentContainerStyle={[
-            styles.scroll,
-            { justifyContent: 'center' },
-          ]}
+          contentContainerStyle={[styles.scroll, { justifyContent: 'center' }]}
           bounces={false}
           showsVerticalScrollIndicator={false}
         >
@@ -146,13 +145,10 @@ export function PendingApprovalScreen({
               Revisión
             </Text>
             <Text
-              style={[
-                styles.subtitle,
-                { textAlign: 'center', marginTop: 12 },
-              ]}
+              style={[styles.subtitle, { textAlign: 'center', marginTop: 12 }]}
             >
-              Tu solicitud de registro como Dueño de Vehículo ha sido enviada con
-              éxito.
+              Tu solicitud de registro como Dueño de Vehículo ha sido enviada
+              con éxito.
               {'\n\n'}
               El administrador del sistema revisará y verificará tus datos
               comerciales. Una vez aprobada la solicitud, se habilitará tu

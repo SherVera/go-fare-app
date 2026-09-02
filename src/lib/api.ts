@@ -1618,7 +1618,10 @@ export async function getVehicleDetail(uuid: string): Promise<any> {
       };
     }
   } catch (err) {
-    console.warn('[API] Error al obtener detalle de vehículo desde backend:', err);
+    console.warn(
+      '[API] Error al obtener detalle de vehículo desde backend:',
+      err,
+    );
   }
 
   return null;
@@ -1890,9 +1893,7 @@ export async function saveCivilAssociationMetadata(
 export async function getAllCivilAssociations(): Promise<any[]> {
   try {
     const res = await fetchWithAuth('/civil-associations');
-    const raw = Array.isArray(res)
-      ? res
-      : res?.data || res?.items || [];
+    const raw = Array.isArray(res) ? res : res?.data || res?.items || [];
     if (Array.isArray(raw) && raw.length > 0) {
       return raw.map((ca: any) => ({
         uuid: ca.uuid,
@@ -2066,7 +2067,9 @@ export async function toggleTransportUnitStatus(
 /**
  * Normaliza el estado de aprobación proveniente de los modelos del backend (ProfileStatus enum).
  */
-function normalizeProfileStatus(rawStatus?: string): 'pending' | 'approved' | 'rejected' {
+function normalizeProfileStatus(
+  rawStatus?: string,
+): 'pending' | 'approved' | 'rejected' {
   const s = String(rawStatus || '').toLowerCase();
   if (s === 'approved' || s === 'aprobado' || s === 'verified') {
     return 'approved';
@@ -2117,9 +2120,7 @@ export async function getAllOwnerRequests(): Promise<any[]> {
         (Array.isArray(roles) &&
           roles.some((r: any) => {
             const rName = (
-              typeof r === 'string'
-                ? r
-                : r?.name || r?.code || r?.slug || ''
+              typeof r === 'string' ? r : r?.name || r?.code || r?.slug || ''
             ).toLowerCase();
             return (
               rName.includes('owner') ||
@@ -2152,9 +2153,7 @@ export async function getAllOwnerRequests(): Promise<any[]> {
             `${u.firstName || ''} ${u.lastName || ''}`.trim(),
           rif: ownerProfile.rif || u.nationalId,
           status:
-            ownerProfile.status ||
-            (u as any).ownerStatus ||
-            (u as any).status,
+            ownerProfile.status || (u as any).ownerStatus || (u as any).status,
           submittedAt: ownerProfile.submittedAt || (u as any).createdAt,
           rejectionReason: ownerProfile.rejectionReason,
         });
@@ -2197,8 +2196,7 @@ export async function getAllOwnerRequests(): Promise<any[]> {
       email: email || 'Sin correo',
       nationalId: idNumber,
       phoneNumber: o.user?.phoneNumber || o.phoneNumber,
-      businessName:
-        o.legalName || o.businessName || 'Propietario Particular',
+      businessName: o.legalName || o.businessName || 'Propietario Particular',
       idNumber,
       status,
       createdAt: o.submittedAt || o.createdAt || new Date().toISOString(),
@@ -2255,9 +2253,7 @@ export async function getAllDriverRequests(): Promise<any[]> {
         (Array.isArray(roles) &&
           roles.some((r: any) => {
             const rName = (
-              typeof r === 'string'
-                ? r
-                : r?.name || r?.code || r?.slug || ''
+              typeof r === 'string' ? r : r?.name || r?.code || r?.slug || ''
             ).toLowerCase();
             return (
               rName.includes('driver') ||
@@ -2286,9 +2282,7 @@ export async function getAllDriverRequests(): Promise<any[]> {
             `${u.firstName || ''} ${u.lastName || ''}`.trim() ||
             'Conductor',
           licenseNumber:
-            driverProfile.licenseNumber ||
-            u.nationalId ||
-            'Sin licencia',
+            driverProfile.licenseNumber || u.nationalId || 'Sin licencia',
           licenseCategory: driverProfile.licenseCategory,
           status:
             driverProfile.status ||

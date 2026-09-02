@@ -83,7 +83,8 @@ export default function AdminDashboardScreen() {
       ).length;
 
       const pendingOwnersCount = safeOwnerReqs.filter(
-        (r: any) => r && (r.status === 'pending' || r.status === 'pending_review'),
+        (r: any) =>
+          r && (r.status === 'pending' || r.status === 'pending_review'),
       ).length;
 
       setStats({
