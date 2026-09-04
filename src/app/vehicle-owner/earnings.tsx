@@ -33,7 +33,7 @@ interface WeeklyBarData {
 function formatRelativeTime(dateStr?: string): string {
   if (!dateStr) return 'Reciente';
   const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return 'Reciente';
+  if (Number.isNaN(date.getTime())) return 'Reciente';
 
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -147,9 +147,8 @@ export default function VehicleOwnerEarnings() {
               v.uuid === tx.vehicleUuid ||
               v.uuid === tx.vehicle?.uuid ||
               (v.licensePlate &&
-                tx.description &&
                 tx.description
-                  .toLowerCase()
+                  ?.toLowerCase()
                   .includes(v.licensePlate.toLowerCase())),
           );
 
@@ -198,7 +197,7 @@ export default function VehicleOwnerEarnings() {
 
       for (const tx of ownerTx) {
         const txDate = new Date(tx.createdAt || tx.timestamp);
-        if (!isNaN(txDate.getTime()) && txDate >= monday) {
+        if (!Number.isNaN(txDate.getTime()) && txDate >= monday) {
           const dayLabel = daysMap[txDate.getDay()];
           if (dayLabel && dayTotals[dayLabel] !== undefined) {
             dayTotals[dayLabel] += Math.abs(

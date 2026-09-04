@@ -278,7 +278,10 @@ export async function refreshBackendJwt(): Promise<string | null> {
         return result.token;
       }
     } catch (err: any) {
-      console.warn('[API] Error al auto-renovar token JWT:', err?.message || err);
+      console.warn(
+        '[API] Error al auto-renovar token JWT:',
+        err?.message || err,
+      );
     } finally {
       activeJwtRefreshPromise = null;
     }
@@ -305,7 +308,9 @@ export async function getValidGoFareToken(): Promise<string | null> {
       const expMs = exp * 1000;
       // Si faltan menos de 45 segundos para que expire, renovar proactivamente
       if (Date.now() >= expMs - 45000) {
-        console.log('[API] El token JWT ha expirado o está por expirar. Renovando...');
+        console.log(
+          '[API] El token JWT ha expirado o está por expirar. Renovando...',
+        );
         token = null;
       }
     }
@@ -2129,7 +2134,7 @@ export async function getAllDocuments(): Promise<any[]> {
     if (Array.isArray(raw) && raw.length > 0) {
       return raw;
     }
-  } catch (err) {
+  } catch (_err) {
     // Si no es admin (ej. 403 Forbidden), intentar obtener los documentos propios
     try {
       const myRes = await fetchWithAuth('/legal-documents/my');
@@ -3344,7 +3349,7 @@ export async function getAssignedVehicles(): Promise<any[]> {
   try {
     // 1. Si hay una sesión activa de caja en el backend, tomar la unidad real de la sesión
     const activeSession = await getCurrentSession().catch(() => null);
-    if (activeSession?.vehicle && activeSession.vehicle.uuid) {
+    if (activeSession?.vehicle?.uuid) {
       return [activeSession.vehicle];
     }
 
@@ -3376,7 +3381,7 @@ export async function getAssignedRoutes(): Promise<any[]> {
   try {
     // 1. Si hay una sesión activa de caja, tomar la ruta de la sesión
     const activeSession = await getCurrentSession().catch(() => null);
-    if (activeSession?.route && activeSession.route.uuid) {
+    if (activeSession?.route?.uuid) {
       return [activeSession.route];
     }
 
@@ -3612,4 +3617,3 @@ export async function removeDriverFromVehicle(
     method: 'DELETE',
   });
 }
-

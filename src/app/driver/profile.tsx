@@ -141,13 +141,20 @@ export default function DriverProfileScreen() {
         } else {
           setAssociatedOwner(null);
           setOwnerName('Sin Dueño Asociado');
-          setOwnerSubtitle('No tienes ningún transportista vinculado actualmente');
+          setOwnerSubtitle(
+            'No tienes ningún transportista vinculado actualmente',
+          );
         }
       } catch (ownerErr) {
-        console.warn('[DriverProfile] Error loading associated owner:', ownerErr);
+        console.warn(
+          '[DriverProfile] Error loading associated owner:',
+          ownerErr,
+        );
         setAssociatedOwner(null);
         setOwnerName('Sin Dueño Asociado');
-        setOwnerSubtitle('No tienes ningún transportista vinculado actualmente');
+        setOwnerSubtitle(
+          'No tienes ningún transportista vinculado actualmente',
+        );
       }
 
       // 2. Cargar vehículo asignado real desde el backend
@@ -310,7 +317,9 @@ export default function DriverProfileScreen() {
               <Ionicons
                 name="bus"
                 size={20}
-                color={vehicle === 'Sin Unidad Asignada' ? '#94A3B8' : '#FFFFFF'}
+                color={
+                  vehicle === 'Sin Unidad Asignada' ? '#94A3B8' : '#FFFFFF'
+                }
               />
             </View>
             <View style={styles.infoDetails}>

@@ -200,7 +200,7 @@ export default function TopUpBalanceScreen() {
         setLoadingBalance(false);
       }
     },
-    [isLiteMode],
+    [isLiteMode, router],
   );
 
   const onRefresh = useCallback(async () => {

@@ -347,7 +347,8 @@ export function PendingApprovalScreen({
                   </Text>
                 </View>
                 <Text style={styles.rejectionNoticeBody}>
-                  Tu cuenta ha sido suspendida temporalmente por la administración de la plataforma.
+                  Tu cuenta ha sido suspendida temporalmente por la
+                  administración de la plataforma.
                 </Text>
                 {rejectionReason ? (
                   <View style={styles.rejectionReasonBox}>
@@ -360,9 +361,14 @@ export function PendingApprovalScreen({
                   </View>
                 ) : (
                   <View style={styles.rejectionReasonBox}>
-                    <Text style={styles.rejectionReasonLabel}>Información:</Text>
+                    <Text style={styles.rejectionReasonLabel}>
+                      Información:
+                    </Text>
                     <Text style={styles.rejectionReasonText}>
-                      El acceso a las operaciones ha sido inhabilitado por disposición administrativa. Si consideras que se trata de un error o requieres asistencia para reactivar tu cuenta, ponte en contacto con soporte técnico o la administración.
+                      El acceso a las operaciones ha sido inhabilitado por
+                      disposición administrativa. Si consideras que se trata de
+                      un error o requieres asistencia para reactivar tu cuenta,
+                      ponte en contacto con soporte técnico o la administración.
                     </Text>
                   </View>
                 )}
@@ -376,7 +382,8 @@ export function PendingApprovalScreen({
                   </Text>
                 </View>
                 <Text style={styles.rejectionNoticeBody}>
-                  Tu solicitud de registro como Dueño de Vehículo ha sido rechazada.
+                  Tu solicitud de registro como Dueño de Vehículo ha sido
+                  rechazada.
                 </Text>
                 {rejectionReason ? (
                   <View style={styles.rejectionReasonBox}>
@@ -391,14 +398,18 @@ export function PendingApprovalScreen({
                   <View style={styles.rejectionReasonBox}>
                     <Text style={styles.rejectionReasonLabel}>Motivo:</Text>
                     <Text style={styles.rejectionReasonText}>
-                      No se especificó un motivo adicional. Si consideras que se trata de un error, comunícate con soporte.
+                      No se especificó un motivo adicional. Si consideras que se
+                      trata de un error, comunícate con soporte.
                     </Text>
                   </View>
                 )}
               </View>
             ) : (
               <Text
-                style={[styles.subtitle, { textAlign: 'center', marginTop: 12 }]}
+                style={[
+                  styles.subtitle,
+                  { textAlign: 'center', marginTop: 12 },
+                ]}
               >
                 Tu solicitud de registro como Dueño de Vehículo ha sido enviada
                 con éxito.

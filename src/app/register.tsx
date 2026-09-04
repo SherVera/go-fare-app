@@ -275,7 +275,10 @@ export default function RegisterScreen() {
           }),
         );
       } catch (storageErr) {
-        console.warn('[Register] Error saving pending profile cache:', storageErr);
+        console.warn(
+          '[Register] Error saving pending profile cache:',
+          storageErr,
+        );
       }
 
       // 9. Llevar a completar perfil (onboarding) para guardar la cédula

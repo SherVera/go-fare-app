@@ -46,7 +46,9 @@ export default function AdminOwnerRequestsScreen() {
 
   // Estado para el modal de rechazo o suspensión
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
-  const [modalActionType, setModalActionType] = useState<'reject' | 'suspend'>('reject');
+  const [modalActionType, setModalActionType] = useState<'reject' | 'suspend'>(
+    'reject',
+  );
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -580,11 +582,7 @@ export default function AdminOwnerRequestsScreen() {
                     style={styles.rejectBtn}
                     onPress={() => handleSuspendInit(item)}
                   >
-                    <Ionicons
-                      name="ban-outline"
-                      size={18}
-                      color="#EF4444"
-                    />
+                    <Ionicons name="ban-outline" size={18} color="#EF4444" />
                     <Text style={styles.rejectBtnText}>Suspender Cuenta</Text>
                   </Pressable>
                 </View>

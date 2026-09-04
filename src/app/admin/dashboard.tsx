@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -21,7 +22,6 @@ import {
   getAllUsers,
 } from '@/lib/api';
 import { sigOutAccount } from '@/lib/firebase';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { tokens } from '@/theme/tokens';
 
 const STATS_CACHE_KEY = 'gofare_admin_dashboard_stats';

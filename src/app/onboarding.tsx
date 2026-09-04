@@ -281,7 +281,10 @@ export default function OnboardingScreen() {
           finalIdNumber,
         );
       } catch (natErr) {
-        console.warn('[Onboarding] Error al guardar cédula en backend:', natErr);
+        console.warn(
+          '[Onboarding] Error al guardar cédula en backend:',
+          natErr,
+        );
       }
 
       // 2. Actualizar datos de usuario (nombre, teléfono)
@@ -295,7 +298,10 @@ export default function OnboardingScreen() {
       try {
         await updateBackendProfile(response.user.id, updatePayload);
       } catch (profErr) {
-        console.warn('[Onboarding] Error al actualizar perfil en backend:', profErr);
+        console.warn(
+          '[Onboarding] Error al actualizar perfil en backend:',
+          profErr,
+        );
       }
 
       // 3. Guardar perfil completo en caché local

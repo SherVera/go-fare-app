@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
@@ -168,7 +168,7 @@ export default function VehicleDetailsScreen() {
             vehicleDocs = uniqueDocs.filter(
               (d: any) =>
                 vehicleDocTypes.includes(d.type) &&
-                (!d.vehicle || !d.vehicle.uuid || d.vehicle.uuid === found.uuid),
+                (!d.vehicle?.uuid || d.vehicle.uuid === found.uuid),
             );
           }
 
@@ -211,7 +211,7 @@ export default function VehicleDetailsScreen() {
           }
 
           // Resolver conductor asignado desde PostgreSQL (vehicle_drivers) o caché local
-          let assignedDriver: MockDriver | undefined = undefined;
+          let assignedDriver: MockDriver | undefined;
 
           if (
             Array.isArray(assignedDriversRes) &&
@@ -1085,8 +1085,7 @@ export default function VehicleDetailsScreen() {
                       vehicle.assignedDriver?.userUuid === driver.userUuid) ||
                     (Boolean(vehicle.assignedDriver?.driverUuid) &&
                       Boolean(driver.driverUuid) &&
-                      vehicle.assignedDriver?.driverUuid ===
-                        driver.driverUuid);
+                      vehicle.assignedDriver?.driverUuid === driver.driverUuid);
 
                   return (
                     <Pressable

@@ -964,9 +964,7 @@ export default function AdminTransportUnitsScreen() {
                       size={16}
                       color="#059669"
                     />
-                    <Text
-                      style={[styles.actionButtonText, styles.approveText]}
-                    >
+                    <Text style={[styles.actionButtonText, styles.approveText]}>
                       Aprobar
                     </Text>
                   </Pressable>
@@ -1260,7 +1258,10 @@ export default function AdminTransportUnitsScreen() {
                           color="#DC2626"
                         />
                         <Text
-                          style={[styles.modalActionText, styles.modalRejectText]}
+                          style={[
+                            styles.modalActionText,
+                            styles.modalRejectText,
+                          ]}
                         >
                           Rechazar
                         </Text>
