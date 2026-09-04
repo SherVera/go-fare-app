@@ -1,7 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -246,8 +245,9 @@ export default function RegisterScreen() {
         console.warn('[Register] Error al crear la cuenta de tarifa:', bgErr);
       }
 
-      // 8. Guardar perfil completo en el caché local
+      // 8. Guardar perfil pendiente y método de autenticación para onboarding
       try {
+        await AsyncStorage.setItem('auth_method', 'email');
         const profileCache = {
           displayName: calculatedDisplayName,
           fullName: calculatedDisplayName,
@@ -257,20 +257,32 @@ export default function RegisterScreen() {
           nationalId: finalIdNumber,
           phoneNumber: formattedPhoneNumber,
           email: trimmedEmail,
-          onboardingCompleted: true,
+          onboardingCompleted: false,
         };
         await AsyncStorage.setItem(
           'gofare_cached_user_profile',
           JSON.stringify(profileCache),
         );
-        await SecureStore.setItemAsync('user_role', 'passenger');
-        await AsyncStorage.setItem('phone_verified_bypass', 'true');
+        await AsyncStorage.setItem(
+          'gofare_pending_profile',
+          JSON.stringify({
+            fullName: calculatedDisplayName,
+            firstName: trimmedFirstName,
+            lastName: trimmedLastName,
+            phoneNumber: formattedPhoneNumber,
+            idNumber: finalIdNumber,
+            email: trimmedEmail,
+          }),
+        );
       } catch (storageErr) {
-        console.warn('[Register] Error saving profile cache:', storageErr);
+        console.warn(
+          '[Register] Error saving pending profile cache:',
+          storageErr,
+        );
       }
 
-      // 9. Redirigir de inmediato al Home (tabs)
-      router.replace('/(tabs)' as any);
+      // 9. Llevar a completar perfil (onboarding) para guardar la cédula
+      router.replace('/onboarding' as any);
     } catch (error: any) {
       console.warn('Registration error:', error);
       const serverErrors: typeof errors = {};

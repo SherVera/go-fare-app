@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import { PendingApprovalScreen } from '@/components/PendingApprovalScreen';
-import { getBackendProfile } from '@/lib/api';
+import { getBackendProfile, getMyTransportOwnerProfile } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
 export default function VehicleOwnerLayout() {
@@ -15,6 +15,17 @@ export default function VehicleOwnerLayout() {
 
   const checkApprovalStatus = useCallback(async () => {
     try {
+      // 1. Consultar estado real del dueño de vehículo en PostgreSQL (GET /transport-owners/me)
+      const ownerProfile = await getMyTransportOwnerProfile();
+      if (
+        ownerProfile &&
+        (ownerProfile.uuid || ownerProfile.id || ownerProfile.status)
+      ) {
+        setIsApproved(ownerProfile.status === 'approved');
+        return;
+      }
+
+      // 2. Fallback: perfil general y roles
       const profile = await getBackendProfile();
       const roles = (profile as any)?.roles || [];
       const isAdmin = roles.some(

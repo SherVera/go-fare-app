@@ -201,7 +201,7 @@ export default function AdminDocumentsScreen() {
             documents: [],
           });
         }
-        map.get(vKey)!.documents.push(d);
+        map.get(vKey)?.documents.push(d);
       });
 
     return Array.from(map.values());
@@ -226,7 +226,7 @@ export default function AdminDocumentsScreen() {
             documents: [],
           });
         }
-        map.get(uKey)!.documents.push(d);
+        map.get(uKey)?.documents.push(d);
       });
 
     return Array.from(map.values());

@@ -224,7 +224,7 @@ export default function DriverHistoryScreen() {
           {/* Tarifa cobrada */}
           <View style={styles.fareContainer}>
             <Text style={styles.fareText}>
-              +{Number(item.fareCost).toFixed(2)} fares
+              +{Number(item.fareCost).toFixed(2)} tickets
             </Text>
             <Text style={styles.codeTextMono} numberOfLines={1}>
               GF-{item.uuid?.substring(0, 8).toUpperCase()}
@@ -254,12 +254,12 @@ export default function DriverHistoryScreen() {
         <View style={styles.statsGrid}>
           <View style={styles.statCol}>
             <Text style={styles.statValue}>{totalCount}</Text>
-            <Text style={styles.statLabel}>Boletos Validados</Text>
+            <Text style={styles.statLabel}>Tickets Validados</Text>
           </View>
           <View style={styles.verticalDivider} />
           <View style={styles.statCol}>
             <Text style={[styles.statValue, { color: '#16A34A' }]}>
-              {totalEarnings.toFixed(2)} fares
+              {totalEarnings.toFixed(2)} tickets
             </Text>
             <Text style={styles.statLabel}>Total Recaudado</Text>
           </View>
@@ -289,7 +289,7 @@ export default function DriverHistoryScreen() {
             </View>
             <Text style={styles.emptyTitle}>Ningún cobro registrado aún</Text>
             <Text style={styles.emptySubtitle}>
-              Cuando valides los códigos QR de los pasajeros, sus boletos
+              Cuando valides los códigos QR de los pasajeros, sus tickets
               aparecerán listados cronológicamente aquí.
             </Text>
           </View>

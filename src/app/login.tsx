@@ -25,6 +25,7 @@ import type { LoginFormState } from '@/interfaces';
 import {
   createFareAccount,
   getFareAccountByUserId,
+  getMyTransportOwnerProfile,
   loginWithFirebaseToken,
   syncWithBackend,
 } from '@/lib/api';
@@ -292,17 +293,7 @@ export default function LoginScreen() {
 
       const currentUser = auth.currentUser || userCredential.user;
 
-      // Bloquear acceso si el correo no ha sido verificado
-      if (!currentUser.emailVerified) {
-        // Redirigir a la pantalla dedicada de verificación
-        router.replace({
-          pathname: '/verify-email',
-          params: { email: trimmedEmail },
-        } as any);
-        return;
-      }
-
-      // Correo verificado — sincronizar con backend y permitir acceso
+      // Sincronizar con backend para obtener el perfil y roles del usuario
       let backendUser = null;
       try {
         const response = await syncWithBackend(currentUser);
@@ -326,6 +317,50 @@ export default function LoginScreen() {
         );
         setLoading(false);
         return; // Detener flujo de inicio de sesión!
+      }
+
+      // Determinar si el usuario es Dueño de Vehículo
+      const roles = (backendUser as any).roles || [];
+      const isAdmin = roles.some(
+        (role: any) => role.name === 'platform_admin' || role.name === 'admin',
+      );
+      const isOwner =
+        roles.some(
+          (role: any) =>
+            role.name === 'transport_owner' ||
+            role.name === 'vehicle_owner' ||
+            role.name === 'owner' ||
+            role.name === 'civil_association',
+        ) ||
+        (backendUser as any)?.role === 'transport_owner' ||
+        (backendUser as any)?.transportOwner != null ||
+        (backendUser as any)?.transport_owner != null;
+      const isDriver = roles.some((role: any) => role.name === 'driver');
+
+      let isVehicleOwner = isOwner;
+      if (!isVehicleOwner) {
+        try {
+          const ownerRes = await getMyTransportOwnerProfile().catch(() => null);
+          if (
+            ownerRes &&
+            (ownerRes.status === 'pending_review' ||
+              ownerRes.status === 'pending' ||
+              ownerRes.status === 'approved' ||
+              ownerRes.status === 'rejected')
+          ) {
+            isVehicleOwner = true;
+          }
+        } catch (_) {}
+      }
+
+      // Bloquear acceso por correo no verificado EXCLUSIVAMENTE para pasajeros/usuarios regulares.
+      // Para Dueños de Vehículo, la pantalla y proceso de activación es 'Solicitud en Revisión'.
+      if (!isVehicleOwner && !currentUser.emailVerified) {
+        router.replace({
+          pathname: '/verify-email',
+          params: { email: trimmedEmail },
+        } as any);
+        return;
       }
 
       // Guardar credenciales encriptadas para inicio rápido
@@ -356,17 +391,9 @@ export default function LoginScreen() {
         }
       }
 
-      const roles = (backendUser as any).roles || [];
-      const isAdmin = roles.some(
-        (role: any) => role.name === 'platform_admin' || role.name === 'admin',
-      );
-      const isOwner = roles.some(
-        (role: any) => role.name === 'transport_owner',
-      );
-      const isDriver = roles.some((role: any) => role.name === 'driver');
       let userRole = isAdmin
         ? 'platform_admin'
-        : isOwner
+        : isVehicleOwner
           ? 'transport_owner'
           : isDriver
             ? 'driver'

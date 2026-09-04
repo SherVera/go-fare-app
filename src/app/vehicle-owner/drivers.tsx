@@ -251,8 +251,8 @@ Tu código de invitación único es: *${code}*`;
     return (
       d.name.toLowerCase().includes(term) ||
       d.nationalId.toLowerCase().includes(term) ||
-      (d.email && d.email.toLowerCase().includes(term)) ||
-      (d.phone && d.phone.toLowerCase().includes(term))
+      d.email?.toLowerCase().includes(term) ||
+      d.phone?.toLowerCase().includes(term)
     );
   });
 

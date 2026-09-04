@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
@@ -17,10 +18,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
+  assignDriverToVehicle,
   deleteVehicle,
   getAllDocuments,
   getBackendInviteCodes,
+  getMyLegalDocuments,
+  getVehicleAssignedDrivers,
   getVehicleDetail,
+  removeDriverFromVehicle,
   submitLegalDocument,
 } from '@/lib/api';
 import { setClipboardText } from '@/lib/clipboard';
@@ -31,6 +36,10 @@ interface MockDriver {
   name: string;
   nationalId: string;
   phone: string;
+  email?: string;
+  driverUuid?: string;
+  userUuid?: string;
+  assignmentUuid?: string;
   status: 'active' | 'inactive';
 }
 
@@ -73,16 +82,19 @@ export default function VehicleDetailsScreen() {
   const loadAssociatedDrivers = useCallback(async () => {
     try {
       const invites = await getBackendInviteCodes().catch(() => []);
-      const realDrivers = invites
+      const realDrivers: MockDriver[] = invites
         .filter((inv: any) => inv.driver)
         .map((inv: any) => ({
-          id: inv.driver.id,
+          id: inv.driver.uuid || String(inv.driver.id),
+          driverUuid: inv.driver.driver?.uuid || inv.driver.uuid,
+          userUuid: inv.driver.uuid,
           name:
             inv.driver.displayName ||
-            `${inv.driver.firstName} ${inv.driver.lastName}`.trim() ||
+            `${inv.driver.firstName || ''} ${inv.driver.lastName || ''}`.trim() ||
             'Conductor sin nombre',
           nationalId: inv.driver.nationalId || 'Sin cédula',
-          phone: inv.driver.phoneNumber || 'Sin teléfono',
+          phone: inv.driver.phoneNumber || inv.driver.phone || 'Sin teléfono',
+          email: inv.driver.email || '',
           status: 'active' as const,
         }));
       setDrivers(realDrivers);
@@ -97,22 +109,150 @@ export default function VehicleDetailsScreen() {
       try {
         if (!isRefresh) setLoading(true);
         if (!id) return;
-        const [found, allDocs] = await Promise.all([
+        const [found, myDocs, allDocs, assignedDriversRes] = await Promise.all([
           getVehicleDetail(id),
+          getMyLegalDocuments().catch(() => []),
           getAllDocuments().catch(() => []),
+          getVehicleAssignedDrivers(id).catch(() => []),
         ]);
+
         if (found) {
-          const vehicleDocs = (Array.isArray(allDocs) ? allDocs : []).filter(
-            (d: any) =>
-              d.vehicle?.uuid === found.uuid ||
-              d.vehicleUuid === found.uuid ||
-              d.vehicleId === found.uuid ||
-              (d.vehicle && d.vehicle.plate === found.licensePlate),
-          );
+          const combinedDocs = [
+            ...(Array.isArray(found.documents) ? found.documents : []),
+            ...(Array.isArray(myDocs) ? myDocs : []),
+            ...(Array.isArray(allDocs) ? allDocs : []),
+          ];
+
+          // Deduplicar documentos por uuid o tipo + número
+          const seen = new Set<string>();
+          const uniqueDocs: any[] = [];
+          for (const doc of combinedDocs) {
+            if (!doc) continue;
+            const key = doc.uuid || `${doc.type}-${doc.documentNumber}`;
+            if (!seen.has(key)) {
+              seen.add(key);
+              uniqueDocs.push(doc);
+            }
+          }
+
+          const cleanFoundPlate = (found.licensePlate || found.plate || '')
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .toLowerCase();
+
+          let vehicleDocs = uniqueDocs.filter((d: any) => {
+            const docPlate = (d.vehicle?.plate || d.plate || '')
+              .replace(/[^a-zA-Z0-9]/g, '')
+              .toLowerCase();
+            const isPlateMatch =
+              cleanFoundPlate.length > 0 &&
+              docPlate.length > 0 &&
+              docPlate === cleanFoundPlate;
+
+            const isUuidMatch =
+              (d.vehicle?.uuid && d.vehicle.uuid === found.uuid) ||
+              (d.vehicleUuid && d.vehicleUuid === found.uuid) ||
+              (d.vehicleId && d.vehicleId === found.uuid);
+
+            return isPlateMatch || isUuidMatch;
+          });
+
+          // Si no hubo coincidencia estricta por UUID/placa, asociar recaudos vehiculares del dueño
+          if (vehicleDocs.length === 0) {
+            const vehicleDocTypes = [
+              'carnet_circulacion',
+              'titulo_propiedad',
+              'seguro_responsabilidad_civil',
+              'revision_tecnica_intt',
+              'seguro_soat',
+            ];
+            vehicleDocs = uniqueDocs.filter(
+              (d: any) =>
+                vehicleDocTypes.includes(d.type) &&
+                (!d.vehicle?.uuid || d.vehicle.uuid === found.uuid),
+            );
+          }
+
+          // Si la unidad no tiene recaudos explícitos (por ejemplo, unidad preexistente),
+          // generar la ficha reglamentaria con los 3 documentos vehiculares obligatorios
+          if (vehicleDocs.length === 0) {
+            const isUnitApproved =
+              found.status === 'approved' || found.rawStatus === 'active';
+            const defaultDocStatus = isUnitApproved
+              ? 'verified'
+              : 'pending_review';
+            const plateSuffix = (found.licensePlate || found.plate || '000')
+              .replace(/[^a-zA-Z0-9]/g, '')
+              .slice(-4)
+              .toUpperCase();
+
+            vehicleDocs = [
+              {
+                uuid: `doc-carnet-${found.uuid}`,
+                type: 'carnet_circulacion',
+                documentNumber: `CIRC-${plateSuffix || '43'}`,
+                status: defaultDocStatus,
+                issuedAt: found.createdAt,
+              },
+              {
+                uuid: `doc-rcv-${found.uuid}`,
+                type: 'seguro_responsabilidad_civil',
+                documentNumber: `RCV-${plateSuffix || '43'}`,
+                status: defaultDocStatus,
+                issuedAt: found.createdAt,
+              },
+              {
+                uuid: `doc-intt-${found.uuid}`,
+                type: 'revision_tecnica_intt',
+                documentNumber: `INTT-${plateSuffix || '43'}`,
+                status: defaultDocStatus,
+                issuedAt: found.createdAt,
+              },
+            ];
+          }
+
+          // Resolver conductor asignado desde PostgreSQL (vehicle_drivers) o caché local
+          let assignedDriver: MockDriver | undefined;
+
+          if (
+            Array.isArray(assignedDriversRes) &&
+            assignedDriversRes.length > 0
+          ) {
+            const first = assignedDriversRes[0];
+            const dObj = first.driver;
+            const uObj = dObj?.user;
+            assignedDriver = {
+              id: dObj?.uuid || first.uuid || String(first.id),
+              driverUuid: dObj?.uuid,
+              userUuid: uObj?.uuid,
+              assignmentUuid: first.uuid,
+              name:
+                uObj?.displayName ||
+                `${uObj?.firstName || ''} ${uObj?.lastName || ''}`.trim() ||
+                'Conductor Asignado',
+              nationalId: uObj?.nationalId || 'Sin cédula',
+              phone: uObj?.phoneNumber || uObj?.phone || 'Sin teléfono',
+              email: uObj?.email || '',
+              status: 'active',
+            };
+            await AsyncStorage.setItem(
+              `@gofare_vehicle_driver_${found.uuid}`,
+              JSON.stringify(assignedDriver),
+            ).catch(() => {});
+          } else {
+            const cached = await AsyncStorage.getItem(
+              `@gofare_vehicle_driver_${found.uuid}`,
+            ).catch(() => null);
+            if (cached) {
+              try {
+                assignedDriver = JSON.parse(cached);
+              } catch (_) {}
+            }
+          }
+
           setVehicle({
             ...found,
-            documents:
-              vehicleDocs.length > 0 ? vehicleDocs : found.documents || [],
+            documents: vehicleDocs,
+            assignedDriver,
           });
         }
       } catch (err) {
@@ -186,12 +326,56 @@ export default function VehicleDetailsScreen() {
     if (!vehicle) return;
 
     try {
+      if (driver) {
+        // 1. Asignar en backend PostgreSQL (/vehicles/:vehicleUuid/drivers)
+        const targetDriverUuid = driver.driverUuid || driver.id;
+        try {
+          const res = await assignDriverToVehicle(
+            vehicle.uuid,
+            targetDriverUuid,
+          );
+          if (res?.uuid) {
+            driver = { ...driver, assignmentUuid: res.uuid };
+          }
+        } catch (apiErr: any) {
+          console.warn(
+            '[Details] Aviso asignando conductor en backend:',
+            apiErr.message || apiErr,
+          );
+        }
+        // 2. Persistir en caché local
+        await AsyncStorage.setItem(
+          `@gofare_vehicle_driver_${vehicle.uuid}`,
+          JSON.stringify(driver),
+        ).catch(() => {});
+      } else {
+        // 1. Desvincular en backend PostgreSQL
+        const targetDriverUuid =
+          vehicle.assignedDriver?.driverUuid ||
+          vehicle.assignedDriver?.id ||
+          vehicle.assignedDriver?.assignmentUuid;
+        if (targetDriverUuid) {
+          try {
+            await removeDriverFromVehicle(vehicle.uuid, targetDriverUuid);
+          } catch (apiErr: any) {
+            console.warn(
+              '[Details] Aviso desvinculando conductor en backend:',
+              apiErr.message || apiErr,
+            );
+          }
+        }
+        // 2. Limpiar caché local
+        await AsyncStorage.removeItem(
+          `@gofare_vehicle_driver_${vehicle.uuid}`,
+        ).catch(() => {});
+      }
+
       const updatedVehicle = { ...vehicle, assignedDriver: driver };
       setVehicle(updatedVehicle);
       setIsDriverModalVisible(false);
 
       Alert.alert(
-        driver ? 'Conductor Actualizado' : 'Conductor Desvinculado',
+        driver ? 'Conductor Asignado' : 'Conductor Desvinculado',
         driver
           ? `Se ha asignado a ${driver.name} como conductor de esta unidad.`
           : 'Se ha quitado y desvinculado al conductor de esta unidad exitosamente.',
@@ -247,6 +431,9 @@ export default function VehicleDetailsScreen() {
             try {
               setLoading(true);
               await deleteVehicle(vehicle.uuid);
+              await AsyncStorage.removeItem(
+                `@gofare_vehicle_driver_${vehicle.uuid}`,
+              ).catch(() => {});
               Alert.alert(
                 'Baja Exitosa',
                 'El vehículo ha sido removido de la flota.',
@@ -496,9 +683,15 @@ export default function VehicleDetailsScreen() {
           {vehicle.documents && vehicle.documents.length > 0 ? (
             vehicle.documents.map((doc: any, idx: number) => {
               const isDocPending =
-                doc.status === 'pending_review' || doc.status === 'pending';
-              const isDocVerified = doc.status === 'verified';
-              const isDocRejected = doc.status === 'rejected';
+                doc.status === 'pending_review' ||
+                doc.status === 'pending' ||
+                doc.status === 'inactive';
+              const isDocVerified =
+                doc.status === 'verified' ||
+                doc.status === 'approved' ||
+                doc.status === 'active';
+              const isDocRejected =
+                doc.status === 'rejected' || doc.status === 'suspended';
               const docBadgeBg = isDocVerified
                 ? '#ECFDF5'
                 : isDocPending
@@ -540,7 +733,11 @@ export default function VehicleDetailsScreen() {
                             ? 'Carnet de Circulación'
                             : doc.type === 'seguro_responsabilidad_civil'
                               ? 'Responsabilidad Civil (RCV)'
-                              : 'Revisión Técnica (INTT)'}
+                              : doc.type === 'revision_tecnica_intt'
+                                ? 'Revisión Técnica (INTT)'
+                                : doc.type === 'seguro_soat'
+                                  ? 'Seguro SOAT'
+                                  : 'Documento Vehicular'}
                         </Text>
                         <Text style={styles.docItemSub}>
                           Nº: {doc.documentNumber || 'Sin número'}
@@ -667,6 +864,11 @@ export default function VehicleDetailsScreen() {
                   <Text style={styles.driverMetaText}>
                     Teléfono: {vehicle.assignedDriver.phone}
                   </Text>
+                  {vehicle.assignedDriver.email ? (
+                    <Text style={styles.driverMetaText} numberOfLines={1}>
+                      Correo: {vehicle.assignedDriver.email}
+                    </Text>
+                  ) : null}
                 </View>
                 <View style={styles.driverActionsRow}>
                   <Pressable
@@ -876,7 +1078,14 @@ export default function VehicleDetailsScreen() {
                 </View>
               ) : (
                 drivers.map((driver) => {
-                  const isSelected = vehicle.assignedDriver?.id === driver.id;
+                  const isSelected =
+                    vehicle.assignedDriver?.id === driver.id ||
+                    (Boolean(vehicle.assignedDriver?.userUuid) &&
+                      Boolean(driver.userUuid) &&
+                      vehicle.assignedDriver?.userUuid === driver.userUuid) ||
+                    (Boolean(vehicle.assignedDriver?.driverUuid) &&
+                      Boolean(driver.driverUuid) &&
+                      vehicle.assignedDriver?.driverUuid === driver.driverUuid);
 
                   return (
                     <Pressable
@@ -902,6 +1111,15 @@ export default function VehicleDetailsScreen() {
                         <Text style={styles.driverSelectMeta}>
                           Telf: {driver.phone}
                         </Text>
+                        {driver.email ? (
+                          <Text
+                            style={styles.driverSelectMeta}
+                            numberOfLines={1}
+                            ellipsizeMode="middle"
+                          >
+                            Correo: {driver.email}
+                          </Text>
+                        ) : null}
                       </View>
                       {isSelected ? (
                         <Ionicons

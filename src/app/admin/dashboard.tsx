@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -22,6 +23,9 @@ import {
 } from '@/lib/api';
 import { sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
+
+const STATS_CACHE_KEY = 'gofare_admin_dashboard_stats';
+const RECENT_USERS_CACHE_KEY = 'gofare_admin_dashboard_recent_users';
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
@@ -87,32 +91,75 @@ export default function AdminDashboardScreen() {
           r && (r.status === 'pending' || r.status === 'pending_review'),
       ).length;
 
-      setStats({
-        passengers: passengerCount,
-        drivers: driverCount,
-        owners: ownerCount,
-        units: safeUnits.length,
-        pendingDocs: pendingCount,
-        pendingOwners: pendingOwnersCount,
-        civilAssociations: civilCount,
-      });
+      // Solo sobrescribir y cachear si al menos un endpoint retornó datos válidos
+      const hasAnyData =
+        safeUsers.length > 0 ||
+        safeUnits.length > 0 ||
+        safeDocs.length > 0 ||
+        safeOwnerReqs.length > 0;
 
-      // Ordenar por fecha de creación (descendente) y tomar los 3 más recientes
-      const sortedUsers = [...safeUsers]
-        .filter((u) => u?.createdAt)
-        .sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        )
-        .slice(0, 3);
+      if (hasAnyData) {
+        const newStats = {
+          passengers: passengerCount,
+          drivers: driverCount,
+          owners: ownerCount,
+          units: safeUnits.length,
+          pendingDocs: pendingCount,
+          pendingOwners: pendingOwnersCount,
+          civilAssociations: civilCount,
+        };
+        setStats(newStats);
+        AsyncStorage.setItem(STATS_CACHE_KEY, JSON.stringify(newStats)).catch(
+          () => {},
+        );
 
-      setRecentUsers(sortedUsers);
+        if (safeUsers.length > 0) {
+          const sortedUsers = [...safeUsers]
+            .filter((u) => u?.createdAt)
+            .sort(
+              (a, b) =>
+                new Date(b.createdAt).getTime() -
+                new Date(a.createdAt).getTime(),
+            )
+            .slice(0, 3);
+
+          setRecentUsers(sortedUsers);
+          AsyncStorage.setItem(
+            RECENT_USERS_CACHE_KEY,
+            JSON.stringify(sortedUsers),
+          ).catch(() => {});
+        }
+      } else {
+        console.warn(
+          '[AdminDashboard] No se obtuvieron datos nuevos de los endpoints. Preservando estado actual.',
+        );
+      }
     } catch (err) {
       console.warn('[AdminDashboard] Error al cargar datos:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  }, []);
+
+  // Cargar métricas cacheadas de inmediato para evitar el flash a ceros
+  useEffect(() => {
+    const loadCached = async () => {
+      try {
+        const cachedStatsStr = await AsyncStorage.getItem(STATS_CACHE_KEY);
+        const cachedUsersStr = await AsyncStorage.getItem(
+          RECENT_USERS_CACHE_KEY,
+        );
+        if (cachedStatsStr) {
+          setStats(JSON.parse(cachedStatsStr));
+          setLoading(false);
+        }
+        if (cachedUsersStr) {
+          setRecentUsers(JSON.parse(cachedUsersStr));
+        }
+      } catch {}
+    };
+    loadCached();
   }, []);
 
   const onRefresh = useCallback(async () => {

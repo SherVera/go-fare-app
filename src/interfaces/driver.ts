@@ -4,6 +4,8 @@ export interface MockDriver {
   nationalId: string;
   phone: string;
   email?: string;
+  driverUuid?: string;
+  userUuid?: string;
   status: 'active' | 'inactive';
 }
 

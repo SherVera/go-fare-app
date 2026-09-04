@@ -24,6 +24,7 @@ import {
   resolveRoleUuid,
   submitVehicleOwnerRequest,
   updateBackendProfile,
+  updateOwnNationalId,
 } from '@/lib/api';
 import { sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
@@ -34,6 +35,7 @@ export default function RegisterVehicleOwnerScreen() {
   // ── ESTADOS DE LOS CAMPOS ──
   // Datos del Usuario
   const [fullName, setFullName] = useState('');
+  const [nationality, setNationality] = useState<'V' | 'E'>('V');
   const [idNumber, setIdNumber] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [email, setEmail] = useState('');
@@ -102,54 +104,70 @@ export default function RegisterVehicleOwnerScreen() {
     setLoading(true);
 
     try {
-      const formattedPhone = phoneNumber.trim().startsWith('+')
-        ? phoneNumber.trim()
-        : phoneNumber.trim().startsWith('0')
-          ? `+58${phoneNumber.trim().slice(1)}`
-          : `+58${phoneNumber.trim()}`;
+      const finalIdNumber = `${nationality}-${idNumber.trim()}`;
+      const cleanedPhone = phoneNumber.trim().replace(/[^0-9]/g, '');
+      const finalPhoneDigits = cleanedPhone.startsWith('0')
+        ? cleanedPhone.slice(1)
+        : cleanedPhone;
+      const formattedPhone = `+58${finalPhoneDigits}`;
 
-      // 1. Crear el usuario en Firebase/PostgreSQL con el rol 'transport_owner'.
-      // Omitimos displayName y phoneNumber ya que el DTO del backend no los permite en el registro inicial.
+      // 1. Crear el usuario en Firebase Auth con el rol 'transport_owner' y la cédula en los claims
       const credentials = await registerWithEmail({
         email: email.trim(),
         password: password.trim(),
         registrationRole: 'transport_owner',
-        nationalId: idNumber.trim(),
+        nationalId: finalIdNumber,
       });
 
       // 2. Intercambiar el ID Token por el JWT de GoFare
       let backendUser = null;
       try {
-        // Intentar crear el usuario local primero en PostgreSQL para asegurar el número de teléfono
+        // Crear el usuario preventivamente en PostgreSQL con su número de teléfono (+58...)
         try {
           const roleUuid = await resolveRoleUuid('transport_owner');
           const parts = fullName.trim().split(/\s+/);
           const firstName = parts[0] || '';
           const lastName = parts.slice(1).join(' ') || '';
-          await createBackendUser({
+          backendUser = await createBackendUser({
             provider: 'local',
             providerId: credentials.localId || '',
             email: email.trim(),
-            phoneNumber: formattedPhone || undefined,
+            phoneNumber: formattedPhone,
             firstName,
             lastName,
             displayName: fullName.trim(),
             roleIds: roleUuid ? [roleUuid] : [],
           });
           console.log(
-            '[RegisterVehicleOwner] Usuario creado preventivamente en PostgreSQL con teléfono y rol transport_owner.',
+            '[RegisterVehicleOwner] Usuario registrado en PostgreSQL con teléfono y rol transport_owner:',
+            formattedPhone,
           );
         } catch (createErr) {
-          console.log(
+          console.warn(
             '[RegisterVehicleOwner] Creación preventiva saltada o ya existente:',
             createErr,
           );
         }
 
         const result = await loginWithFirebaseToken(credentials.idToken);
-        backendUser = result.user;
+        if (!backendUser) {
+          backendUser = result.user;
+        }
 
-        // Actualizar el perfil en el backend ya que no se pudo hacer en el registro inicial
+        // Guardar/actualizar la cédula (nationalId) explícitamente vía PATCH /auth/me/national-id
+        try {
+          await updateOwnNationalId(finalIdNumber);
+          console.log(
+            '[RegisterVehicleOwner] Cédula guardada exitosamente con PATCH /auth/me/national-id',
+          );
+        } catch (natErr) {
+          console.warn(
+            '[RegisterVehicleOwner] Error al actualizar nationalId:',
+            natErr,
+          );
+        }
+
+        // Actualizar el perfil en el backend (nombres, apellidos y teléfono)
         const parts = fullName.trim().split(/\s+/);
         const firstName = parts[0];
         const lastName = parts.slice(1).join(' ') || undefined;
@@ -159,7 +177,7 @@ export default function RegisterVehicleOwnerScreen() {
             firstName,
             lastName,
             phoneNumber: formattedPhone,
-            nationalId: idNumber.trim(),
+            nationalId: finalIdNumber,
           });
         } catch (profileUpdateErr) {
           console.warn(
@@ -195,7 +213,7 @@ export default function RegisterVehicleOwnerScreen() {
       try {
         await submitVehicleOwnerRequest({
           businessName: fullName.trim(),
-          idNumber: idNumber.trim(),
+          idNumber: finalIdNumber,
         });
       } catch (requestError: any) {
         console.error(
@@ -407,11 +425,27 @@ export default function RegisterVehicleOwnerScreen() {
           <View
             style={[styles.inputCard, errors.idNumber && styles.inputCardError]}
           >
-            <Text
-              style={[styles.prefix, errors.idNumber && { color: '#EF4444' }]}
+            <Pressable
+              onPress={() => {
+                if (!loading) {
+                  setNationality((prev) => (prev === 'V' ? 'E' : 'V'));
+                }
+              }}
+              style={styles.nationalitySelector}
+              hitSlop={10}
             >
-              V-
-            </Text>
+              <Text
+                style={[styles.prefix, errors.idNumber && { color: '#EF4444' }]}
+              >
+                {nationality}-
+              </Text>
+              <Ionicons
+                name="chevron-down"
+                size={10}
+                color="#8594AB"
+                style={{ marginLeft: 2, marginTop: 1 }}
+              />
+            </Pressable>
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
@@ -420,7 +454,8 @@ export default function RegisterVehicleOwnerScreen() {
               keyboardType="number-pad"
               value={idNumber}
               onChangeText={(text) => {
-                setIdNumber(text);
+                const cleaned = text.replace(/[^0-9]/g, '');
+                setIdNumber(cleaned);
                 if (errors.idNumber)
                   setErrors((prev) => ({ ...prev, idNumber: undefined }));
               }}
@@ -847,5 +882,10 @@ const styles = StyleSheet.create({
   dropdownItemTextActive: {
     color: tokens.colors.primary,
     fontFamily: tokens.typography.fontFamily.bold,
+  },
+  nationalitySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 4,
   },
 });

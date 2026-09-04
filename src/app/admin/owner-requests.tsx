@@ -4,9 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -20,6 +24,8 @@ import {
   getAllAffiliationRequests,
   rejectDriverRequest,
   rejectOwnerRequest,
+  suspendDriverRequest,
+  suspendOwnerRequest,
   verifyDriverRequest,
   verifyOwnerRequest,
 } from '@/lib/api';
@@ -34,12 +40,15 @@ export default function AdminOwnerRequestsScreen() {
     'all',
   );
   const [activeTab, setActiveTab] = useState<
-    'pending' | 'approved' | 'rejected'
+    'pending' | 'approved' | 'rejected' | 'suspended'
   >('pending');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Estado para el modal de rechazo
+  // Estado para el modal de rechazo o suspensión
   const [selectedReq, setSelectedReq] = useState<any | null>(null);
+  const [modalActionType, setModalActionType] = useState<'reject' | 'suspend'>(
+    'reject',
+  );
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -84,6 +93,7 @@ export default function AdminOwnerRequestsScreen() {
       pending: roleFiltered.filter((r) => r.status === 'pending').length,
       approved: roleFiltered.filter((r) => r.status === 'approved').length,
       rejected: roleFiltered.filter((r) => r.status === 'rejected').length,
+      suspended: roleFiltered.filter((r) => r.status === 'suspended').length,
     };
   }, [requests, activeRole]);
 
@@ -157,11 +167,19 @@ export default function AdminOwnerRequestsScreen() {
 
   const handleRejectInit = (req: any) => {
     setSelectedReq(req);
+    setModalActionType('reject');
     setRejectReason('');
     setRejectModalVisible(true);
   };
 
-  const handleRejectConfirm = async () => {
+  const handleSuspendInit = (req: any) => {
+    setSelectedReq(req);
+    setModalActionType('suspend');
+    setRejectReason('');
+    setRejectModalVisible(true);
+  };
+
+  const handleModalConfirm = async () => {
     if (!selectedReq) return;
     if (rejectReason.trim().length < 4) {
       Alert.alert(
@@ -171,19 +189,29 @@ export default function AdminOwnerRequestsScreen() {
       return;
     }
 
+    Keyboard.dismiss();
     setRejectModalVisible(false);
     setLoading(true);
     try {
-      if (selectedReq.roleType === 'driver') {
-        await rejectDriverRequest(selectedReq.uuid, rejectReason.trim());
+      if (modalActionType === 'suspend') {
+        if (selectedReq.roleType === 'driver') {
+          await suspendDriverRequest(selectedReq.uuid, rejectReason.trim());
+        } else {
+          await suspendOwnerRequest(selectedReq.uuid, rejectReason.trim());
+        }
+        Alert.alert('Suspendida', 'La cuenta ha sido suspendida exitosamente.');
       } else {
-        await rejectOwnerRequest(selectedReq.uuid, rejectReason.trim());
+        if (selectedReq.roleType === 'driver') {
+          await rejectDriverRequest(selectedReq.uuid, rejectReason.trim());
+        } else {
+          await rejectOwnerRequest(selectedReq.uuid, rejectReason.trim());
+        }
+        Alert.alert('Rechazada', 'La solicitud ha sido rechazada.');
       }
-      Alert.alert('Rechazada', 'La solicitud ha sido rechazada.');
       fetchRequests();
     } catch (err: any) {
-      console.warn('[AdminOwnerRequests] Error rejecting request:', err);
-      Alert.alert('Error', err.message || 'No se pudo rechazar la solicitud.');
+      console.warn('[AdminOwnerRequests] Error processing action:', err);
+      Alert.alert('Error', err.message || 'No se pudo procesar la acción.');
       setLoading(false);
     }
   };
@@ -301,6 +329,7 @@ export default function AdminOwnerRequestsScreen() {
               styles.tabLabel,
               activeTab === 'pending' && styles.tabLabelActive,
             ]}
+            numberOfLines={1}
           >
             Pendientes ({counts.pending})
           </Text>
@@ -315,6 +344,7 @@ export default function AdminOwnerRequestsScreen() {
               styles.tabLabel,
               activeTab === 'approved' && styles.tabLabelActive,
             ]}
+            numberOfLines={1}
           >
             Aprobadas ({counts.approved})
           </Text>
@@ -329,8 +359,24 @@ export default function AdminOwnerRequestsScreen() {
               styles.tabLabel,
               activeTab === 'rejected' && styles.tabLabelActive,
             ]}
+            numberOfLines={1}
           >
             Rechazadas ({counts.rejected})
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.tab, activeTab === 'suspended' && styles.tabActive]}
+          onPress={() => setActiveTab('suspended')}
+        >
+          <Text
+            style={[
+              styles.tabLabel,
+              activeTab === 'suspended' && styles.tabLabelActive,
+            ]}
+            numberOfLines={1}
+          >
+            Suspendidas ({counts.suspended})
           </Text>
         </Pressable>
       </View>
@@ -374,6 +420,7 @@ export default function AdminOwnerRequestsScreen() {
           const isDriver = item.roleType === 'driver';
           const isApproved = item.status === 'approved';
           const isRejected = item.status === 'rejected';
+          const isSuspended = item.status === 'suspended';
           const dateStr = item.createdAt
             ? new Date(item.createdAt).toLocaleDateString('es-ES', {
                 day: 'numeric',
@@ -473,8 +520,8 @@ export default function AdminOwnerRequestsScreen() {
                 </View>
               )}
 
-              {/* Motivo de rechazo */}
-              {isRejected && (
+              {/* Motivo de rechazo o suspensión */}
+              {(isRejected || isSuspended) && (
                 <View style={styles.rejectionCard}>
                   <View
                     style={{
@@ -484,24 +531,28 @@ export default function AdminOwnerRequestsScreen() {
                     }}
                   >
                     <Ionicons
-                      name="close-circle"
+                      name={isSuspended ? 'ban' : 'close-circle'}
                       size={15}
                       color="#DC2626"
                       style={{ marginRight: 5 }}
                     />
                     <Text style={styles.rejectionTitle}>
-                      SOLICITUD RECHAZADA:
+                      {isSuspended
+                        ? 'CUENTA SUSPENDIDA:'
+                        : 'SOLICITUD RECHAZADA:'}
                     </Text>
                   </View>
                   <Text style={styles.rejectionText}>
                     {item.rejectionReason ||
-                      'No cumple con los requisitos establecidos.'}
+                      (isSuspended
+                        ? 'Cuenta suspendida por decisión administrativa.'
+                        : 'No cumple con los requisitos establecidos.')}
                   </Text>
                 </View>
               )}
 
-              {/* Acciones para Rechazadas: Reconsiderar */}
-              {isRejected && (
+              {/* Acciones para Rechazadas y Suspendidas: Reconsiderar / Reactivar */}
+              {(isRejected || isSuspended) && (
                 <View style={styles.actionsRow}>
                   <Pressable
                     style={[
@@ -516,8 +567,23 @@ export default function AdminOwnerRequestsScreen() {
                       color="#FFFFFF"
                     />
                     <Text style={styles.approveBtnText}>
-                      Reconsiderar y Aprobar
+                      {isSuspended
+                        ? 'Reactivar Cuenta'
+                        : 'Reconsiderar y Aprobar'}
                     </Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {/* Acciones para Aprobadas: Suspender Cuenta */}
+              {isApproved && (
+                <View style={styles.actionsRow}>
+                  <Pressable
+                    style={styles.rejectBtn}
+                    onPress={() => handleSuspendInit(item)}
+                  >
+                    <Ionicons name="ban-outline" size={18} color="#EF4444" />
+                    <Text style={styles.rejectBtnText}>Suspender Cuenta</Text>
                   </Pressable>
                 </View>
               )}
@@ -560,18 +626,45 @@ export default function AdminOwnerRequestsScreen() {
         }}
       />
 
-      {/* Modal de Rechazo */}
+      {/* Modal de Rechazo o Suspensión */}
       <Modal
         visible={rejectModalVisible}
         transparent={true}
-        animationType="slide"
-        onRequestClose={() => setRejectModalVisible(false)}
+        animationType="fade"
+        onRequestClose={() => {
+          Keyboard.dismiss();
+          setRejectModalVisible(false);
+        }}
+        statusBarTranslucent
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+          style={styles.modalOverlay}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              Keyboard.dismiss();
+              setRejectModalVisible(false);
+            }}
+          />
+
           <View style={styles.modalContent}>
+            <View style={styles.modalDragIndicator} />
+
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Rechazar Solicitud</Text>
-              <Pressable onPress={() => setRejectModalVisible(false)}>
+              <Text style={styles.modalTitle}>
+                {modalActionType === 'suspend'
+                  ? 'Suspender Cuenta'
+                  : 'Rechazar Solicitud'}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setRejectModalVisible(false);
+                }}
+                hitSlop={12}
+              >
                 <Ionicons
                   name="close-circle-outline"
                   size={24}
@@ -580,38 +673,60 @@ export default function AdminOwnerRequestsScreen() {
               </Pressable>
             </View>
 
-            <Text style={styles.modalSub}>
-              Ingresa el motivo del rechazo para informarle al solicitante (
-              {selectedReq?.displayName}):
-            </Text>
+            <ScrollView
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
+            >
+              <Text style={styles.modalSubtitle}>
+                {modalActionType === 'suspend'
+                  ? 'Ingresa el motivo de la suspensión administrativa para ('
+                  : 'Ingresa el motivo del rechazo para informarle al solicitante ('}
+                <Text style={styles.modalApplicantName}>
+                  {selectedReq?.displayName || 'Solicitante'}
+                </Text>
+                ):
+              </Text>
 
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Ej. Documentación no legible o inconsistente..."
-              placeholderTextColor="#94A3B8"
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              multiline
-              numberOfLines={4}
-            />
+              <TextInput
+                style={styles.modalInput}
+                placeholder={
+                  modalActionType === 'suspend'
+                    ? 'Ej. Incumplimiento de normativas o documentación no conforme...'
+                    : 'Ej. Documentación no legible o inconsistente...'
+                }
+                placeholderTextColor="#94A3B8"
+                value={rejectReason}
+                onChangeText={setRejectReason}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
 
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.modalCancelBtn}
-                onPress={() => setRejectModalVisible(false)}
-              >
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </Pressable>
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={styles.modalCancelBtn}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setRejectModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Cancelar</Text>
+                </Pressable>
 
-              <Pressable
-                style={styles.modalRejectConfirmBtn}
-                onPress={handleRejectConfirm}
-              >
-                <Text style={styles.modalRejectConfirmText}>Rechazar</Text>
-              </Pressable>
-            </View>
+                <Pressable
+                  style={styles.modalRejectConfirmBtn}
+                  onPress={handleModalConfirm}
+                >
+                  <Text style={styles.modalRejectConfirmText}>
+                    {modalActionType === 'suspend' ? 'Suspender' : 'Rechazar'}
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -936,46 +1051,70 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    padding: 24,
-    paddingBottom: 40,
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 22,
+    maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 14,
+    elevation: 16,
+  },
+  modalDragIndicator: {
+    width: 36,
+    height: 4,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 14,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   modalTitle: {
     fontSize: 18,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#0F172A',
   },
+  modalScrollContent: {
+    paddingBottom: 4,
+  },
   modalSubtitle: {
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#64748B',
     marginBottom: 14,
-    lineHeight: 18,
+    lineHeight: 19,
+  },
+  modalApplicantName: {
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#0F172A',
   },
   modalInput: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#CBD5E1',
-    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#0F172A',
-    minHeight: 100,
+    minHeight: 88,
+    maxHeight: 130,
     textAlignVertical: 'top',
-    marginBottom: 20,
+    marginBottom: 18,
   },
   modalActions: {
     flexDirection: 'row',
@@ -990,6 +1129,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CBD5E1',
     marginRight: 10,
+    backgroundColor: '#FFFFFF',
   },
   modalCancelText: {
     fontFamily: tokens.typography.fontFamily.bold,
@@ -1003,6 +1143,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: 48,
     borderRadius: 12,
+    elevation: 2,
   },
   modalRejectConfirmText: {
     fontFamily: tokens.typography.fontFamily.bold,
