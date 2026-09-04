@@ -768,7 +768,7 @@ export default function PayTripScreen() {
 
                     <View style={styles.ticketInfoRow}>
                       <Text style={styles.ticketInfoLabel}>
-                        BOLETOS RESTANTES
+                        TICKETS RESTANTES
                       </Text>
                       <Text
                         style={[
@@ -778,8 +778,8 @@ export default function PayTripScreen() {
                       >
                         {Math.max(0, Math.floor(balance))}{' '}
                         {Math.max(0, Math.floor(balance)) === 1
-                          ? 'boleto'
-                          : 'boletos'}
+                          ? 'ticket'
+                          : 'tickets'}
                       </Text>
                     </View>
 

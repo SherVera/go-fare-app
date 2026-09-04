@@ -37,9 +37,9 @@ export default function AdminTransportUnitsScreen() {
   const [units, setUnits] = useState<any[]>([]);
   const [filteredUnits, setFilteredUnits] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [activeTab, setActiveTab] = useState<'all' | 'active' | 'inactive'>(
-    'all',
-  );
+  const [activeTab, setActiveTab] = useState<
+    'all' | 'active' | 'inactive' | 'rejected'
+  >('all');
   const [selectedUnit, setSelectedUnit] = useState<any | null>(null);
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -61,15 +61,27 @@ export default function AdminTransportUnitsScreen() {
       // Filter by status tab
       if (tab === 'active') {
         result = result.filter(
-          (u) => u.isActive === true || u.status === 'active',
+          (u) =>
+            (u.isActive === true || u.status === 'active') &&
+            u.status !== 'suspended' &&
+            u.status !== 'rejected',
         );
       } else if (tab === 'inactive') {
         result = result.filter(
           (u) =>
-            u.isActive === false ||
-            u.status === 'inactive' ||
-            u.status === 'pending_review' ||
-            u.status === 'pending',
+            (u.status === 'inactive' ||
+              u.status === 'pending_review' ||
+              u.status === 'pending' ||
+              u.isActive === false) &&
+            u.status !== 'suspended' &&
+            u.status !== 'rejected',
+        );
+      } else if (tab === 'rejected') {
+        result = result.filter(
+          (u) =>
+            u.status === 'suspended' ||
+            u.status === 'rejected' ||
+            u.status === 'rechazada',
         );
       }
 
@@ -580,6 +592,20 @@ export default function AdminTransportUnitsScreen() {
             Pendientes
           </Text>
         </Pressable>
+
+        <Pressable
+          style={[styles.tab, activeTab === 'rejected' && styles.tabActive]}
+          onPress={() => handleTabChange('rejected')}
+        >
+          <Text
+            style={[
+              styles.tabLabel,
+              activeTab === 'rejected' && styles.tabLabelActiveRejected,
+            ]}
+          >
+            Rechazadas
+          </Text>
+        </Pressable>
       </View>
 
       {/* List */}
@@ -618,17 +644,37 @@ export default function AdminTransportUnitsScreen() {
           </View>
         }
         renderItem={({ item }) => {
-          const statusColor = item.isActive ? '#10B981' : '#F59E0B';
-          const statusText = item.isActive ? 'Activa' : 'Pendiente';
+          const isRejected =
+            item.status === 'suspended' ||
+            item.status === 'rejected' ||
+            item.status === 'rechazada';
+          const isActive =
+            (item.isActive === true || item.status === 'active') && !isRejected;
+
+          const statusColor = isRejected
+            ? '#EF4444'
+            : isActive
+              ? '#10B981'
+              : '#F59E0B';
+          const statusText = isRejected
+            ? 'Rechazada'
+            : isActive
+              ? 'Activa'
+              : 'Pendiente';
 
           return (
             <View style={styles.unitCard}>
               <View style={styles.cardHeader}>
-                <View style={styles.iconCircle}>
+                <View
+                  style={[
+                    styles.iconCircle,
+                    isRejected && { backgroundColor: '#FEE2E2' },
+                  ]}
+                >
                   <Ionicons
                     name="bus"
                     size={22}
-                    color={tokens.colors.primary}
+                    color={isRejected ? '#DC2626' : tokens.colors.primary}
                   />
                 </View>
                 <View style={styles.meta}>
@@ -640,7 +686,7 @@ export default function AdminTransportUnitsScreen() {
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: `${statusColor}12` },
+                    { backgroundColor: `${statusColor}14` },
                   ]}
                 >
                   <View
@@ -844,6 +890,20 @@ export default function AdminTransportUnitsScreen() {
                 </View>
               )}
 
+              {isRejected && (
+                <View style={styles.cardRejectionBanner}>
+                  <Ionicons
+                    name="alert-circle"
+                    size={14}
+                    color="#DC2626"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.cardRejectionBannerText}>
+                    Unidad rechazada por el administrador
+                  </Text>
+                </View>
+              )}
+
               {/* Acciones */}
               <View style={styles.cardActions}>
                 <Pressable
@@ -858,7 +918,7 @@ export default function AdminTransportUnitsScreen() {
                   <Text style={styles.actionButtonText}>Detalles</Text>
                 </Pressable>
 
-                {!item.isActive && (
+                {!isActive && !isRejected && (
                   <>
                     <Pressable
                       style={[styles.actionButton, styles.approveButton]}
@@ -894,7 +954,25 @@ export default function AdminTransportUnitsScreen() {
                   </>
                 )}
 
-                {item.isActive && (
+                {isRejected && (
+                  <Pressable
+                    style={[styles.actionButton, styles.approveButton]}
+                    onPress={() => handleApproveUnit(item)}
+                  >
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={16}
+                      color="#059669"
+                    />
+                    <Text
+                      style={[styles.actionButtonText, styles.approveText]}
+                    >
+                      Aprobar
+                    </Text>
+                  </Pressable>
+                )}
+
+                {isActive && (
                   <Pressable
                     style={[styles.actionButton, styles.deactivateButton]}
                     onPress={() => handleDeactivateUnit(item)}
@@ -962,9 +1040,14 @@ export default function AdminTransportUnitsScreen() {
                     style={[
                       styles.modalStatusBadge,
                       {
-                        backgroundColor: selectedUnit.isActive
-                          ? '#ECFDF5'
-                          : '#FEF3C7',
+                        backgroundColor:
+                          selectedUnit.status === 'suspended' ||
+                          selectedUnit.status === 'rejected' ||
+                          selectedUnit.status === 'rechazada'
+                            ? '#FEE2E2'
+                            : selectedUnit.isActive
+                              ? '#D1FAE5'
+                              : '#FEF3C7',
                       },
                     ]}
                   >
@@ -972,9 +1055,14 @@ export default function AdminTransportUnitsScreen() {
                       style={[
                         styles.modalStatusDot,
                         {
-                          backgroundColor: selectedUnit.isActive
-                            ? '#10B981'
-                            : '#F59E0B',
+                          backgroundColor:
+                            selectedUnit.status === 'suspended' ||
+                            selectedUnit.status === 'rejected' ||
+                            selectedUnit.status === 'rechazada'
+                              ? '#EF4444'
+                              : selectedUnit.isActive
+                                ? '#10B981'
+                                : '#F59E0B',
                         },
                       ]}
                     />
@@ -982,11 +1070,24 @@ export default function AdminTransportUnitsScreen() {
                       style={[
                         styles.modalStatusText,
                         {
-                          color: selectedUnit.isActive ? '#059669' : '#D97706',
+                          color:
+                            selectedUnit.status === 'suspended' ||
+                            selectedUnit.status === 'rejected' ||
+                            selectedUnit.status === 'rechazada'
+                              ? '#DC2626'
+                              : selectedUnit.isActive
+                                ? '#059669'
+                                : '#D97706',
                         },
                       ]}
                     >
-                      {selectedUnit.isActive ? 'Activa' : 'Pendiente'}
+                      {selectedUnit.status === 'suspended' ||
+                      selectedUnit.status === 'rejected' ||
+                      selectedUnit.status === 'rechazada'
+                        ? 'Rechazada'
+                        : selectedUnit.isActive
+                          ? 'Activa'
+                          : 'Pendiente'}
                     </Text>
                   </View>
                 </View>
@@ -1141,41 +1242,48 @@ export default function AdminTransportUnitsScreen() {
               </View>
             )}
 
-            {selectedUnit && !selectedUnit.isActive && !detailLoading && (
-              <View style={styles.modalActionRow}>
-                <Pressable
-                  style={[styles.modalActionBtn, styles.modalRejectBtn]}
-                  onPress={() => handleRejectUnit(selectedUnit)}
-                >
-                  <Ionicons
-                    name="close-circle-outline"
-                    size={18}
-                    color="#DC2626"
-                  />
-                  <Text
-                    style={[styles.modalActionText, styles.modalRejectText]}
-                  >
-                    Rechazar
-                  </Text>
-                </Pressable>
+            {selectedUnit &&
+              !selectedUnit.isActive &&
+              selectedUnit.status !== 'active' &&
+              !detailLoading && (
+                <View style={styles.modalActionRow}>
+                  {selectedUnit.status !== 'suspended' &&
+                    selectedUnit.status !== 'rejected' &&
+                    selectedUnit.status !== 'rechazada' && (
+                      <Pressable
+                        style={[styles.modalActionBtn, styles.modalRejectBtn]}
+                        onPress={() => handleRejectUnit(selectedUnit)}
+                      >
+                        <Ionicons
+                          name="close-circle-outline"
+                          size={18}
+                          color="#DC2626"
+                        />
+                        <Text
+                          style={[styles.modalActionText, styles.modalRejectText]}
+                        >
+                          Rechazar
+                        </Text>
+                      </Pressable>
+                    )}
 
-                <Pressable
-                  style={[styles.modalActionBtn, styles.modalApproveBtn]}
-                  onPress={() => handleApproveUnit(selectedUnit)}
-                >
-                  <Ionicons
-                    name="checkmark-circle-outline"
-                    size={18}
-                    color="#059669"
-                  />
-                  <Text
-                    style={[styles.modalActionText, styles.modalApproveText]}
+                  <Pressable
+                    style={[styles.modalActionBtn, styles.modalApproveBtn]}
+                    onPress={() => handleApproveUnit(selectedUnit)}
                   >
-                    Aprobar
-                  </Text>
-                </Pressable>
-              </View>
-            )}
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={18}
+                      color="#059669"
+                    />
+                    <Text
+                      style={[styles.modalActionText, styles.modalApproveText]}
+                    >
+                      Aprobar
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
           </View>
         </View>
       </Modal>
@@ -1242,6 +1350,25 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     color: tokens.colors.primary,
+  },
+  tabLabelActiveRejected: {
+    color: '#DC2626',
+  },
+  cardRejectionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 12,
+  },
+  cardRejectionBannerText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#991B1B',
   },
   listContent: {
     paddingHorizontal: 20,

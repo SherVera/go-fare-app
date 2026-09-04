@@ -16,7 +16,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
   formatUserProfileName,
+  getAssignedVehicles,
   getBackendProfile,
+  getMyAssociatedOwner,
   updateBackendProfile,
 } from '@/lib/api';
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
@@ -32,9 +34,12 @@ export default function DriverProfileScreen() {
   const [phone, setPhone] = useState('No registrado');
   const [license, setLicense] = useState('');
 
-  // Coop / Vehicle info
+  // Association & Vehicle info
+  const [associatedOwner, setAssociatedOwner] = useState<any | null>(null);
+  const [ownerName, setOwnerName] = useState('Sin Dueño Asociado');
+  const [ownerSubtitle, setOwnerSubtitle] = useState('');
   const [cooperative, setCooperative] = useState('Línea Particular');
-  const [vehicle, _setVehicle] = useState('Sin Unidad Asignada');
+  const [vehicle, setVehicle] = useState('Sin Unidad Asignada');
 
   const loadProfileData = useCallback(async () => {
     try {
@@ -112,13 +117,65 @@ export default function DriverProfileScreen() {
         }
       }
 
-      // Cargar info de cooperativa si existiera local
+      // 1. Cargar dueño asociado desde el backend real
+      try {
+        const owner = await getMyAssociatedOwner();
+        if (owner) {
+          setAssociatedOwner(owner);
+          const resolvedOwnerName =
+            formatUserProfileName(owner) ||
+            owner.displayName ||
+            `${owner.firstName || ''} ${owner.lastName || ''}`.trim() ||
+            owner.email ||
+            'Dueño de Transporte';
+          setOwnerName(resolvedOwnerName);
+
+          const extraDetails: string[] = [];
+          if (owner.nationalId || owner.idNumber) {
+            extraDetails.push(`C.I: ${owner.nationalId || owner.idNumber}`);
+          }
+          if (owner.email && !resolvedOwnerName.includes(owner.email)) {
+            extraDetails.push(owner.email);
+          }
+          setOwnerSubtitle(extraDetails.join(' • '));
+        } else {
+          setAssociatedOwner(null);
+          setOwnerName('Sin Dueño Asociado');
+          setOwnerSubtitle('No tienes ningún transportista vinculado actualmente');
+        }
+      } catch (ownerErr) {
+        console.warn('[DriverProfile] Error loading associated owner:', ownerErr);
+        setAssociatedOwner(null);
+        setOwnerName('Sin Dueño Asociado');
+        setOwnerSubtitle('No tienes ningún transportista vinculado actualmente');
+      }
+
+      // 2. Cargar vehículo asignado real desde el backend
+      try {
+        const vehicles = await getAssignedVehicles();
+        if (vehicles && vehicles.length > 0) {
+          const v = vehicles[0];
+          setVehicle(`${v.brand} ${v.model} (${v.plate})`);
+          if (v.cooperativeName) {
+            setCooperative(v.cooperativeName);
+          }
+        } else {
+          setVehicle('Sin Unidad Asignada');
+        }
+      } catch (vehErr) {
+        console.warn('[DriverProfile] Error loading vehicles:', vehErr);
+        setVehicle('Sin Unidad Asignada');
+      }
+
+      // 3. Cargar info de cooperativa si existiera local
       const coopStr = await AsyncStorage.getItem(
         'mock_vehicle_owner_cooperative',
       );
       if (coopStr) {
         const coopData = JSON.parse(coopStr);
-        setCooperative(coopData.businessName);
+        if (coopData.businessName) {
+          setCooperative(coopData.businessName);
+        }
       }
     } catch (err) {
       console.warn('[DriverProfile] Error loading data:', err);
@@ -200,9 +257,36 @@ export default function DriverProfileScreen() {
           <Text style={styles.profileRoleBadge}>Conductor de Unidad</Text>
         </View>
 
-        {/* Coop Info Card */}
+        {/* Association, Coop & Vehicle Card */}
         <View style={styles.infoCard}>
-          <Text style={styles.infoCardTitle}>COOPERATIVA Y UNIDAD</Text>
+          <Text style={styles.infoCardTitle}>ASOCIACIÓN Y TRANSPORTE</Text>
+
+          {/* Dueño Asociado */}
+          <View style={styles.row}>
+            <View
+              style={[
+                styles.iconWrapper,
+                !associatedOwner && styles.iconWrapperInactive,
+              ]}
+            >
+              <Ionicons
+                name={associatedOwner ? 'person' : 'person-outline'}
+                size={20}
+                color={associatedOwner ? '#FFFFFF' : '#94A3B8'}
+              />
+            </View>
+            <View style={styles.infoDetails}>
+              <Text style={styles.infoLabelText}>Dueño Asociado</Text>
+              <Text style={styles.infoValueText}>{ownerName}</Text>
+              {ownerSubtitle ? (
+                <Text style={styles.infoSubText}>{ownerSubtitle}</Text>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.horizontalDivider} />
+
+          {/* Cooperativa Afiliada */}
           <View style={styles.row}>
             <View style={styles.iconWrapper}>
               <Ionicons name="business" size={20} color="#FFFFFF" />
@@ -212,10 +296,22 @@ export default function DriverProfileScreen() {
               <Text style={styles.infoValueText}>{cooperative}</Text>
             </View>
           </View>
+
           <View style={styles.horizontalDivider} />
+
+          {/* Unidad de Transporte */}
           <View style={styles.row}>
-            <View style={styles.iconWrapper}>
-              <Ionicons name="bus" size={20} color="#FFFFFF" />
+            <View
+              style={[
+                styles.iconWrapper,
+                vehicle === 'Sin Unidad Asignada' && styles.iconWrapperInactive,
+              ]}
+            >
+              <Ionicons
+                name="bus"
+                size={20}
+                color={vehicle === 'Sin Unidad Asignada' ? '#94A3B8' : '#FFFFFF'}
+              />
             </View>
             <View style={styles.infoDetails}>
               <Text style={styles.infoLabelText}>Unidad de Transporte</Text>
@@ -438,6 +534,15 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F1F5F9',
     marginVertical: 12,
+  },
+  iconWrapperInactive: {
+    backgroundColor: '#E2E8F0',
+  },
+  infoSubText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginTop: 2,
   },
   sectionTitle: {
     fontSize: 15,

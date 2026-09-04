@@ -20,6 +20,8 @@ import {
   clearBackendJwt,
   createBackendUser,
   createFareAccount,
+  getBackendProfile,
+  getMyTransportOwnerProfile,
   resolveRoleUuid,
   syncWithBackend,
   updateBackendProfile,
@@ -45,6 +47,73 @@ export default function VerifyEmailScreen() {
 
   const registeredEmail =
     params.email || auth.currentUser?.email || 'tu correo';
+
+  // Si el usuario es Dueño de Vehículo, la pantalla de verificación de correo NO aplica.
+  // Debe ser redirigido inmediatamente a la pantalla de 'Solicitud en Revisión'
+  useEffect(() => {
+    let active = true;
+    const checkIfOwner = async () => {
+      try {
+        const cachedRole = await SecureStore.getItemAsync('user_role');
+        if (
+          cachedRole === 'transport_owner' ||
+          cachedRole === 'vehicle_owner' ||
+          cachedRole === 'owner'
+        ) {
+          if (active) router.replace('/pending-approval');
+          return;
+        }
+
+        const profile = await getBackendProfile().catch(() => null);
+        if (profile) {
+          const roles = (profile as any)?.roles || [];
+          const isOwner =
+            roles.some((r: any) => {
+              const name = (r?.name || r?.role || r || '')
+                .toString()
+                .toLowerCase();
+              return (
+                name === 'transport_owner' ||
+                name === 'vehicle_owner' ||
+                name === 'owner' ||
+                name === 'civil_association'
+              );
+            }) ||
+            (profile as any)?.role === 'transport_owner' ||
+            (profile as any)?.transportOwner != null ||
+            (profile as any)?.transport_owner != null;
+
+          if (isOwner && active) {
+            await SecureStore.setItemAsync('user_role', 'transport_owner');
+            router.replace('/pending-approval');
+            return;
+          }
+        }
+
+        const ownerRes = await getMyTransportOwnerProfile().catch(() => null);
+        if (
+          ownerRes &&
+          (ownerRes.status === 'pending_review' ||
+            ownerRes.status === 'pending' ||
+            ownerRes.status === 'approved' ||
+            ownerRes.status === 'rejected')
+        ) {
+          if (active) {
+            await SecureStore.setItemAsync('user_role', 'transport_owner');
+            router.replace(
+              ownerRes.status === 'approved'
+                ? '/vehicle-owner/dashboard'
+                : '/pending-approval',
+            );
+          }
+        }
+      } catch {}
+    };
+    checkIfOwner();
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   // Al montar, recuperar el perfil pendiente de AsyncStorage como fallback por si se recarga la app
   useEffect(() => {

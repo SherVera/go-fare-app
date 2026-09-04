@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { getBackendProfile, getMyTransportOwnerProfile } from '@/lib/api';
-import { sigOutAccount } from '@/lib/firebase';
+import { auth, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 interface PendingApprovalScreenProps {
@@ -27,19 +28,118 @@ export function PendingApprovalScreen({
 }: PendingApprovalScreenProps) {
   const router = useRouter();
   const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<
+    'pending' | 'rejected' | 'approved' | 'suspended'
+  >('pending');
+  const [rejectionReason, setRejectionReason] = useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>(
+    auth.currentUser?.email || '',
+  );
 
   const checkStatusSilently = useCallback(async () => {
     try {
-      const ownerProfile = await getMyTransportOwnerProfile();
-      if (ownerProfile && ownerProfile.status === 'approved') {
+      if (!userEmail && auth.currentUser?.email) {
+        setUserEmail(auth.currentUser.email);
+      }
+
+      // Esta pantalla es EXCLUSIVA para dueños de vehículo.
+      // Si el rol es conductor, administrador o pasajero, redirigir inmediatamente.
+      const cachedRole = await SecureStore.getItemAsync('user_role');
+      if (cachedRole === 'driver' || cachedRole === 'conductor') {
+        router.replace('/driver/dashboard');
+        return;
+      }
+      if (cachedRole === 'platform_admin' || cachedRole === 'admin') {
+        router.replace('/admin/dashboard');
+        return;
+      }
+
+      // Verificar rol en backend para conductores y administradores
+      const profile = await getBackendProfile().catch(() => null);
+      if (profile) {
+        const roles = (profile as any)?.roles || [];
+        const isDriver =
+          roles.some((r: any) => {
+            const name = (r?.name || r?.role || r || '')
+              .toString()
+              .toLowerCase();
+            return name === 'driver' || name === 'conductor';
+          }) ||
+          (profile as any)?.role === 'driver' ||
+          (profile as any)?.firstName?.toLowerCase().includes('conductor') ||
+          (profile as any)?.displayName?.toLowerCase().includes('conductor');
+
+        if (isDriver) {
+          router.replace('/driver/dashboard');
+          return;
+        }
+
+        const isAdmin = roles.some((r: any) => {
+          const name = (r?.name || r?.role || r || '').toString().toLowerCase();
+          return name === 'platform_admin' || name === 'admin';
+        });
+        if (isAdmin) {
+          router.replace('/admin/dashboard');
+          return;
+        }
+      }
+
+      const ownerProfile = await getMyTransportOwnerProfile().catch(() => null);
+
+      if (ownerProfile?.user?.email) {
+        setUserEmail(ownerProfile.user.email);
+      } else if (ownerProfile?.email) {
+        setUserEmail(ownerProfile.email);
+      }
+
+      const resolvedStatus =
+        ownerProfile?.status ||
+        (profile as any)?.transportOwner?.status ||
+        (profile as any)?.transport_owner?.status ||
+        (profile as any)?.ownerStatus ||
+        (profile as any)?.status;
+
+      const reason =
+        ownerProfile?.rejectionReason ||
+        ownerProfile?.rejection_reason ||
+        ownerProfile?.suspensionReason ||
+        ownerProfile?.suspension_reason ||
+        (profile as any)?.transportOwner?.rejectionReason ||
+        (profile as any)?.transportOwner?.suspensionReason ||
+        (profile as any)?.rejectionReason ||
+        (profile as any)?.suspensionReason ||
+        '';
+
+      if (resolvedStatus === 'approved') {
+        setStatus('approved');
         if (onApproved) {
           onApproved();
         } else {
           router.replace('/vehicle-owner/dashboard');
         }
+        return;
+      }
+
+      if (resolvedStatus === 'suspended') {
+        setStatus('suspended');
+        setRejectionReason(reason);
+        return;
+      }
+
+      if (resolvedStatus === 'rejected') {
+        setStatus('rejected');
+        setRejectionReason(reason);
+        return;
+      }
+
+      setStatus('pending');
+
+      // Si no tiene perfil de dueño o no ha solicitado ser dueño (pasajero estándar)
+      if (!ownerProfile || ownerProfile.status === 'not_applied') {
+        router.replace('/(tabs)');
       }
     } catch (_) {}
-  }, [onApproved, router]);
+  }, [onApproved, router, userEmail]);
 
   useEffect(() => {
     checkStatusSilently();
@@ -62,14 +162,26 @@ export function PendingApprovalScreen({
         ? null
         : await getBackendProfile().catch(() => null);
 
-      const status =
+      const resolvedStatus =
         ownerProfile?.status ||
         (profile as any)?.transportOwner?.status ||
         (profile as any)?.transport_owner?.status ||
         (profile as any)?.ownerStatus ||
         (profile as any)?.status;
 
-      if (status === 'approved') {
+      const reason =
+        ownerProfile?.rejectionReason ||
+        ownerProfile?.rejection_reason ||
+        ownerProfile?.suspensionReason ||
+        ownerProfile?.suspension_reason ||
+        (profile as any)?.transportOwner?.rejectionReason ||
+        (profile as any)?.transportOwner?.suspensionReason ||
+        (profile as any)?.rejectionReason ||
+        (profile as any)?.suspensionReason ||
+        '';
+
+      if (resolvedStatus === 'approved') {
+        setStatus('approved');
         Alert.alert(
           '¡Solicitud Aprobada!',
           'Tu cuenta ha sido aprobada por el administrador. Ya puedes acceder al panel de control.',
@@ -86,16 +198,22 @@ export function PendingApprovalScreen({
             },
           ],
         );
-      } else if (status === 'rejected') {
-        const reason =
-          ownerProfile?.rejectionReason ||
-          (profile as any)?.transportOwner?.rejectionReason ||
-          'No cumple con los requisitos solicitados.';
+      } else if (resolvedStatus === 'suspended') {
+        setStatus('suspended');
+        setRejectionReason(reason);
+        Alert.alert(
+          'Cuenta Suspendida',
+          `Tu cuenta se encuentra suspendida por la administración.${reason ? `\n\nMotivo: ${reason}` : '\n\nSi consideras que se trata de un error, comunícate con el equipo de soporte.'}`,
+        );
+      } else if (resolvedStatus === 'rejected') {
+        setStatus('rejected');
+        setRejectionReason(reason);
         Alert.alert(
           'Solicitud Rechazada',
-          `El administrador ha rechazado tu solicitud.\n\nMotivo: ${reason}`,
+          `El administrador ha rechazado tu solicitud.${reason ? `\n\nMotivo: ${reason}` : '\n\nNo se especificó un motivo.'}`,
         );
       } else {
+        setStatus('pending');
         Alert.alert(
           'Aún en Revisión',
           'Tu solicitud sigue en proceso de revisión por parte del administrador. Por favor, intenta de nuevo más tarde.',
@@ -112,6 +230,10 @@ export function PendingApprovalScreen({
     }
   };
 
+  const isRejected = status === 'rejected';
+  const isSuspended = status === 'suspended';
+  const isBlocked = isRejected || isSuspended;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.blob} />
@@ -119,41 +241,173 @@ export function PendingApprovalScreen({
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScreenHeader title="Solicitud Enviada" onBack={handleSignOut} />
+        <ScreenHeader
+          title={
+            isSuspended
+              ? 'Cuenta Suspendida'
+              : isRejected
+                ? 'Solicitud Rechazada'
+                : 'Solicitud Enviada'
+          }
+          onBack={handleSignOut}
+        />
         <ScrollView
           contentContainerStyle={[styles.scroll, { justifyContent: 'center' }]}
           bounces={false}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.iconSection}>
-            <View style={styles.fakeShadow} />
-            <View style={styles.iconCard}>
-              <View style={styles.topShine} />
+            <View
+              style={[
+                styles.fakeShadow,
+                isBlocked && { backgroundColor: '#F87171', opacity: 0.25 },
+              ]}
+            />
+            <View
+              style={[
+                styles.iconCard,
+                isBlocked && {
+                  backgroundColor: '#FEE2E2',
+                  shadowColor: '#EF4444',
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.topShine,
+                  isBlocked && { backgroundColor: '#FEF2F2' },
+                ]}
+              />
               <Ionicons
-                name="time-outline"
+                name={
+                  isSuspended
+                    ? 'ban-outline'
+                    : isRejected
+                      ? 'close-circle-outline'
+                      : 'time-outline'
+                }
                 size={96}
-                color={tokens.colors.primary}
+                color={isBlocked ? '#DC2626' : tokens.colors.primary}
               />
             </View>
           </View>
 
           <View style={[styles.titleBlock, { alignItems: 'center' }]}>
             <Text style={[styles.titleDark, { textAlign: 'center' }]}>
-              Solicitud en
-            </Text>
-            <Text style={[styles.titleBlue, { textAlign: 'center' }]}>
-              Revisión
+              {isSuspended ? 'Cuenta' : 'Solicitud'}
             </Text>
             <Text
-              style={[styles.subtitle, { textAlign: 'center', marginTop: 12 }]}
+              style={[
+                styles.titleBlue,
+                isBlocked && { color: '#DC2626' },
+                { textAlign: 'center' },
+              ]}
             >
-              Tu solicitud de registro como Dueño de Vehículo ha sido enviada
-              con éxito.
-              {'\n\n'}
-              El administrador del sistema revisará y verificará tus datos
-              comerciales. Una vez aprobada la solicitud, se habilitará tu
-              cuenta para acceder a tu panel de dueño de vehículo.
+              {isSuspended
+                ? 'Suspendida'
+                : isRejected
+                  ? 'Rechazada'
+                  : 'Revisión'}
             </Text>
+
+            {userEmail ? (
+              <View
+                style={[
+                  styles.emailBadge,
+                  isBlocked && {
+                    backgroundColor: '#FEF2F2',
+                    borderColor: '#FECACA',
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={14}
+                  color={isBlocked ? '#DC2626' : '#2563EB'}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.emailBadgeText,
+                    isBlocked && { color: '#991B1B' },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {userEmail}
+                </Text>
+              </View>
+            ) : null}
+
+            {isSuspended ? (
+              <View style={styles.rejectionNoticeCard}>
+                <View style={styles.rejectionHeaderRow}>
+                  <Ionicons name="alert-circle" size={22} color="#DC2626" />
+                  <Text style={styles.rejectionNoticeTitle}>
+                    Aviso de Suspensión
+                  </Text>
+                </View>
+                <Text style={styles.rejectionNoticeBody}>
+                  Tu cuenta ha sido suspendida temporalmente por la administración de la plataforma.
+                </Text>
+                {rejectionReason ? (
+                  <View style={styles.rejectionReasonBox}>
+                    <Text style={styles.rejectionReasonLabel}>
+                      Motivo de la suspensión:
+                    </Text>
+                    <Text style={styles.rejectionReasonText}>
+                      {rejectionReason}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.rejectionReasonBox}>
+                    <Text style={styles.rejectionReasonLabel}>Información:</Text>
+                    <Text style={styles.rejectionReasonText}>
+                      El acceso a las operaciones ha sido inhabilitado por disposición administrativa. Si consideras que se trata de un error o requieres asistencia para reactivar tu cuenta, ponte en contacto con soporte técnico o la administración.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : isRejected ? (
+              <View style={styles.rejectionNoticeCard}>
+                <View style={styles.rejectionHeaderRow}>
+                  <Ionicons name="alert-circle" size={22} color="#DC2626" />
+                  <Text style={styles.rejectionNoticeTitle}>
+                    Aviso del Administrador
+                  </Text>
+                </View>
+                <Text style={styles.rejectionNoticeBody}>
+                  Tu solicitud de registro como Dueño de Vehículo ha sido rechazada.
+                </Text>
+                {rejectionReason ? (
+                  <View style={styles.rejectionReasonBox}>
+                    <Text style={styles.rejectionReasonLabel}>
+                      Motivo del rechazo:
+                    </Text>
+                    <Text style={styles.rejectionReasonText}>
+                      {rejectionReason}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.rejectionReasonBox}>
+                    <Text style={styles.rejectionReasonLabel}>Motivo:</Text>
+                    <Text style={styles.rejectionReasonText}>
+                      No se especificó un motivo adicional. Si consideras que se trata de un error, comunícate con soporte.
+                    </Text>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <Text
+                style={[styles.subtitle, { textAlign: 'center', marginTop: 12 }]}
+              >
+                Tu solicitud de registro como Dueño de Vehículo ha sido enviada
+                con éxito.
+                {'\n\n'}
+                El administrador del sistema revisará y verificará tus datos
+                comerciales. Una vez aprobada la solicitud, se habilitará tu
+                cuenta para acceder a tu panel de dueño de vehículo.
+              </Text>
+            )}
           </View>
 
           {/* Botón Comprobar Estado */}
@@ -333,5 +587,74 @@ const styles = StyleSheet.create({
     color: '#B0BCCC',
     textTransform: 'uppercase',
     letterSpacing: 1.2,
+  },
+  emailBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  emailBadgeText: {
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#1E40AF',
+  },
+  rejectionNoticeCard: {
+    width: '100%',
+    backgroundColor: '#FFF5F5',
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: '#FCA5A5',
+    padding: 18,
+    marginTop: 18,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  rejectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  rejectionNoticeTitle: {
+    fontSize: 16,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#991B1B',
+    marginLeft: 8,
+  },
+  rejectionNoticeBody: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#7F1D1D',
+    lineHeight: 20,
+  },
+  rejectionReasonBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#EF4444',
+    padding: 12,
+    marginTop: 12,
+  },
+  rejectionReasonLabel: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#B91C1C',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  rejectionReasonText: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#1E293B',
+    lineHeight: 20,
   },
 });

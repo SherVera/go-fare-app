@@ -145,14 +145,23 @@ export default function DriverDashboard() {
         );
       }
 
-      // Cargar listas de vehículos y rutas asociadas (simuladas en frontend con UUIDs reales de Neon)
+      // Cargar listas de vehículos y rutas asignadas reales desde PostgreSQL
       const vehicles = await getAssignedVehicles();
       const routes = await getAssignedRoutes();
       setAssignedVehicles(vehicles);
       setAssignedRoutes(routes);
 
-      if (vehicles.length > 0) setSelectedVehicle(vehicles[0]);
-      if (routes.length > 0) setSelectedRoute(routes[0]);
+      if (vehicles.length > 0) {
+        setSelectedVehicle(vehicles[0]);
+      } else {
+        setSelectedVehicle(null);
+      }
+
+      if (routes.length > 0) {
+        setSelectedRoute(routes[0]);
+      } else {
+        setSelectedRoute(null);
+      }
 
       // Consultar si hay una sesión activa de caja en el backend
       const session = await getCurrentSession();
@@ -193,10 +202,17 @@ export default function DriverDashboard() {
 
   // 1. INICIAR TURNO (Abrir sesión de caja en el backend)
   const handleStartShift = async () => {
-    if (!selectedVehicle || !selectedRoute) {
+    if (!selectedVehicle) {
       Alert.alert(
-        'Atención',
-        'Por favor, selecciona un vehículo y una ruta para iniciar tu turno.',
+        'Sin Unidad Asignada',
+        'No tienes un vehículo asignado para operar. Contacta a tu dueño de transporte para que te asigne una unidad.',
+      );
+      return;
+    }
+    if (!selectedRoute) {
+      Alert.alert(
+        'Sin Ruta Asignada',
+        'Por favor, selecciona una ruta para iniciar tu turno.',
       );
       return;
     }
@@ -272,7 +288,7 @@ export default function DriverDashboard() {
     if (!activeSession) return;
     Alert.alert(
       'Confirmar Cierre de Turno',
-      `¿Estás seguro de que deseas finalizar tu turno de trabajo?\n\nSe validarán ${activeSession.ridesCount} boletos y se liquidará el monto de ${Number(activeSession.totalFares).toFixed(2).replace('.', ',')} fares a la cuenta del transportista.`,
+      `¿Estás seguro de que deseas finalizar tu turno de trabajo?\n\nSe validarán ${activeSession.ridesCount} tickets y se liquidará el monto de ${Number(activeSession.totalFares).toFixed(2).replace('.', ',')} tickets a la cuenta del transportista.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -378,7 +394,7 @@ export default function DriverDashboard() {
           <View style={styles.payBannerInfo}>
             <Text style={styles.payBannerLabel}>¡COBRO RECIBIDO!</Text>
             <Text style={styles.payBannerAmount}>
-              +{payNotification.amount.toFixed(2).replace('.', ',')} fares
+              +{payNotification.amount.toFixed(2).replace('.', ',')} tickets
             </Text>
           </View>
           <Text style={styles.payBannerTime}>{payNotification.time}</Text>
@@ -467,17 +483,32 @@ export default function DriverDashboard() {
               <Pressable
                 style={({ pressed }) => [
                   styles.primaryActionButton,
+                  assignedVehicles.length === 0 && styles.disabledActionButton,
                   pressed && { opacity: 0.9 },
                 ]}
                 onPress={handleStartShift}
               >
                 <Ionicons
-                  name="play"
+                  name={
+                    assignedVehicles.length === 0
+                      ? 'lock-closed-outline'
+                      : 'play'
+                  }
                   size={16}
-                  color="#FFFFFF"
+                  color={assignedVehicles.length === 0 ? '#94A3B8' : '#FFFFFF'}
                   style={{ marginRight: 6 }}
                 />
-                <Text style={styles.actionButtonText}>Iniciar Turno</Text>
+                <Text
+                  style={[
+                    styles.actionButtonText,
+                    assignedVehicles.length === 0 &&
+                      styles.disabledActionButtonText,
+                  ]}
+                >
+                  {assignedVehicles.length === 0
+                    ? 'Sin Unidad Asignada'
+                    : 'Iniciar Turno'}
+                </Text>
               </Pressable>
             ) : isEnServicio ? (
               <View style={styles.actionRowButtons}>
@@ -560,7 +591,11 @@ export default function DriverDashboard() {
             <Ionicons
               name="car-sport"
               size={24}
-              color={tokens.colors.primary}
+              color={
+                assignedVehicles.length === 0 && !activeSession
+                  ? '#94A3B8'
+                  : tokens.colors.primary
+              }
               style={{ marginRight: 12 }}
             />
             {activeSession ? (
@@ -569,6 +604,24 @@ export default function DriverDashboard() {
                 <Text style={styles.vehicleCoopText}>
                   {(activeSession as any)?.vehicle?.cooperativeName ||
                     'Línea Particular'}
+                </Text>
+              </View>
+            ) : assignedVehicles.length === 0 ? (
+              <View style={styles.noVehicleContainer}>
+                <View style={styles.noVehicleBadge}>
+                  <Ionicons
+                    name="alert-circle"
+                    size={16}
+                    color="#D97706"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.noVehicleTitle}>
+                    No tienes unidades asignadas
+                  </Text>
+                </View>
+                <Text style={styles.noVehicleSubtitle}>
+                  Comunícate con tu transportista o dueño para que te asigne un
+                  vehículo en el sistema y puedas iniciar tu turno.
                 </Text>
               </View>
             ) : (
@@ -630,6 +683,18 @@ export default function DriverDashboard() {
               {displayRouteName}
             </Text>
           </View>
+        ) : assignedRoutes.length === 0 ? (
+          <View style={styles.noRouteContainer}>
+            <Ionicons
+              name="map-outline"
+              size={18}
+              color="#94A3B8"
+              style={{ marginRight: 10 }}
+            />
+            <Text style={styles.noRouteText}>
+              No hay rutas asignadas disponibles
+            </Text>
+          </View>
         ) : (
           <View style={{ position: 'relative', zIndex: 10 }}>
             <Pressable
@@ -677,7 +742,7 @@ export default function DriverDashboard() {
                       {route.name}
                     </Text>
                     <Text style={styles.dropdownItemFare}>
-                      Tarifa: {Number(route.fareCost).toFixed(2)} fares
+                      Tarifa: {Number(route.fareCost).toFixed(2)} tickets
                     </Text>
                   </Pressable>
                 ))}
@@ -702,7 +767,7 @@ export default function DriverDashboard() {
             <Text style={styles.statValue}>
               {activeSession ? activeSession.ridesCount : 0}
             </Text>
-            <Text style={styles.statLabel}>Boletos Validados</Text>
+            <Text style={styles.statLabel}>Tickets Validados</Text>
           </View>
           <View style={styles.statBox}>
             <View
@@ -714,7 +779,7 @@ export default function DriverDashboard() {
               {activeSession
                 ? Number(activeSession.totalFares).toFixed(2).replace('.', ',')
                 : '0,00'}{' '}
-              fares
+              tickets
             </Text>
             <Text style={styles.statLabel}>Recaudado Turno</Text>
           </View>
@@ -1178,5 +1243,47 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#0369A1',
+  },
+  noVehicleContainer: {
+    flex: 1,
+  },
+  noVehicleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  noVehicleTitle: {
+    fontSize: 13.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#D97706',
+  },
+  noVehicleSubtitle: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  noRouteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  noRouteText: {
+    fontSize: 13.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#94A3B8',
+  },
+  disabledActionButton: {
+    backgroundColor: '#E2E8F0',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  disabledActionButtonText: {
+    color: '#94A3B8',
   },
 });

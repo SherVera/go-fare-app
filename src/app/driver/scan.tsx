@@ -257,7 +257,7 @@ export default function DriverScanScreen() {
     if (!sanitizedCode) {
       Alert.alert(
         'Código Requerido',
-        'Por favor, ingresa el código del boleto.',
+        'Por favor, ingresa el código del ticket.',
       );
       return;
     }
@@ -303,13 +303,13 @@ export default function DriverScanScreen() {
       }, 3500);
 
       Alert.alert(
-        'Boleto Validado',
-        `El boleto fue verificado y cobrado con éxito. Pasajero: ${ticketName}`,
+        'Ticket Validado',
+        `El ticket fue verificado y cobrado con éxito. Pasajero: ${ticketName}`,
       );
     } catch (err: any) {
       Alert.alert(
         'Error de Validación',
-        err.message || 'El boleto no es válido.',
+        err.message || 'El ticket no es válido.',
       );
     } finally {
       setManualProcessing(false);
@@ -340,7 +340,9 @@ export default function DriverScanScreen() {
           </View>
           <Text style={styles.offlineTitle}>Turno Fuera de Servicio</Text>
           <Text style={styles.offlineSubtitle}>
-            Debes iniciar tu turno de trabajo ("En Servicio") en la pestaña de
+            {
+              'Debes iniciar tu turno de trabajo ("En Servicio") en la pestaña de'
+            }
             Inicio para poder generar el código QR de cobro.
           </Text>
           <Pressable
@@ -506,8 +508,8 @@ export default function DriverScanScreen() {
           )}
         </View>
 
-        {/* Validación Manual de Boleto */}
-        <Text style={styles.sectionTitle}>Validación Manual de Boleto</Text>
+        {/* Validación Manual de Ticket */}
+        <Text style={styles.sectionTitle}>Validación Manual de Ticket</Text>
         <View style={styles.inputCard}>
           <Ionicons
             name="keypad-outline"
@@ -517,7 +519,7 @@ export default function DriverScanScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder="Ingresa código o ID de boleto..."
+            placeholder="Ingresa código o ID de ticket..."
             placeholderTextColor="#A1A1AA"
             value={qrCodeInput}
             onChangeText={setQrCodeInput}
@@ -584,7 +586,7 @@ export default function DriverScanScreen() {
                       </View>
                       <Text style={styles.receiptStatusText}>Pago Exitoso</Text>
                       <Text style={styles.receiptAmount}>
-                        {Number(selectedPayment.fareCost).toFixed(2)} fares
+                        {Number(selectedPayment.fareCost).toFixed(2)} tickets
                       </Text>
                     </View>
 
@@ -638,7 +640,7 @@ export default function DriverScanScreen() {
                       <View style={styles.receiptRow}>
                         <Text style={styles.receiptLabel}>Tarifa cobrada:</Text>
                         <Text style={styles.receiptValue}>
-                          {Number(selectedPayment.fareCost).toFixed(2)} fares
+                          {Number(selectedPayment.fareCost).toFixed(2)} tickets
                         </Text>
                       </View>
                       <View style={styles.receiptRow}>

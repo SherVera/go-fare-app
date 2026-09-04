@@ -233,15 +233,102 @@ async function fetchWithTimeout(
 }
 
 /**
+ * Decodifica de forma segura la fecha de expiración (exp) en segundos de un JWT.
+ */
+function decodeJwtExp(token: string): number | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    if (typeof atob === 'function') {
+      const jsonStr = atob(base64);
+      const parsed = JSON.parse(jsonStr);
+      return typeof parsed.exp === 'number' ? parsed.exp : null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+let activeJwtRefreshPromise: Promise<string | null> | null = null;
+
+/**
+ * Renueva automáticamente el token JWT del backend utilizando Firebase Auth.
+ */
+export async function refreshBackendJwt(): Promise<string | null> {
+  const fbUser = auth.currentUser;
+  if (!fbUser) return null;
+
+  if (activeJwtRefreshPromise) {
+    return activeJwtRefreshPromise;
+  }
+
+  activeJwtRefreshPromise = (async () => {
+    try {
+      console.log('[API] Renovando token JWT de backend con Firebase...');
+      const freshIdToken = await fbUser.getIdToken(true);
+      if (!freshIdToken) return null;
+      const result = await loginWithFirebaseToken(freshIdToken);
+      if (result?.token) {
+        console.log('[API] Token JWT renovado exitosamente.');
+        return result.token;
+      }
+    } catch (err: any) {
+      console.warn('[API] Error al auto-renovar token JWT:', err?.message || err);
+    } finally {
+      activeJwtRefreshPromise = null;
+    }
+    return null;
+  })();
+
+  return activeJwtRefreshPromise;
+}
+
+/**
+ * Retorna un token JWT válido. Si el token en SecureStore expiró o no existe,
+ * intenta renovarlo proactivamente mediante Firebase Auth antes de enviar la petición.
+ */
+export async function getValidGoFareToken(): Promise<string | null> {
+  let token = await getGoFareToken();
+
+  if (token === 'mock-gofare-jwt-token-bypass') {
+    return token;
+  }
+
+  if (token) {
+    const exp = decodeJwtExp(token);
+    if (exp) {
+      const expMs = exp * 1000;
+      // Si faltan menos de 45 segundos para que expire, renovar proactivamente
+      if (Date.now() >= expMs - 45000) {
+        console.log('[API] El token JWT ha expirado o está por expirar. Renovando...');
+        token = null;
+      }
+    }
+  }
+
+  if (!token && auth.currentUser) {
+    token = await refreshBackendJwt();
+  }
+
+  return token;
+}
+
+/**
  * Wrapper personalizado para peticiones fetch que añade automáticamente la cabecera
- * de autorización Bearer si hay un token disponible, y maneja errores globales.
+ * de autorización Bearer si hay un token disponible, y maneja auto-renovación y reintentos.
  */
 async function fetchWithAuth(
   path: string,
   options: RequestInit = {},
   timeoutMs?: number,
+  isRetry = false,
 ): Promise<any> {
-  const token = await getGoFareToken();
+  const token = await getValidGoFareToken();
 
   if (token === 'mock-gofare-jwt-token-bypass') {
     // Interceptor de desarrollo para usuarios de bypass telefónico (offline / local)
@@ -464,14 +551,28 @@ async function fetchWithAuth(
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetchWithTimeout(
-    `${BASE_URL}${path}`,
-    {
-      ...options,
-      headers,
-    },
-    timeoutMs,
-  );
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `${BASE_URL}${path}`,
+      {
+        ...options,
+        headers,
+      },
+      timeoutMs || 45000,
+    );
+  } catch (netErr: any) {
+    // Si falla por timeout o error transitorio de red en una petición GET (ej. Render despertando), reintentar una vez
+    const method = (options.method || 'GET').toUpperCase();
+    if (!isRetry && method === 'GET') {
+      console.log(
+        `[API] Reintentando ${path} tras error de conexión (${netErr?.message || 'timeout'})...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      return fetchWithAuth(path, options, timeoutMs, true);
+    }
+    throw netErr;
+  }
 
   // Si la respuesta es No Content (204), retornamos null directamente
   if (response.status === 204) {
@@ -481,12 +582,23 @@ async function fetchWithAuth(
   const responseData = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    // Si obtenemos 401 Unauthorized y no hemos reintentado todavía:
+    // Intentar renovar el token con Firebase y reintentar la petición de inmediato
+    if (response.status === 401 && !isRetry && auth.currentUser) {
+      console.log(
+        `[API] 401 Unauthorized en ${path}. Intentando auto-renovar JWT y reintentar...`,
+      );
+      await clearGoFareToken();
+      const freshToken = await refreshBackendJwt();
+      if (freshToken) {
+        return fetchWithAuth(path, options, timeoutMs, true);
+      }
+    }
+
     const errorMessage =
       responseData.message || `Error del servidor (${response.status})`;
 
-    // Si obtenemos un 401 Unauthorized, significa que el token expiró o es inválido
-    // (por ejemplo, debido a una migración/cambio de proyecto Firebase).
-    // Limpiamos el token y forzamos el cierre de sesión en el SDK nativo.
+    // Si persiste el 401 después de intentar renovar, limpiar sesión
     if (response.status === 401) {
       await clearGoFareToken();
       try {
@@ -612,19 +724,19 @@ export async function createBackendUser(data: {
   lastName?: string;
   displayName?: string;
   roleIds?: string[];
-  nationalId?: string;
-  national_id?: string;
 }): Promise<BackendUser> {
-  const cleanDto = {
+  const cleanDto: Record<string, any> = {
     provider: data.provider,
     providerId: data.providerId,
-    email: data.email,
-    phoneNumber: data.phoneNumber || data.phone_number,
-    firstName: data.firstName,
-    lastName: data.lastName,
-    displayName: data.displayName,
-    roleIds: data.roleIds,
   };
+
+  if (data.email) cleanDto.email = data.email.trim();
+  const phone = (data.phoneNumber || data.phone_number || '').trim();
+  if (phone) cleanDto.phoneNumber = phone;
+  if (data.firstName) cleanDto.firstName = data.firstName.trim();
+  if (data.lastName) cleanDto.lastName = data.lastName.trim();
+  if (data.displayName) cleanDto.displayName = data.displayName.trim();
+  if (data.roleIds && data.roleIds.length > 0) cleanDto.roleIds = data.roleIds;
 
   const response = await fetchWithTimeout(
     `${BASE_URL}/users`,
@@ -1980,7 +2092,33 @@ export async function updateCivilAssociationProfile(
 }
 
 /**
+ * Obtiene los documentos legales del usuario autenticado (dueño de vehículo / conductor).
+ */
+export async function getMyLegalDocuments(): Promise<any[]> {
+  try {
+    const res = await fetchWithAuth('/legal-documents/my');
+    const raw = Array.isArray(res)
+      ? res
+      : res?.data || res?.documents || res?.items || [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw;
+    }
+  } catch (err) {
+    console.warn('[API] Error al consultar /legal-documents/my:', err);
+  }
+
+  try {
+    const cached = await AsyncStorage.getItem('mock_admin_documents');
+    const docs = cached ? JSON.parse(cached) : [];
+    return Array.isArray(docs) ? docs : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
  * Obtiene la lista de todos los documentos presentados en la plataforma directamente del backend.
+ * Si el usuario no tiene permisos de administrador (403), consulta sus propios documentos (/legal-documents/my).
  */
 export async function getAllDocuments(): Promise<any[]> {
   try {
@@ -1988,9 +2126,27 @@ export async function getAllDocuments(): Promise<any[]> {
     const raw = Array.isArray(res)
       ? res
       : res?.data || res?.documents || res?.items || [];
-    return Array.isArray(raw) ? raw : [];
+    if (Array.isArray(raw) && raw.length > 0) {
+      return raw;
+    }
   } catch (err) {
-    console.warn('[API] Error al consultar legal-documents del backend:', err);
+    // Si no es admin (ej. 403 Forbidden), intentar obtener los documentos propios
+    try {
+      const myRes = await fetchWithAuth('/legal-documents/my');
+      const myRaw = Array.isArray(myRes)
+        ? myRes
+        : myRes?.data || myRes?.documents || myRes?.items || [];
+      if (Array.isArray(myRaw) && myRaw.length > 0) {
+        return myRaw;
+      }
+    } catch (_) {}
+  }
+
+  try {
+    const cached = await AsyncStorage.getItem('mock_admin_documents');
+    const docs = cached ? JSON.parse(cached) : [];
+    return Array.isArray(docs) ? docs : [];
+  } catch (_) {
     return [];
   }
 }
@@ -2042,6 +2198,7 @@ export async function getAllTransportUnits(): Promise<any[]> {
         owner: u.owner,
         civilAssociation: u.civilAssociation,
         createdAt: u.createdAt,
+        rejectionReason: u.rejectionReason || u.rejection_reason,
       }));
     }
   } catch (err) {
@@ -2069,10 +2226,18 @@ export async function toggleTransportUnitStatus(
  */
 function normalizeProfileStatus(
   rawStatus?: string,
-): 'pending' | 'approved' | 'rejected' {
+): 'pending' | 'approved' | 'rejected' | 'suspended' {
   const s = String(rawStatus || '').toLowerCase();
   if (s === 'approved' || s === 'aprobado' || s === 'verified') {
     return 'approved';
+  }
+  if (
+    s === 'suspended' ||
+    s === 'suspendido' ||
+    s === 'inactivo' ||
+    s === 'inactive'
+  ) {
+    return 'suspended';
   }
   if (s === 'rejected' || s === 'rechazado') {
     return 'rejected';
@@ -2087,7 +2252,13 @@ export async function getAllOwnerRequests(): Promise<any[]> {
   const rawOwners: any[] = [];
 
   // 1. Endpoints de transport-owners y civil-associations por cada estado en backend
-  const statusList = ['pending_review', 'approved', 'rejected', 'not_applied'];
+  const statusList = [
+    'pending_review',
+    'approved',
+    'rejected',
+    'suspended',
+    'not_applied',
+  ];
   const endpoints = [
     ...statusList.map((s) => `/transport-owners?status=${s}`),
     ...statusList.map((s) => `/civil-associations?status=${s}`),
@@ -2486,6 +2657,52 @@ export async function rejectDriverRequest(
       body: JSON.stringify({ reason }),
     });
   } catch (_) {}
+  return { success: true };
+}
+
+/**
+ * Suspende la cuenta de un dueño de vehículo con motivo administrativo.
+ */
+export async function suspendOwnerRequest(
+  requestUuid: string,
+  reason: string,
+): Promise<any> {
+  try {
+    return await fetchWithAuth(`/transport-owners/${requestUuid}/suspend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (_) {
+    try {
+      return await fetchWithAuth(`/transport-owners/${requestUuid}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'suspended', rejectionReason: reason }),
+      });
+    } catch (_) {}
+  }
+  return { success: true };
+}
+
+/**
+ * Suspende la cuenta de un conductor con motivo administrativo.
+ */
+export async function suspendDriverRequest(
+  requestUuid: string,
+  reason: string,
+): Promise<any> {
+  try {
+    return await fetchWithAuth(`/drivers/${requestUuid}/suspend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason }),
+    });
+  } catch (_) {
+    try {
+      return await fetchWithAuth(`/drivers/${requestUuid}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'suspended', rejectionReason: reason }),
+      });
+    } catch (_) {}
+  }
   return { success: true };
 }
 
@@ -3015,12 +3232,9 @@ export async function openSession(
     }
     return session;
   } catch (err: any) {
-    console.warn(
-      '[API] Backend error on openSession, executing resilient fallback:',
-      err?.message || err,
-    );
+    console.warn('[API] Backend error on openSession:', err?.message || err);
 
-    // 1. Intentar obtener la sesión activa existente en el servidor
+    // Intentar obtener si ya existe una sesión activa real en el servidor
     try {
       const active = await fetchWithAuth('/cash-sessions/me/current');
       if (active?.uuid) {
@@ -3032,67 +3246,7 @@ export async function openSession(
       }
     } catch {}
 
-    // 2. Si no hay sesión activa en servidor, crear sesión resiliente local
-    const vehicles = await getAssignedVehicles();
-    const routes = await getAssignedRoutes();
-    const selVehicle =
-      vehicles.find((v) => v.uuid === vehicleUuid) || vehicles[0];
-    const selRoute = routes.find((r) => r.uuid === routeUuid) || routes[0];
-
-    let curDriverName = auth.currentUser?.displayName || '';
-    let curDriverDoc = '';
-    try {
-      const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
-      if (cached) {
-        const p = JSON.parse(cached);
-        if (
-          p.displayName &&
-          p.displayName !== 'Usuario Invitado' &&
-          p.displayName !== 'Usuario'
-        ) {
-          curDriverName = p.displayName;
-        }
-        if (p.nationalId || p.cedula) {
-          curDriverDoc = p.nationalId || p.cedula;
-        }
-      }
-    } catch {}
-
-    const fallbackSession = {
-      id: `sess-${Date.now()}`,
-      uuid: `sess-uuid-${Date.now()}`,
-      status: 'open',
-      fareCost: selRoute?.fareCost || 1,
-      totalFares: 0,
-      ridesCount: 0,
-      openedAt: new Date().toISOString(),
-      driverName:
-        curDriverName || formatUserProfileName(auth.currentUser) || 'Conductor',
-      driverDoc: curDriverDoc,
-      driver: {
-        displayName:
-          curDriverName ||
-          formatUserProfileName(auth.currentUser) ||
-          'Conductor',
-        nationalId: curDriverDoc,
-      },
-      vehicle: {
-        uuid: selVehicle?.uuid || vehicleUuid,
-        plate: selVehicle?.plate || 'XY987ZT',
-        brand: selVehicle?.brand || 'Encava',
-        model: selVehicle?.model || 'ENT-610',
-      },
-      route: {
-        uuid: selRoute?.uuid || routeUuid,
-        name: selRoute?.name || 'Ruta L1: Propatria - Palo Verde',
-      },
-    };
-
-    await AsyncStorage.setItem(
-      'gofare_active_cash_session',
-      JSON.stringify(fallbackSession),
-    );
-    return fallbackSession;
+    throw err;
   }
 }
 
@@ -3183,39 +3337,61 @@ export async function closeSession(sessionUuid: string): Promise<any> {
 }
 
 /**
- * Obtiene las unidades de transporte (vehículos) asignadas del conductor (del owner asociado).
- * Simulado localmente con UUIDs reales de la base de datos de pruebas para no alterar el backend.
+ * Obtiene las unidades de transporte (vehículos) asignadas del conductor.
+ * Consulta directamente al backend en PostgreSQL y nunca retorna datos mockeados.
  */
 export async function getAssignedVehicles(): Promise<any[]> {
-  return [
-    {
-      uuid: 'e8e3f885-e18f-4d81-8d8a-1646c85957f9',
-      plate: 'XY987ZT',
-      brand: 'Encava',
-      model: 'ENT-610',
-      year: 2015,
-      capacity: 32,
-      color: 'Blanco',
-      status: 'active',
-      routeNumber: 'Ruta L1',
-    },
-  ];
+  try {
+    // 1. Si hay una sesión activa de caja en el backend, tomar la unidad real de la sesión
+    const activeSession = await getCurrentSession().catch(() => null);
+    if (activeSession?.vehicle && activeSession.vehicle.uuid) {
+      return [activeSession.vehicle];
+    }
+
+    // 2. Consultar unidades asignadas directamente desde el backend (/vehicles/assigned)
+    const res = await fetchWithAuth('/vehicles/assigned').catch(() => null);
+    if (Array.isArray(res) && res.length > 0) {
+      return res;
+    }
+
+    // 3. Fallback: intentar /vehicles/my
+    const myUnits = await fetchWithAuth('/vehicles/my').catch(() => null);
+    if (Array.isArray(myUnits) && myUnits.length > 0) {
+      return myUnits;
+    }
+
+    // 4. Si el conductor no tiene unidades asignadas en base de datos, retornar arreglo vacío (sin mock)
+    return [];
+  } catch (err) {
+    console.warn('[API] Error consultando vehículos asignados:', err);
+    return [];
+  }
 }
 
 /**
- * Obtiene las rutas de transporte asignadas del conductor (del owner asociado).
- * Simulado localmente con UUIDs reales de la base de datos de pruebas para no alterar el backend.
+ * Obtiene las rutas asignadas para la operación del conductor.
+ * Consulta al backend en PostgreSQL y nunca retorna datos mockeados.
  */
 export async function getAssignedRoutes(): Promise<any[]> {
-  return [
-    {
-      uuid: '8ba1fbcc-54ff-4125-b731-dd5880aec48a',
-      name: 'Ruta L1: Propatria - Palo Verde',
-      code: 'L1',
-      fareCost: 1,
-      isActive: true,
-    },
-  ];
+  try {
+    // 1. Si hay una sesión activa de caja, tomar la ruta de la sesión
+    const activeSession = await getCurrentSession().catch(() => null);
+    if (activeSession?.route && activeSession.route.uuid) {
+      return [activeSession.route];
+    }
+
+    // 2. Consultar rutas activas del backend
+    const res = await fetchWithAuth('/routes').catch(() => null);
+    if (Array.isArray(res) && res.length > 0) {
+      return res.filter((r: any) => r.isActive !== false);
+    }
+
+    // Si no hay rutas asignadas, retornar arreglo vacío
+    return [];
+  } catch (err) {
+    console.warn('[API] Error consultando rutas asignadas:', err);
+    return [];
+  }
 }
 
 /**
@@ -3240,7 +3416,7 @@ export async function getSessionQr(
   // Enriquecer dinámicamente el QR con el nombre del conductor activo de la sesión
   let driverName = '';
   let driverDoc = '';
-  let vehiclePlate = 'XY987ZT';
+  let vehiclePlate = '';
 
   try {
     const storedSess = await AsyncStorage.getItem('gofare_active_cash_session');
@@ -3324,6 +3500,54 @@ export async function getBackendInviteCodes(): Promise<any[]> {
 }
 
 /**
+ * Obtiene las invitaciones y asociaciones del conductor autenticado (vigentes e históricas).
+ */
+export async function getMyDriverInviteCodes(): Promise<any[]> {
+  try {
+    return await fetchWithAuth('/invite-codes/mine');
+  } catch (err) {
+    console.warn('[API] Error al obtener asociaciones del conductor:', err);
+    return [];
+  }
+}
+
+/**
+ * Obtiene la información del dueño / transportista al que está asociado el conductor autenticado.
+ */
+export async function getMyAssociatedOwner(): Promise<any | null> {
+  try {
+    // 1. Si hay una sesión activa de caja en el backend, revisar si incluye el owner
+    const session = await getCurrentSession().catch(() => null);
+    if (session?.owner) {
+      return session.owner;
+    }
+
+    // 2. Consultar asociaciones activas vía /invite-codes/mine
+    const codes = await getMyDriverInviteCodes();
+    if (Array.isArray(codes)) {
+      // Buscar la asociación activa: canjeada (usedAt != null) y no revocada (revokedAt == null)
+      const activeAssociation = codes.find(
+        (c: any) => c.usedAt && !c.revokedAt && c.owner,
+      );
+      if (activeAssociation?.owner) {
+        return activeAssociation.owner;
+      }
+      // Fallback: cualquier código canjeado con owner
+      const redeemed = codes.find(
+        (c: any) => (c.isRedeemed || c.usedAt) && !c.revokedAt && c.owner,
+      );
+      if (redeemed?.owner) {
+        return redeemed.owner;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn('[API] Error al obtener dueño asociado:', err);
+    return null;
+  }
+}
+
+/**
  * [Admin] Aprueba una unidad de transporte (inactive -> active).
  */
 export async function approveVehicle(uuid: string): Promise<any> {
@@ -3340,3 +3564,52 @@ export async function rejectVehicle(uuid: string): Promise<any> {
     method: 'PATCH',
   });
 }
+
+/**
+ * Obtiene la lista de conductores asignados a una unidad específica desde el backend.
+ * Endpoint: GET /vehicles/:vehicleUuid/drivers
+ */
+export async function getVehicleAssignedDrivers(
+  vehicleUuid: string,
+): Promise<any[]> {
+  try {
+    const res = await fetchWithAuth(`/vehicles/${vehicleUuid}/drivers`, {
+      method: 'GET',
+    });
+    return Array.isArray(res) ? res : [];
+  } catch (err) {
+    console.warn(
+      `[API] Error al obtener conductores asignados a la unidad ${vehicleUuid}:`,
+      err,
+    );
+    return [];
+  }
+}
+
+/**
+ * Asigna un conductor a una unidad específica en el backend.
+ * Endpoint: POST /vehicles/:vehicleUuid/drivers
+ */
+export async function assignDriverToVehicle(
+  vehicleUuid: string,
+  driverUuid: string,
+): Promise<any> {
+  return await fetchWithAuth(`/vehicles/${vehicleUuid}/drivers`, {
+    method: 'POST',
+    body: JSON.stringify({ driverUuid }),
+  });
+}
+
+/**
+ * Quita / desvincula un conductor de una unidad en el backend.
+ * Endpoint: DELETE /vehicles/:vehicleUuid/drivers/:driverUuid
+ */
+export async function removeDriverFromVehicle(
+  vehicleUuid: string,
+  driverUuid: string,
+): Promise<void> {
+  await fetchWithAuth(`/vehicles/${vehicleUuid}/drivers/${driverUuid}`, {
+    method: 'DELETE',
+  });
+}
+

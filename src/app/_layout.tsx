@@ -327,33 +327,6 @@ export default function RootLayout() {
         console.warn('[Layout] Error al leer auth_method:', methodErr);
       }
 
-      // Si el inicio de sesión fue por correo, sí se requiere verificación de email
-      const needsEmailVerification =
-        currentUser && !currentUser.emailVerified && authMethod === 'email';
-
-      if (needsEmailVerification) {
-        const currentSegment = segmentsRef.current[0] as string | undefined;
-        const allowedVRoutes = new Set([
-          'register',
-          'verify-email',
-          'verify-phone',
-        ]);
-        if (allowedVRoutes.has(currentSegment || '')) {
-          if (!cancelled) setPhase('signed_out');
-          return;
-        }
-
-        // Si no está verificado, redirigir a verify-email de inmediato sin popup
-        if (!cancelled) {
-          setPhase('signed_out');
-          router.replace({
-            pathname: '/verify-email',
-            params: { email: currentUser.email || '' },
-          } as any);
-        }
-        return;
-      }
-
       if (!currentUser) {
         await clearBackendJwt();
         try {
@@ -402,6 +375,25 @@ export default function RootLayout() {
             .toLowerCase();
           return name === 'platform_admin' || name === 'admin';
         });
+
+        const isDriver =
+          roles.some((r: any) => {
+            const name = (r?.name || r?.role || r?.code || r || '')
+              .toString()
+              .toLowerCase();
+            return (
+              name === 'driver' || name === 'conductor' || name === 'chofer'
+            );
+          }) ||
+          (backendUser as any).role === 'driver' ||
+          (backendUser as any).driver != null ||
+          (backendUser as any).driverProfile != null ||
+          (backendUser as any).driver_profile != null ||
+          (backendUser as any).isDriver === true ||
+          (backendUser as any).firstName?.toLowerCase().includes('conductor') ||
+          (backendUser as any).lastName?.toLowerCase().includes('conductor') ||
+          (backendUser as any).displayName?.toLowerCase().includes('conductor');
+
         const isOwner =
           roles.some((r: any) => {
             const name = (r?.name || r?.role || r?.code || r || '')
@@ -414,30 +406,32 @@ export default function RootLayout() {
               name === 'civil_association'
             );
           }) ||
-          ownerProfile != null ||
-          (backendUser as any).role === 'transport_owner';
-
-        const isDriver = roles.some((r: any) => {
-          const name = (r?.name || r?.role || r?.code || r || '')
-            .toString()
-            .toLowerCase();
-          return name === 'driver' || name === 'conductor';
-        });
+          (backendUser as any).role === 'transport_owner' ||
+          (ownerProfile &&
+            (ownerProfile.status === 'pending_review' ||
+              ownerProfile.status === 'approved' ||
+              ownerProfile.status === 'rejected'));
 
         role = isAdmin
           ? 'platform_admin'
-          : isOwner
-            ? 'transport_owner'
-            : isDriver
-              ? 'driver'
+          : isDriver
+            ? 'driver'
+            : isOwner
+              ? 'transport_owner'
               : null;
       }
 
-      // Si aún no detectamos rol privilegiado, verificar si existe perfil de dueño en backend
+      // Si aún no detectamos rol privilegiado, verificar si existe solicitud de dueño en backend
+      // Estrictamente: NO aplica a conductores y solo aplica si el estado es pending_review, approved o rejected (nunca not_applied)
       if (!role || role === 'passenger') {
         try {
           const ownerRes = await getMyTransportOwnerProfile();
-          if (ownerRes && (ownerRes.uuid || ownerRes.id || ownerRes.status)) {
+          if (
+            ownerRes &&
+            (ownerRes.status === 'pending_review' ||
+              ownerRes.status === 'approved' ||
+              ownerRes.status === 'rejected')
+          ) {
             ownerProfile = ownerRes;
             role = 'transport_owner';
           }
@@ -488,6 +482,25 @@ export default function RootLayout() {
       if (!cancelled) {
         setUserRole(finalRole);
       }
+
+      // La verificación por enlace de correo aplica a pasajeros/usuarios regulares.
+      // Para dueños de vehículo (transport_owner), el flujo y activación
+      // depende EXCLUSIVAMENTE de la pantalla 'Solicitud en Revisión'.
+      const isOwnerRole =
+        finalRole === 'transport_owner' ||
+        finalRole === 'vehicle_owner' ||
+        ownerProfile != null;
+
+      const isEmailUser =
+        authMethod === 'email' ||
+        currentUser.providerData?.some((p) => p.providerId === 'password') ||
+        (Boolean(currentUser.email) && !currentUser.phoneNumber);
+
+      const needsEmailVerification =
+        !isOwnerRole &&
+        currentUser &&
+        !currentUser.emailVerified &&
+        isEmailUser;
 
       let complete = false;
       if (
@@ -582,7 +595,36 @@ export default function RootLayout() {
       }
 
       if (cancelled) return;
-      setPhase(complete ? 'signed_in' : 'needs_onboarding');
+
+      // 1. Si no ha completado su perfil (cédula, nombre, teléfono), guiar a completar perfil (onboarding)
+      if (!complete) {
+        setPhase('needs_onboarding');
+        return;
+      }
+
+      // 2. Una vez completado el perfil, si el usuario es por correo y no está verificado, guiar a verificar correo
+      if (needsEmailVerification) {
+        const currentSegment = segmentsRef.current[0] as string | undefined;
+        const allowedVRoutes = new Set([
+          'register',
+          'verify-email',
+          'verify-phone',
+          'onboarding',
+        ]);
+        if (allowedVRoutes.has(currentSegment || '')) {
+          setPhase('signed_out');
+          return;
+        }
+
+        setPhase('signed_out');
+        router.replace({
+          pathname: '/verify-email',
+          params: { email: currentUser.email || '' },
+        } as any);
+        return;
+      }
+
+      setPhase('signed_in');
     };
 
     registerAuthSessionResolver(applyPhase);
@@ -870,7 +912,8 @@ export default function RootLayout() {
             s0 === '(tabs)' ||
             s0 === 'vehicle-owner' ||
             s0 === 'admin' ||
-            s0 === 'onboarding'
+            s0 === 'onboarding' ||
+            s0 === 'pending-approval'
           ) {
             router.replace('/driver/dashboard' as any);
           }
@@ -880,7 +923,8 @@ export default function RootLayout() {
             s0 === 'vehicle-owner' ||
             s0 === 'driver' ||
             s0 === 'admin' ||
-            s0 === 'onboarding'
+            s0 === 'onboarding' ||
+            s0 === 'pending-approval'
           ) {
             router.replace('/(tabs)' as any);
           }

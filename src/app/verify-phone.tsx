@@ -87,8 +87,6 @@ export default function VerifyPhoneScreen() {
           firstName,
           lastName,
           displayName: finalFullName,
-          nationalId: finalIdNumber,
-          national_id: finalIdNumber,
           roleIds: roleUuid ? [roleUuid] : [],
         });
       } catch (createErr) {

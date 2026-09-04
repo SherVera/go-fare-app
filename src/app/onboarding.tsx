@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { useEffect, useState } from 'react';
 import {
@@ -20,9 +21,15 @@ import {
   getBackendProfile,
   syncWithBackend,
   updateBackendProfile,
+  updateOwnNationalId,
 } from '@/lib/api';
 import { refreshAuthSessionPhase } from '@/lib/auth-session';
-import { auth, sigOutAccount, updateUser } from '@/lib/firebase';
+import {
+  auth,
+  sendVerificationEmail,
+  sigOutAccount,
+  updateUser,
+} from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 function vePhoneFromE164(phone: string | null | undefined): string {
@@ -37,6 +44,7 @@ function vePhoneFromE164(phone: string | null | undefined): string {
 }
 
 export default function OnboardingScreen() {
+  const router = useRouter();
   const user = auth.currentUser;
 
   const [fullName, setFullName] = useState(
@@ -265,17 +273,32 @@ export default function OnboardingScreen() {
 
       const finalIdNumber = `${nationality}-${idNumber.trim().replace(/^(V-|E-)/i, '')}`;
 
+      // 1. Guardar la cédula explícitamente en PostgreSQL vía PATCH /auth/me/national-id
+      try {
+        await updateOwnNationalId(finalIdNumber);
+        console.log(
+          '[Onboarding] Cédula guardada exitosamente con PATCH /auth/me/national-id:',
+          finalIdNumber,
+        );
+      } catch (natErr) {
+        console.warn('[Onboarding] Error al guardar cédula en backend:', natErr);
+      }
+
+      // 2. Actualizar datos de usuario (nombre, teléfono)
       const updatePayload: any = {
         displayName: fullName.trim(),
         firstName,
         lastName,
-        nationalId: finalIdNumber,
         phoneNumber: formattedPhoneNumber,
       };
 
-      await updateBackendProfile(response.user.id, updatePayload);
+      try {
+        await updateBackendProfile(response.user.id, updatePayload);
+      } catch (profErr) {
+        console.warn('[Onboarding] Error al actualizar perfil en backend:', profErr);
+      }
 
-      // Guardar perfil completo en caché local
+      // 3. Guardar perfil completo en caché local
       const cachedProfile = {
         uid: user.uid,
         fullName: fullName.trim(),
@@ -292,6 +315,45 @@ export default function OnboardingScreen() {
         'gofare_cached_user_profile',
         JSON.stringify(cachedProfile),
       );
+      await AsyncStorage.setItem(
+        'gofare_pending_profile',
+        JSON.stringify({
+          fullName: fullName.trim(),
+          firstName,
+          lastName,
+          idNumber: finalIdNumber,
+          phoneNumber: formattedPhoneNumber,
+          email: email || undefined,
+        }),
+      );
+
+      // 4. Si el correo no ha sido verificado, enviar enlace de confirmación y llevar a verify-email
+      if (!user.emailVerified) {
+        try {
+          await sendVerificationEmail(user);
+          console.log(
+            '[Onboarding] Correo de verificación enviado exitosamente a:',
+            email,
+          );
+        } catch (emailErr) {
+          console.warn(
+            '[Onboarding] Error enviando correo de verificación:',
+            emailErr,
+          );
+        }
+
+        await AsyncStorage.setItem('auth_method', 'email');
+        router.replace({
+          pathname: '/verify-email',
+          params: {
+            email,
+            fullName: fullName.trim(),
+            phoneNumber: formattedPhoneNumber,
+            idNumber: finalIdNumber,
+          },
+        } as any);
+        return;
+      }
 
       console.log('[Onboarding] Completado, refrescando sesión...');
       await refreshAuthSessionPhase();
