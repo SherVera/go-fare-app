@@ -20,6 +20,7 @@ import {
   getBackendProfile,
   getMyAssociatedOwner,
   updateBackendProfile,
+  verifyAuthStatus,
 } from '@/lib/api';
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { auth } from '@/lib/firebase';
@@ -44,8 +45,16 @@ export default function DriverProfileScreen() {
   const loadProfileData = useCallback(async () => {
     try {
       setLoading(true);
+      const authStatus = await verifyAuthStatus();
+      if (!authStatus.isAuthenticated) {
+        await purgeUserSessionAndLogout();
+        router.replace('/login');
+        return;
+      }
+
       const user = auth.currentUser;
       if (!user) {
+        await purgeUserSessionAndLogout();
         router.replace('/login');
         return;
       }
@@ -78,11 +87,18 @@ export default function DriverProfileScreen() {
         if (bUser.nationalId || bUser.idNumber || bUser.cedula) {
           setLicense(bUser.nationalId || bUser.idNumber || bUser.cedula);
         }
-      } catch (apiErr) {
-        console.warn(
-          '[DriverProfile] API error, falling back to local cache:',
-          apiErr,
-        );
+      } catch (apiErr: any) {
+        console.warn('[DriverProfile] API error, checking error type:', apiErr);
+        if (
+          apiErr?.status === 401 ||
+          apiErr?.message?.includes('401') ||
+          apiErr?.message?.includes('expired') ||
+          apiErr?.message?.includes('No authenticated user')
+        ) {
+          await purgeUserSessionAndLogout();
+          router.replace('/login');
+          return;
+        }
         try {
           const cached = await AsyncStorage.getItem(
             'gofare_cached_user_profile',
@@ -91,7 +107,8 @@ export default function DriverProfileScreen() {
             const cachedData = JSON.parse(cached);
             if (
               cachedData.email === 'invitado@gofare.dev' ||
-              cachedData.displayName === 'Usuario Invitado'
+              cachedData.displayName === 'Usuario Invitado' ||
+              (cachedData.uid && cachedData.uid !== user.uid)
             ) {
               await AsyncStorage.removeItem('gofare_cached_user_profile');
             } else {

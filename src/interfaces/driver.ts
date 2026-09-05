@@ -9,6 +9,14 @@ export interface MockDriver {
   status: 'active' | 'inactive';
 }
 
+export type VehicleStatus =
+  | 'active'
+  | 'inactive'
+  | 'suspended'
+  | 'approved'
+  | 'pending'
+  | 'rejected';
+
 export interface MockVehicle {
   uuid: string;
   vehicleMake: string;
@@ -16,8 +24,16 @@ export interface MockVehicle {
   vehicleYear: number;
   licensePlate: string;
   cooperativeName: string;
-  status: 'approved' | 'pending' | 'rejected';
+  status: VehicleStatus;
+  rawStatus?: string;
   createdAt: string;
   assignedDriver?: MockDriver;
   adminNotes?: string;
+  color?: string;
+  capacity?: number;
+  totalEarnings?: number;
+  tripsCount?: number;
+  photoUrl?: string;
+  routeNumber?: string;
+  inviteCode?: string;
 }

@@ -54,7 +54,13 @@ interface MockVehicle {
   cooperativeName?: string;
   inviteCode?: string;
   documents?: any[];
-  status: 'approved' | 'pending' | 'rejected';
+  status:
+    | 'approved'
+    | 'pending'
+    | 'rejected'
+    | 'active'
+    | 'inactive'
+    | 'suspended';
   createdAt: string;
   adminNotes?: string;
   assignedDriver?: MockDriver;
@@ -245,7 +251,7 @@ export default function VehicleDetailsScreen() {
             if (cached) {
               try {
                 assignedDriver = JSON.parse(cached);
-              } catch (_) {}
+              } catch {}
             }
           }
 
@@ -492,7 +498,10 @@ export default function VehicleDetailsScreen() {
     );
   }
 
-  const isApproved = vehicle.status === 'approved';
+  const isApproved =
+    vehicle.status === 'approved' || vehicle.status === 'active';
+  const isInactive = vehicle.status === 'inactive';
+  const isSuspended = vehicle.status === 'suspended';
   const isPending = vehicle.status === 'pending';
   const isRejected = vehicle.status === 'rejected';
 
@@ -571,11 +580,13 @@ export default function VehicleDetailsScreen() {
           </View>
 
           <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>ESTADO DE REVISIÓN:</Text>
+            <Text style={styles.statusLabel}>ESTADO DE LA UNIDAD:</Text>
             <View
               style={[
                 styles.statusBadge,
                 isApproved && styles.badgeApproved,
+                isInactive && styles.badgeInactive,
+                isSuspended && styles.badgeSuspended,
                 isPending && styles.badgePending,
                 isRejected && styles.badgeRejected,
               ]}
@@ -584,13 +595,25 @@ export default function VehicleDetailsScreen() {
                 name={
                   isApproved
                     ? 'checkmark-circle'
-                    : isPending
-                      ? 'time'
-                      : 'close-circle'
+                    : isInactive
+                      ? 'pause-circle'
+                      : isSuspended
+                        ? 'alert-circle'
+                        : isPending
+                          ? 'time'
+                          : 'close-circle'
                 }
                 size={16}
                 color={
-                  isApproved ? '#16A34A' : isPending ? '#D97706' : '#DC2626'
+                  isApproved
+                    ? '#16A34A'
+                    : isInactive
+                      ? '#64748B'
+                      : isSuspended
+                        ? '#EA580C'
+                        : isPending
+                          ? '#D97706'
+                          : '#DC2626'
                 }
                 style={{ marginRight: 6 }}
               />
@@ -598,15 +621,21 @@ export default function VehicleDetailsScreen() {
                 style={[
                   styles.statusText,
                   isApproved && { color: '#16A34A' },
+                  isInactive && { color: '#64748B' },
+                  isSuspended && { color: '#EA580C' },
                   isPending && { color: '#D97706' },
                   isRejected && { color: '#DC2626' },
                 ]}
               >
                 {isApproved
-                  ? 'Aprobada para operar'
-                  : isPending
-                    ? 'Revisión Pendiente'
-                    : 'Rechazada'}
+                  ? 'Activa / Aprobada para operar'
+                  : isInactive
+                    ? 'Unidad Inactiva'
+                    : isSuspended
+                      ? 'Unidad Suspendida'
+                      : isPending
+                        ? 'Revisión Pendiente'
+                        : 'Unidad Rechazada'}
               </Text>
             </View>
           </View>
@@ -1381,6 +1410,12 @@ const styles = StyleSheet.create({
   },
   badgeApproved: {
     backgroundColor: '#DCFCE7',
+  },
+  badgeInactive: {
+    backgroundColor: '#F1F5F9',
+  },
+  badgeSuspended: {
+    backgroundColor: '#FFEDD5',
   },
   badgePending: {
     backgroundColor: '#FEF3C7',

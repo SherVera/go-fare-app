@@ -20,8 +20,10 @@ import {
   getBackendProfile,
   getFareAccountByUserId,
   getUserTickets,
+  verifyAuthStatus,
 } from '@/lib/api';
 import { CACHE_KEYS, getLiteCache, setLiteCache } from '@/lib/api-cache';
+import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { tokens } from '@/theme/tokens';
 
 export default function TripsScreen() {
@@ -43,7 +45,15 @@ export default function TripsScreen() {
 
   const fetchTicketsData = useCallback(
     async (isManualRefresh = false) => {
-      // 1. En Modo Lite: si tenemos datos en caché y no es actualización manual, usar caché instantáneo
+      // 1. Verificar primero si el usuario está autenticado y su token GoFare está vigente
+      const authStatus = await verifyAuthStatus();
+      if (!authStatus.isAuthenticated) {
+        await purgeUserSessionAndLogout();
+        router.replace('/login');
+        return;
+      }
+
+      // 2. En Modo Lite: si tenemos datos en caché y no es actualización manual, usar caché instantáneo
       if (isLiteMode && !isManualRefresh) {
         const cachedTickets = await getLiteCache<BackendTicket[]>(
           CACHE_KEYS.TICKETS,
@@ -88,14 +98,23 @@ export default function TripsScreen() {
             console.warn('[Trips] Error fetching transactions:', txErr);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('[Trips] Error fetching data:', error);
+        if (
+          error?.status === 401 ||
+          error?.message?.includes('401') ||
+          error?.message?.includes('expired') ||
+          error?.message?.includes('No authenticated user')
+        ) {
+          await purgeUserSessionAndLogout();
+          router.replace('/login');
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [isLiteMode],
+    [isLiteMode, router],
   );
 
   useFocusEffect(

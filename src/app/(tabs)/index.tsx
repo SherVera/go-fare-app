@@ -23,8 +23,9 @@ import {
   createFareAccount,
   getBackendProfile,
   getFareAccountByUserId,
+  verifyAuthStatus,
 } from '@/lib/api';
-import { auth } from '@/lib/firebase';
+import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { tokens } from '@/theme/tokens';
 
 export default function HomeDashboard() {
@@ -36,24 +37,32 @@ export default function HomeDashboard() {
   const [showPhoneLink, setShowPhoneLink] = useState(false);
 
   const fetchUserData = useCallback(async () => {
-    const user = auth.currentUser;
-    if (!user) {
+    // 1. Verificar estrictamente estado de autenticación y vigencia del token
+    const authStatus = await verifyAuthStatus();
+    if (!authStatus.isAuthenticated || !authStatus.user) {
+      console.log(
+        '[Home] Usuario no autenticado o token vencido. Limpiando y redirigiendo a login...',
+      );
       setUserProfile(null);
       setLoading(false);
       setRefreshing(false);
+      await purgeUserSessionAndLogout();
       router.replace('/login');
       return;
     }
 
-    // 1. Cargar desde la caché local solo si pertenece al usuario autenticado actual
+    const user = authStatus.user;
+
+    // 2. Cargar desde la caché local SOLO si pertenece estrictamente al usuario autenticado actual
     try {
       const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (
+          !parsed.uid ||
+          parsed.uid !== user.uid ||
           parsed.email === 'invitado@gofare.dev' ||
-          parsed.displayName === 'Usuario Invitado' ||
-          (parsed.uid && parsed.uid !== user.uid)
+          parsed.displayName === 'Usuario Invitado'
         ) {
           await AsyncStorage.removeItem('gofare_cached_user_profile');
         } else {
@@ -69,12 +78,16 @@ export default function HomeDashboard() {
     }
 
     try {
-      // Obtener perfil y cuenta de tarifa desde el backend de GoFare
+      // 3. Obtener perfil y cuenta de tarifa desde el backend de GoFare
       const backendUser = await getBackendProfile();
+      if (!backendUser) {
+        throw new Error('Perfil de usuario vacío o no encontrado en backend');
+      }
+
       let fareAccount = null;
       try {
         fareAccount = await getFareAccountByUserId(backendUser.id);
-      } catch (_) {
+      } catch {
         // Si no existe la cuenta de tarifa, la creamos
         try {
           fareAccount = await createFareAccount(backendUser.id);
@@ -83,15 +96,6 @@ export default function HomeDashboard() {
             '[Home] Error al crear la cuenta de tarifa:',
             createError,
           );
-          const errMsg = (createError as { message?: string })?.message || '';
-          if (
-            errMsg.includes('phone/link') ||
-            errMsg.includes('phone number') ||
-            errMsg.includes('auth/phone/link')
-          ) {
-            // Se omite la vinculación telefónica por ahora
-            // setShowPhoneLink(true);
-          }
         }
       }
 
@@ -101,7 +105,7 @@ export default function HomeDashboard() {
         const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
         if (cached) {
           const cachedProfile = JSON.parse(cached);
-          if (cachedProfile.carnetId) {
+          if (cachedProfile.carnetId && cachedProfile.uid === user.uid) {
             carnetId = cachedProfile.carnetId;
           }
         }
@@ -204,15 +208,26 @@ export default function HomeDashboard() {
         '[Home] Error al obtener datos del backend:',
         error.message || error,
       );
-      // Si el error es de autorización (Unauthorized), no hacemos fallback
-      if (error?.message === 'Unauthorized') {
+      // Si el error es de autenticación o expiración de token, cerrar sesión inmediatamente
+      if (
+        error?.message?.includes('401') ||
+        error?.message?.includes('Unauthorized') ||
+        error?.message?.includes('expirado') ||
+        error?.message?.includes('No hay una sesión activa')
+      ) {
+        await purgeUserSessionAndLogout();
+        setUserProfile(null);
+        router.replace('/login');
         return;
       }
-      // Fallback a caché local en caso de error de conexión
+      // Fallback a caché local SOLO si coincide con el usuario autenticado
       try {
         const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
         if (cached) {
-          setUserProfile(JSON.parse(cached));
+          const parsed = JSON.parse(cached);
+          if (parsed.uid === user.uid) {
+            setUserProfile(parsed);
+          }
         }
       } catch (cacheErr: any) {
         console.log(
@@ -220,10 +235,11 @@ export default function HomeDashboard() {
           cacheErr.message || cacheErr,
         );
       }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLoading(false);
-    setRefreshing(false);
-  }, [router.replace, isLiteMode, refreshing]);
+  }, [router, isLiteMode, refreshing]);
 
   useFocusEffect(
     useCallback(() => {
@@ -262,6 +278,10 @@ export default function HomeDashboard() {
     return (
       <AppLoadingScreen message="Sincronizando información de tu cuenta..." />
     );
+  }
+
+  if (!userProfile) {
+    return <AppLoadingScreen message="Verificando sesión de usuario..." />;
   }
 
   return (

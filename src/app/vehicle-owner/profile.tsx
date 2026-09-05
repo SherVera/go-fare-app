@@ -18,6 +18,7 @@ import {
   getBackendInviteCodes,
   getBackendProfile,
   getOwnerVehicles,
+  verifyAuthStatus,
 } from '@/lib/api';
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { auth } from '@/lib/firebase';
@@ -42,44 +43,69 @@ export default function VehicleOwnerProfile() {
   const loadProfileData = useCallback(async () => {
     try {
       setLoading(true);
-      const user = auth.currentUser;
-      if (user) {
-        // Cargar datos del usuario
-        try {
-          const backendUser = await getBackendProfile();
-          setName(
-            backendUser.displayName ||
-              `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
-              'Socio',
-          );
-          setEmail(backendUser.email);
-          setPhone(backendUser.phoneNumber || 'No registrado');
+      const authStatus = await verifyAuthStatus();
+      if (!authStatus.isAuthenticated) {
+        await purgeUserSessionAndLogout();
+        router.replace('/login');
+        return;
+      }
 
-          const civil =
-            (backendUser as any)?.transportOwner?.civilAssociation ||
-            (backendUser as any)?.civilAssociation;
-          if (civil?.name) {
-            setCoopName(civil.name);
-            setCoopRif(civil.rif ? `RIF: ${civil.rif}` : '');
-          }
-        } catch (apiErr) {
-          console.warn(
-            '[Profile] API error, falling back to local cache:',
-            apiErr,
+      const user = auth.currentUser;
+      if (!user) {
+        await purgeUserSessionAndLogout();
+        router.replace('/login');
+        return;
+      }
+
+      // Cargar datos del usuario
+      try {
+        const backendUser = await getBackendProfile();
+        setName(
+          backendUser.displayName ||
+            `${backendUser.firstName || ''} ${backendUser.lastName || ''}`.trim() ||
+            'Socio',
+        );
+        setEmail(backendUser.email);
+        setPhone(backendUser.phoneNumber || 'No registrado');
+
+        const civil =
+          (backendUser as any)?.transportOwner?.civilAssociation ||
+          (backendUser as any)?.civilAssociation;
+        if (civil?.name) {
+          setCoopName(civil.name);
+          setCoopRif(civil.rif ? `RIF: ${civil.rif}` : '');
+        }
+      } catch (apiErr: any) {
+        console.warn(
+          '[Profile] API error, checking auth error status:',
+          apiErr,
+        );
+        if (
+          apiErr?.status === 401 ||
+          apiErr?.message?.includes('401') ||
+          apiErr?.message?.includes('expired') ||
+          apiErr?.message?.includes('No authenticated user')
+        ) {
+          await purgeUserSessionAndLogout();
+          router.replace('/login');
+          return;
+        }
+        try {
+          const cached = await AsyncStorage.getItem(
+            'gofare_cached_user_profile',
           );
-          try {
-            const cached = await AsyncStorage.getItem(
-              'gofare_cached_user_profile',
-            );
-            if (cached) {
-              const cachedData = JSON.parse(cached);
+          if (cached) {
+            const cachedData = JSON.parse(cached);
+            if (cachedData.uid && cachedData.uid !== user.uid) {
+              await AsyncStorage.removeItem('gofare_cached_user_profile');
+            } else {
               setName(cachedData.fullName || cachedData.displayName || 'Socio');
               setEmail(cachedData.email || user.email || 'socio@example.com');
               setPhone(cachedData.phoneNumber || 'No registrado');
             }
-          } catch (cacheErr) {
-            console.warn('[Profile] Error loading cached data:', cacheErr);
           }
+        } catch (cacheErr) {
+          console.warn('[Profile] Error loading cached data:', cacheErr);
         }
       }
 
@@ -121,7 +147,7 @@ export default function VehicleOwnerProfile() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {

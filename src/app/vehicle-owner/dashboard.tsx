@@ -15,10 +15,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import type { MockVehicle } from '@/interfaces';
-import { getBackendProfile, getOwnerVehicles } from '@/lib/api';
+import {
+  getBackendProfile,
+  getOwnerVehicles,
+  verifyAuthStatus,
+} from '@/lib/api';
+import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { tokens } from '@/theme/tokens';
 
-type FilterType = 'all' | 'approved' | 'pending' | 'rejected';
+type FilterType =
+  | 'all'
+  | 'active'
+  | 'inactive'
+  | 'suspended'
+  | 'pending'
+  | 'rejected'
+  | 'approved';
 
 const formatDate = (dateStr: string | Date) => {
   if (!dateStr) return '';
@@ -90,6 +102,14 @@ export default function VehicleOwnerDashboard() {
 
   const loadData = useCallback(async () => {
     try {
+      setLoading(true);
+      const authStatus = await verifyAuthStatus();
+      if (!authStatus.isAuthenticated) {
+        await purgeUserSessionAndLogout();
+        router.replace('/login');
+        return;
+      }
+
       // 1. Cargar vehículos reales del dueño desde PostgreSQL (GET /vehicles/my)
       const realVehicles = await getOwnerVehicles();
       setVehicles(realVehicles);
@@ -128,16 +148,25 @@ export default function VehicleOwnerDashboard() {
           profErr,
         );
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn(
         '[Dashboard] Error al cargar lista de vehículos reales:',
         err,
       );
+      if (
+        err?.status === 401 ||
+        err?.message?.includes('401') ||
+        err?.message?.includes('expired') ||
+        err?.message?.includes('No authenticated user')
+      ) {
+        await purgeUserSessionAndLogout();
+        router.replace('/login');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {
@@ -153,28 +182,64 @@ export default function VehicleOwnerDashboard() {
   // Filtrado de unidades
   const filteredVehicles = vehicles.filter((vehicle) => {
     if (filter === 'all') return true;
+    if (filter === 'active') {
+      return vehicle.status === 'active' || vehicle.status === 'approved';
+    }
+    if (filter === 'inactive') {
+      return vehicle.status === 'inactive';
+    }
+    if (filter === 'suspended') {
+      return vehicle.status === 'suspended';
+    }
+    if (filter === 'pending') {
+      return vehicle.status === 'pending';
+    }
+    if (filter === 'rejected') {
+      return vehicle.status === 'rejected';
+    }
     return vehicle.status === filter;
   });
 
   // Estadísticas
   const totalUnits = vehicles.length;
-  const approvedUnits = vehicles.filter((v) => v.status === 'approved').length;
+  const activeUnits = vehicles.filter(
+    (v) => v.status === 'active' || v.status === 'approved',
+  ).length;
+  const inactiveUnits = vehicles.filter((v) => v.status === 'inactive').length;
+  const suspendedUnits = vehicles.filter(
+    (v) => v.status === 'suspended',
+  ).length;
   const pendingUnits = vehicles.filter((v) => v.status === 'pending').length;
   const rejectedUnits = vehicles.filter((v) => v.status === 'rejected').length;
 
-  const _handleShowNotes = (vehicle: MockVehicle) => {
+  const handleShowNotes = (vehicle: MockVehicle) => {
     setSelectedVehicle(vehicle);
     setIsModalVisible(true);
   };
 
-  const getStatusStyle = (status: MockVehicle['status']) => {
+  const getStatusStyle = (status: MockVehicle['status'] | string) => {
     switch (status) {
+      case 'active':
       case 'approved':
         return {
           bg: '#DCFCE7',
           text: '#16A34A',
-          label: 'Aprobado',
+          label: 'Activo',
           icon: 'checkmark-circle-outline' as const,
+        };
+      case 'inactive':
+        return {
+          bg: '#F1F5F9',
+          text: '#64748B',
+          label: 'Inactivo',
+          icon: 'pause-circle-outline' as const,
+        };
+      case 'suspended':
+        return {
+          bg: '#FFEDD5',
+          text: '#EA580C',
+          label: 'Suspendido',
+          icon: 'alert-circle-outline' as const,
         };
       case 'pending':
         return {
@@ -189,6 +254,13 @@ export default function VehicleOwnerDashboard() {
           text: '#DC2626',
           label: 'Rechazado',
           icon: 'close-circle-outline' as const,
+        };
+      default:
+        return {
+          bg: '#F1F5F9',
+          text: '#64748B',
+          label: status ? String(status).toUpperCase() : 'Inactivo',
+          icon: 'help-circle-outline' as const,
         };
     }
   };
@@ -237,7 +309,11 @@ export default function VehicleOwnerDashboard() {
 
         {/* ── RESUMEN DE FLOTA (STATS) ── */}
         <Text style={styles.sectionTitle}>Resumen de Buses</Text>
-        <View style={styles.statsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statsScroll}
+        >
           {/* Total */}
           <View style={styles.statBox}>
             <Text style={[styles.statNum, { color: tokens.colors.primary }]}>
@@ -245,28 +321,46 @@ export default function VehicleOwnerDashboard() {
             </Text>
             <Text style={styles.statLabel}>Total Unidades</Text>
           </View>
-          {/* Aprobadas */}
+          {/* Activas */}
           <View style={styles.statBox}>
             <Text style={[styles.statNum, { color: '#16A34A' }]}>
-              {approvedUnits}
+              {activeUnits}
             </Text>
-            <Text style={styles.statLabel}>Aprobadas</Text>
+            <Text style={styles.statLabel}>Activas</Text>
           </View>
-          {/* Pendientes */}
+          {/* Inactivas */}
           <View style={styles.statBox}>
-            <Text style={[styles.statNum, { color: '#D97706' }]}>
-              {pendingUnits}
+            <Text style={[styles.statNum, { color: '#64748B' }]}>
+              {inactiveUnits}
             </Text>
-            <Text style={styles.statLabel}>Pendientes</Text>
+            <Text style={styles.statLabel}>Inactivas</Text>
           </View>
-          {/* Rechazadas */}
+          {/* Suspendidas */}
           <View style={styles.statBox}>
-            <Text style={[styles.statNum, { color: '#DC2626' }]}>
-              {rejectedUnits}
+            <Text style={[styles.statNum, { color: '#EA580C' }]}>
+              {suspendedUnits}
             </Text>
-            <Text style={styles.statLabel}>Rechazadas</Text>
+            <Text style={styles.statLabel}>Suspendidas</Text>
           </View>
-        </View>
+          {/* Pendientes (si hay) */}
+          {pendingUnits > 0 && (
+            <View style={styles.statBox}>
+              <Text style={[styles.statNum, { color: '#D97706' }]}>
+                {pendingUnits}
+              </Text>
+              <Text style={styles.statLabel}>Pendientes</Text>
+            </View>
+          )}
+          {/* Rechazadas (si hay) */}
+          {rejectedUnits > 0 && (
+            <View style={styles.statBox}>
+              <Text style={[styles.statNum, { color: '#DC2626' }]}>
+                {rejectedUnits}
+              </Text>
+              <Text style={styles.statLabel}>Rechazadas</Text>
+            </View>
+          )}
+        </ScrollView>
 
         {/* ── FILTROS (CHIPS) ── */}
         <View style={styles.filtersWrapper}>
@@ -275,35 +369,39 @@ export default function VehicleOwnerDashboard() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.filtersScroll}
           >
-            {(['all', 'approved', 'pending', 'rejected'] as const).map(
-              (type) => {
-                const isActive = filter === type;
-                let label = 'Todos';
-                if (type === 'approved') label = 'Aprobados';
-                if (type === 'pending') label = 'Pendientes';
-                if (type === 'rejected') label = 'Rechazados';
-
-                return (
-                  <Pressable
-                    key={type}
+            {[
+              { type: 'all' as const, label: 'Todos' },
+              { type: 'active' as const, label: 'Activos' },
+              { type: 'inactive' as const, label: 'Inactivos' },
+              { type: 'suspended' as const, label: 'Suspendidos' },
+              ...(pendingUnits > 0
+                ? [{ type: 'pending' as const, label: 'Pendientes' }]
+                : []),
+              ...(rejectedUnits > 0
+                ? [{ type: 'rejected' as const, label: 'Rechazados' }]
+                : []),
+            ].map((item) => {
+              const isActive = filter === item.type;
+              return (
+                <Pressable
+                  key={item.type}
+                  style={[
+                    styles.filterChip,
+                    isActive && styles.filterChipActive,
+                  ]}
+                  onPress={() => setFilter(item.type)}
+                >
+                  <Text
                     style={[
-                      styles.filterChip,
-                      isActive && styles.filterChipActive,
+                      styles.filterChipText,
+                      isActive && styles.filterChipTextActive,
                     ]}
-                    onPress={() => setFilter(type)}
                   >
-                    <Text
-                      style={[
-                        styles.filterChipText,
-                        isActive && styles.filterChipTextActive,
-                      ]}
-                    >
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              },
-            )}
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -394,19 +492,41 @@ export default function VehicleOwnerDashboard() {
                   </View>
                 </View>
 
-                {vehicle.status === 'rejected' && vehicle.adminNotes && (
-                  <View style={styles.actionBtn}>
-                    <Ionicons
-                      name="warning-outline"
-                      size={16}
-                      color="#DC2626"
-                      style={{ marginRight: 6 }}
-                    />
-                    <Text style={styles.actionBtnText}>
-                      Ver Motivo de Rechazo
-                    </Text>
-                  </View>
-                )}
+                {(vehicle.status === 'rejected' ||
+                  vehicle.status === 'suspended') &&
+                  vehicle.adminNotes && (
+                    <Pressable
+                      style={[
+                        styles.actionBtn,
+                        vehicle.status === 'suspended' && {
+                          backgroundColor: '#FFEDD5',
+                        },
+                      ]}
+                      onPress={() => handleShowNotes(vehicle)}
+                    >
+                      <Ionicons
+                        name="warning-outline"
+                        size={16}
+                        color={
+                          vehicle.status === 'suspended' ? '#EA580C' : '#DC2626'
+                        }
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text
+                        style={[
+                          styles.actionBtnText,
+                          vehicle.status === 'suspended' && {
+                            color: '#EA580C',
+                          },
+                        ]}
+                      >
+                        Ver Motivo de{' '}
+                        {vehicle.status === 'suspended'
+                          ? 'Suspensión'
+                          : 'Rechazo'}
+                      </Text>
+                    </Pressable>
+                  )}
               </Pressable>
             );
           })
@@ -449,12 +569,24 @@ export default function VehicleOwnerDashboard() {
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
                 <Ionicons
-                  name="alert-circle"
+                  name={
+                    selectedVehicle?.status === 'suspended'
+                      ? 'alert-circle'
+                      : 'close-circle'
+                  }
                   size={24}
-                  color="#DC2626"
+                  color={
+                    selectedVehicle?.status === 'suspended'
+                      ? '#EA580C'
+                      : '#DC2626'
+                  }
                   style={{ marginRight: 8 }}
                 />
-                <Text style={styles.modalTitle}>Solicitud Rechazada</Text>
+                <Text style={styles.modalTitle}>
+                  {selectedVehicle?.status === 'suspended'
+                    ? 'Unidad Suspendida'
+                    : 'Solicitud Rechazada'}
+                </Text>
               </View>
               <Pressable onPress={() => setIsModalVisible(false)} hitSlop={10}>
                 <Ionicons name="close" size={24} color="#8594AB" />
@@ -614,11 +746,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 20,
   },
+  statsScroll: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    minWidth: '100%',
+    paddingBottom: 4,
+  },
   statBox: {
     flex: 1,
+    minWidth: 78,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     paddingVertical: 12,
+    paddingHorizontal: 4,
     alignItems: 'center',
     marginHorizontal: 4,
     shadowColor: '#8594AB',
