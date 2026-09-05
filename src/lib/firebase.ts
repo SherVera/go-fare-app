@@ -40,6 +40,7 @@ import {
   isSuccessResponse,
   statusCodes,
 } from '@react-native-google-signin/google-signin';
+import * as SecureStore from 'expo-secure-store';
 
 // `@react-native-firebase/firestore@24` doesn't ship .d.ts for the modular
 // subpath, so we derive the constraint type from `query()`'s second argument.
@@ -128,7 +129,25 @@ export const updateUser = (
 };
 
 export const sigOutAccount = async () => {
-  await AsyncStorage.removeItem('user');
+  try {
+    await AsyncStorage.multiRemove([
+      'user',
+      'gofare_cached_user_profile',
+      'mock_user_profile_data',
+      'temp_auth',
+      'phone_verified_bypass',
+      'auth_method',
+    ]);
+  } catch (err) {
+    console.warn('[Firebase] Error al limpiar AsyncStorage en logout:', err);
+  }
+  try {
+    await SecureStore.deleteItemAsync('user_role');
+    await SecureStore.deleteItemAsync('gofare_jwt_token');
+    await SecureStore.deleteItemAsync('backend_jwt');
+  } catch (err) {
+    console.warn('[Firebase] Error al limpiar SecureStore en logout:', err);
+  }
   try {
     await signOut(auth);
   } catch (error: any) {

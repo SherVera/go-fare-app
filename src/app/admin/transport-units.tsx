@@ -25,7 +25,6 @@ import {
   getVehicleDetail,
   rejectDocument,
   rejectVehicle,
-  toggleTransportUnitStatus,
   verifyDocument,
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
@@ -38,7 +37,7 @@ export default function AdminTransportUnitsScreen() {
   const [filteredUnits, setFilteredUnits] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<
-    'all' | 'active' | 'inactive' | 'rejected'
+    'all' | 'active' | 'inactive' | 'suspended' | 'rejected'
   >('all');
   const [selectedUnit, setSelectedUnit] = useState<any | null>(null);
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
@@ -76,12 +75,16 @@ export default function AdminTransportUnitsScreen() {
             u.status !== 'suspended' &&
             u.status !== 'rejected',
         );
+      } else if (tab === 'suspended') {
+        result = result.filter(
+          (u) => u.status === 'suspended' || u.status === 'suspendida',
+        );
       } else if (tab === 'rejected') {
         result = result.filter(
           (u) =>
-            u.status === 'suspended' ||
-            u.status === 'rejected' ||
-            u.status === 'rechazada',
+            (u.status === 'rejected' || u.status === 'rechazada') &&
+            u.status !== 'suspended' &&
+            u.status !== 'suspendida',
         );
       }
 
@@ -352,10 +355,14 @@ export default function AdminTransportUnitsScreen() {
         );
       }
 
+      const isReactivation =
+        targetUnit.status === 'suspended' || targetUnit.status === 'suspendida';
       setIsDetailModalVisible(false);
       Alert.alert(
-        'Unidad Aprobada',
-        `La unidad ${targetUnit.plate || targetUnit.licensePlate} y sus documentos adjuntos han sido aprobados con éxito.`,
+        isReactivation ? 'Unidad Reactivada' : 'Unidad Aprobada',
+        isReactivation
+          ? `La unidad ${targetUnit.plate || targetUnit.licensePlate} ha sido activada con éxito.`
+          : `La unidad ${targetUnit.plate || targetUnit.licensePlate} y sus documentos adjuntos han sido aprobados con éxito.`,
       );
       await fetchUnits();
     } catch (err: any) {
@@ -406,10 +413,14 @@ export default function AdminTransportUnitsScreen() {
         );
       }
 
+      const isSuspension =
+        targetUnit.isActive === true || targetUnit.status === 'active';
       setIsDetailModalVisible(false);
       Alert.alert(
-        'Unidad Rechazada',
-        `La unidad ${targetUnit.plate || targetUnit.licensePlate} y sus documentos adjuntos han sido rechazados.`,
+        isSuspension ? 'Unidad Suspendida' : 'Unidad Rechazada',
+        isSuspension
+          ? `La unidad ${targetUnit.plate || targetUnit.licensePlate} ha sido suspendida.`
+          : `La unidad ${targetUnit.plate || targetUnit.licensePlate} y sus documentos adjuntos han sido rechazados.`,
       );
       await fetchUnits();
     } catch (err: any) {
@@ -430,6 +441,21 @@ export default function AdminTransportUnitsScreen() {
         { text: 'Cancelar', style: 'cancel' },
         {
           text: 'Aprobar Unidad y Recaudos',
+          onPress: () => executeApproveVehicle(item),
+        },
+      ],
+    );
+  };
+
+  const handleReactivateUnit = (item: any) => {
+    const plate = item.plate || item.licensePlate;
+    Alert.alert(
+      'Activar Unidad',
+      `¿Deseas volver a activar la unidad ${plate}?\n\nLa unidad volverá al estado "Activa" y estará habilitada para operar en la plataforma.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Activar Unidad',
           onPress: () => executeApproveVehicle(item),
         },
       ],
@@ -484,33 +510,21 @@ export default function AdminTransportUnitsScreen() {
     );
   };
 
-  const handleDeactivateUnit = async (item: any) => {
+  const handleSuspendUnit = (item: any) => {
+    const plate = item.plate || item.licensePlate;
     Alert.alert(
-      'Desactivar Unidad',
-      `¿Estás seguro de que deseas desactivar la unidad ${item.plate}? Cambiará su estado a Pendiente.`,
+      'Suspender Unidad',
+      `¿Estás seguro de que deseas suspender la unidad ${plate}?\n\nLa unidad pasará al estado "Suspendida" y quedará inhabilitada para operar en la plataforma.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
-          text: 'Desactivar',
+          text: 'Suspender Unidad',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              await toggleTransportUnitStatus(item.uuid, false);
-              Alert.alert(
-                'Éxito',
-                `Unidad ${item.plate} desactivada con éxito.`,
-              );
-              await fetchUnits();
-            } catch (err: any) {
-              Alert.alert(
-                'Error',
-                err.message || 'No se pudo desactivar la unidad.',
-              );
-            } finally {
-              setLoading(false);
-            }
-          },
+          onPress: () =>
+            executeRejectVehicle(
+              item,
+              'Unidad suspendida por el administrador.',
+            ),
         },
       ],
     );
@@ -550,62 +564,82 @@ export default function AdminTransportUnitsScreen() {
       </View>
 
       {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <Pressable
-          style={[styles.tab, activeTab === 'all' && styles.tabActive]}
-          onPress={() => handleTabChange('all')}
+      <View style={styles.tabsWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabsContainer}
         >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'all' && styles.tabLabelActive,
-            ]}
+          <Pressable
+            style={[styles.tab, activeTab === 'all' && styles.tabActive]}
+            onPress={() => handleTabChange('all')}
           >
-            Todas
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === 'all' && styles.tabLabelActive,
+              ]}
+            >
+              Todas
+            </Text>
+          </Pressable>
 
-        <Pressable
-          style={[styles.tab, activeTab === 'active' && styles.tabActive]}
-          onPress={() => handleTabChange('active')}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'active' && styles.tabLabelActive,
-            ]}
+          <Pressable
+            style={[styles.tab, activeTab === 'active' && styles.tabActive]}
+            onPress={() => handleTabChange('active')}
           >
-            Activas
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === 'active' && styles.tabLabelActive,
+              ]}
+            >
+              Activas
+            </Text>
+          </Pressable>
 
-        <Pressable
-          style={[styles.tab, activeTab === 'inactive' && styles.tabActive]}
-          onPress={() => handleTabChange('inactive')}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'inactive' && styles.tabLabelActive,
-            ]}
+          <Pressable
+            style={[styles.tab, activeTab === 'inactive' && styles.tabActive]}
+            onPress={() => handleTabChange('inactive')}
           >
-            Pendientes
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === 'inactive' && styles.tabLabelActive,
+              ]}
+            >
+              Pendientes
+            </Text>
+          </Pressable>
 
-        <Pressable
-          style={[styles.tab, activeTab === 'rejected' && styles.tabActive]}
-          onPress={() => handleTabChange('rejected')}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'rejected' && styles.tabLabelActiveRejected,
-            ]}
+          <Pressable
+            style={[styles.tab, activeTab === 'suspended' && styles.tabActive]}
+            onPress={() => handleTabChange('suspended')}
           >
-            Rechazadas
-          </Text>
-        </Pressable>
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === 'suspended' && styles.tabLabelActiveSuspended,
+              ]}
+            >
+              Suspendidas
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.tab, activeTab === 'rejected' && styles.tabActive]}
+            onPress={() => handleTabChange('rejected')}
+          >
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === 'rejected' && styles.tabLabelActiveRejected,
+              ]}
+            >
+              Rechazadas
+            </Text>
+          </Pressable>
+        </ScrollView>
       </View>
 
       {/* List */}
@@ -644,23 +678,30 @@ export default function AdminTransportUnitsScreen() {
           </View>
         }
         renderItem={({ item }) => {
+          const isSuspended =
+            item.status === 'suspended' || item.status === 'suspendida';
           const isRejected =
-            item.status === 'suspended' ||
-            item.status === 'rejected' ||
-            item.status === 'rechazada';
+            (item.status === 'rejected' || item.status === 'rechazada') &&
+            !isSuspended;
           const isActive =
-            (item.isActive === true || item.status === 'active') && !isRejected;
+            (item.isActive === true || item.status === 'active') &&
+            !isRejected &&
+            !isSuspended;
 
-          const statusColor = isRejected
-            ? '#EF4444'
-            : isActive
-              ? '#10B981'
-              : '#F59E0B';
-          const statusText = isRejected
-            ? 'Rechazada'
-            : isActive
-              ? 'Activa'
-              : 'Pendiente';
+          const statusColor = isSuspended
+            ? '#EA580C'
+            : isRejected
+              ? '#EF4444'
+              : isActive
+                ? '#10B981'
+                : '#F59E0B';
+          const statusText = isSuspended
+            ? 'Suspendida'
+            : isRejected
+              ? 'Rechazada'
+              : isActive
+                ? 'Activa'
+                : 'Pendiente';
 
           return (
             <View style={styles.unitCard}>
@@ -668,13 +709,20 @@ export default function AdminTransportUnitsScreen() {
                 <View
                   style={[
                     styles.iconCircle,
+                    isSuspended && { backgroundColor: '#FFEDD5' },
                     isRejected && { backgroundColor: '#FEE2E2' },
                   ]}
                 >
                   <Ionicons
                     name="bus"
                     size={22}
-                    color={isRejected ? '#DC2626' : tokens.colors.primary}
+                    color={
+                      isSuspended
+                        ? '#EA580C'
+                        : isRejected
+                          ? '#DC2626'
+                          : tokens.colors.primary
+                    }
                   />
                 </View>
                 <View style={styles.meta}>
@@ -686,7 +734,13 @@ export default function AdminTransportUnitsScreen() {
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: `${statusColor}14` },
+                    {
+                      backgroundColor: isSuspended
+                        ? '#FFEDD5'
+                        : isRejected
+                          ? '#FEE2E2'
+                          : `${statusColor}14`,
+                    },
                   ]}
                 >
                   <View
@@ -890,6 +944,22 @@ export default function AdminTransportUnitsScreen() {
                 </View>
               )}
 
+              {isSuspended && (
+                <View style={styles.cardSuspensionBanner}>
+                  <Ionicons
+                    name="alert-circle"
+                    size={14}
+                    color="#EA580C"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.cardSuspensionBannerText}>
+                    {item.suspensionReason
+                      ? `Unidad suspendida: ${item.suspensionReason}`
+                      : 'Unidad suspendida por el administrador'}
+                  </Text>
+                </View>
+              )}
+
               {isRejected && (
                 <View style={styles.cardRejectionBanner}>
                   <Ionicons
@@ -899,7 +969,9 @@ export default function AdminTransportUnitsScreen() {
                     style={{ marginRight: 6 }}
                   />
                   <Text style={styles.cardRejectionBannerText}>
-                    Unidad rechazada por el administrador
+                    {item.rejectionReason
+                      ? `Unidad rechazada: ${item.rejectionReason}`
+                      : 'Unidad rechazada por el administrador'}
                   </Text>
                 </View>
               )}
@@ -918,7 +990,7 @@ export default function AdminTransportUnitsScreen() {
                   <Text style={styles.actionButtonText}>Detalles</Text>
                 </Pressable>
 
-                {!isActive && !isRejected && (
+                {!isActive && !isRejected && !isSuspended && (
                   <>
                     <Pressable
                       style={[styles.actionButton, styles.approveButton]}
@@ -954,6 +1026,22 @@ export default function AdminTransportUnitsScreen() {
                   </>
                 )}
 
+                {isSuspended && (
+                  <Pressable
+                    style={[styles.actionButton, styles.approveButton]}
+                    onPress={() => handleReactivateUnit(item)}
+                  >
+                    <Ionicons
+                      name="refresh-circle-outline"
+                      size={16}
+                      color="#059669"
+                    />
+                    <Text style={[styles.actionButtonText, styles.approveText]}>
+                      Activar
+                    </Text>
+                  </Pressable>
+                )}
+
                 {isRejected && (
                   <Pressable
                     style={[styles.actionButton, styles.approveButton]}
@@ -972,14 +1060,16 @@ export default function AdminTransportUnitsScreen() {
 
                 {isActive && (
                   <Pressable
-                    style={[styles.actionButton, styles.deactivateButton]}
-                    onPress={() => handleDeactivateUnit(item)}
+                    style={[styles.actionButton, styles.suspendButton]}
+                    onPress={() => handleSuspendUnit(item)}
                   >
-                    <Ionicons name="ban-outline" size={16} color="#64748B" />
-                    <Text
-                      style={[styles.actionButtonText, styles.deactivateText]}
-                    >
-                      Desactivar
+                    <Ionicons
+                      name="pause-circle-outline"
+                      size={16}
+                      color="#EA580C"
+                    />
+                    <Text style={[styles.actionButtonText, styles.suspendText]}>
+                      Suspender
                     </Text>
                   </Pressable>
                 )}
@@ -1040,12 +1130,14 @@ export default function AdminTransportUnitsScreen() {
                       {
                         backgroundColor:
                           selectedUnit.status === 'suspended' ||
-                          selectedUnit.status === 'rejected' ||
-                          selectedUnit.status === 'rechazada'
-                            ? '#FEE2E2'
-                            : selectedUnit.isActive
-                              ? '#D1FAE5'
-                              : '#FEF3C7',
+                          selectedUnit.status === 'suspendida'
+                            ? '#FFEDD5'
+                            : selectedUnit.status === 'rejected' ||
+                                selectedUnit.status === 'rechazada'
+                              ? '#FEE2E2'
+                              : selectedUnit.isActive
+                                ? '#D1FAE5'
+                                : '#FEF3C7',
                       },
                     ]}
                   >
@@ -1055,12 +1147,14 @@ export default function AdminTransportUnitsScreen() {
                         {
                           backgroundColor:
                             selectedUnit.status === 'suspended' ||
-                            selectedUnit.status === 'rejected' ||
-                            selectedUnit.status === 'rechazada'
-                              ? '#EF4444'
-                              : selectedUnit.isActive
-                                ? '#10B981'
-                                : '#F59E0B',
+                            selectedUnit.status === 'suspendida'
+                              ? '#EA580C'
+                              : selectedUnit.status === 'rejected' ||
+                                  selectedUnit.status === 'rechazada'
+                                ? '#EF4444'
+                                : selectedUnit.isActive
+                                  ? '#10B981'
+                                  : '#F59E0B',
                         },
                       ]}
                     />
@@ -1070,22 +1164,26 @@ export default function AdminTransportUnitsScreen() {
                         {
                           color:
                             selectedUnit.status === 'suspended' ||
-                            selectedUnit.status === 'rejected' ||
-                            selectedUnit.status === 'rechazada'
-                              ? '#DC2626'
-                              : selectedUnit.isActive
-                                ? '#059669'
-                                : '#D97706',
+                            selectedUnit.status === 'suspendida'
+                              ? '#EA580C'
+                              : selectedUnit.status === 'rejected' ||
+                                  selectedUnit.status === 'rechazada'
+                                ? '#DC2626'
+                                : selectedUnit.isActive
+                                  ? '#059669'
+                                  : '#D97706',
                         },
                       ]}
                     >
                       {selectedUnit.status === 'suspended' ||
-                      selectedUnit.status === 'rejected' ||
-                      selectedUnit.status === 'rechazada'
-                        ? 'Rechazada'
-                        : selectedUnit.isActive
-                          ? 'Activa'
-                          : 'Pendiente'}
+                      selectedUnit.status === 'suspendida'
+                        ? 'Suspendida'
+                        : selectedUnit.status === 'rejected' ||
+                            selectedUnit.status === 'rechazada'
+                          ? 'Rechazada'
+                          : selectedUnit.isActive
+                            ? 'Activa'
+                            : 'Pendiente'}
                     </Text>
                   </View>
                 </View>
@@ -1246,6 +1344,7 @@ export default function AdminTransportUnitsScreen() {
               !detailLoading && (
                 <View style={styles.modalActionRow}>
                   {selectedUnit.status !== 'suspended' &&
+                    selectedUnit.status !== 'suspendida' &&
                     selectedUnit.status !== 'rejected' &&
                     selectedUnit.status !== 'rechazada' && (
                       <Pressable
@@ -1270,17 +1369,52 @@ export default function AdminTransportUnitsScreen() {
 
                   <Pressable
                     style={[styles.modalActionBtn, styles.modalApproveBtn]}
-                    onPress={() => handleApproveUnit(selectedUnit)}
+                    onPress={() =>
+                      selectedUnit.status === 'suspended' ||
+                      selectedUnit.status === 'suspendida'
+                        ? handleReactivateUnit(selectedUnit)
+                        : handleApproveUnit(selectedUnit)
+                    }
                   >
                     <Ionicons
-                      name="checkmark-circle-outline"
+                      name={
+                        selectedUnit.status === 'suspended' ||
+                        selectedUnit.status === 'suspendida'
+                          ? 'refresh-circle-outline'
+                          : 'checkmark-circle-outline'
+                      }
                       size={18}
                       color="#059669"
                     />
                     <Text
                       style={[styles.modalActionText, styles.modalApproveText]}
                     >
-                      Aprobar
+                      {selectedUnit.status === 'suspended' ||
+                      selectedUnit.status === 'suspendida'
+                        ? 'Activar Unidad'
+                        : 'Aprobar'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+
+            {selectedUnit &&
+              (selectedUnit.isActive || selectedUnit.status === 'active') &&
+              !detailLoading && (
+                <View style={styles.modalActionRow}>
+                  <Pressable
+                    style={[styles.modalActionBtn, styles.modalSuspendBtn]}
+                    onPress={() => handleSuspendUnit(selectedUnit)}
+                  >
+                    <Ionicons
+                      name="pause-circle-outline"
+                      size={18}
+                      color="#EA580C"
+                    />
+                    <Text
+                      style={[styles.modalActionText, styles.modalSuspendText]}
+                    >
+                      Suspender Unidad
                     </Text>
                   </Pressable>
                 </View>
@@ -1321,17 +1455,20 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#0F172A',
   },
+  tabsWrapper: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
   tabsContainer: {
     flexDirection: 'row',
     backgroundColor: '#E2E8F0',
     borderRadius: 12,
-    marginHorizontal: 20,
-    marginBottom: 16,
     padding: 4,
+    gap: 4,
   },
   tab: {
-    flex: 1,
     paddingVertical: 10,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 8,
@@ -1352,8 +1489,27 @@ const styles = StyleSheet.create({
   tabLabelActive: {
     color: tokens.colors.primary,
   },
+  tabLabelActiveSuspended: {
+    color: '#EA580C',
+  },
   tabLabelActiveRejected: {
     color: '#DC2626',
+  },
+  cardSuspensionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginTop: 12,
+  },
+  cardSuspensionBannerText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#C2410C',
   },
   cardRejectionBanner: {
     flexDirection: 'row',
@@ -1662,6 +1818,13 @@ const styles = StyleSheet.create({
   rejectText: {
     color: '#DC2626',
   },
+  suspendButton: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FFEDD5',
+  },
+  suspendText: {
+    color: '#EA580C',
+  },
   deactivateButton: {
     backgroundColor: '#F8FAFC',
     borderColor: '#E2E8F0',
@@ -1909,5 +2072,12 @@ const styles = StyleSheet.create({
   },
   modalRejectText: {
     color: '#DC2626',
+  },
+  modalSuspendBtn: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FFEDD5',
+  },
+  modalSuspendText: {
+    color: '#EA580C',
   },
 });

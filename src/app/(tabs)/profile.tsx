@@ -26,9 +26,12 @@ import type {
   ProfileMenuItem,
   UserProfile,
 } from '@/interfaces';
-import { getBackendProfile, getFareAccountByUserId } from '@/lib/api';
+import {
+  getBackendProfile,
+  getFareAccountByUserId,
+  verifyAuthStatus,
+} from '@/lib/api';
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
-import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function ProfileScreen() {
@@ -41,13 +44,14 @@ export default function ProfileScreen() {
   const router = useRouter();
 
   const fetchUserData = useCallback(async () => {
-    const user = auth.currentUser;
-    if (!user) {
+    const authStatus = await verifyAuthStatus();
+    if (!authStatus.isAuthenticated || !authStatus.user) {
+      await purgeUserSessionAndLogout();
       setUserProfile(null);
-      setLoading(false);
       router.replace('/login');
       return;
     }
+    const user = authStatus.user;
 
     // 1. Cargar desde la caché local solo si pertenece al usuario actual
     let cachedData: any = null;
@@ -152,15 +156,25 @@ export default function ProfileScreen() {
         '[Profile] Error al obtener datos del backend:',
         error.message || error,
       );
-      if (error?.message === 'Unauthorized') {
+      if (
+        error?.message?.includes('401') ||
+        error?.message?.includes('Unauthorized') ||
+        error?.message?.includes('expirado') ||
+        error?.message?.includes('No hay una sesión activa')
+      ) {
+        await purgeUserSessionAndLogout();
+        setUserProfile(null);
+        router.replace('/login');
         return;
       }
-      // Fallback a caché local en caso de error
+      // Fallback a caché local en caso de error de conexión solo si coincide con el usuario
       try {
         const cached = await AsyncStorage.getItem('gofare_cached_user_profile');
         if (cached) {
           const fbProfile = JSON.parse(cached);
-          setUserProfile(fbProfile);
+          if (fbProfile.uid === user.uid) {
+            setUserProfile(fbProfile);
+          }
         }
       } catch (cacheErr: any) {
         console.log(
@@ -171,7 +185,7 @@ export default function ProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [router.replace]);
+  }, [router]);
 
   useFocusEffect(
     useCallback(() => {

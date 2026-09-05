@@ -39,9 +39,13 @@ import {
   clearBackendJwt,
   getBackendProfile,
   getMyTransportOwnerProfile,
+  isJwtExpired,
   syncWithBackend,
 } from '@/lib/api';
-import { registerAuthSessionResolver } from '@/lib/auth-session';
+import {
+  purgeUserSessionAndLogout,
+  registerAuthSessionResolver,
+} from '@/lib/auth-session';
 import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
 import {
   getFcmToken,
@@ -242,36 +246,33 @@ export default function RootLayout() {
 
   const fontsReady = loaded || fontLoadTimedOut;
 
-  // 0. Fast-path: Restaurar sesión autenticada inmediatamente desde caché local al abrir la app
+  // 0. Fast-path: Restaurar sesión autenticada únicamente si el usuario está activo y su token es vigente
   useEffect(() => {
     let isMounted = true;
     const restoreCachedSession = async () => {
       try {
         const cachedRole = await SecureStore.getItemAsync('user_role');
         const cachedJwt = await SecureStore.getItemAsync('gofare_jwt_token');
-        const cachedProfileStr = await AsyncStorage.getItem(
-          'gofare_cached_user_profile',
-        );
+        const currentUser = auth.currentUser;
 
-        if (cachedProfileStr) {
-          try {
-            const parsed = JSON.parse(cachedProfileStr);
-            if (
-              parsed.email === 'invitado@gofare.dev' ||
-              parsed.displayName === 'Usuario Invitado'
-            ) {
-              await AsyncStorage.removeItem('gofare_cached_user_profile');
-            }
-          } catch {}
-        }
-
-        if (isMounted && cachedRole && (cachedJwt || cachedProfileStr)) {
+        // Solo permitir fast-path si hay usuario activo en Firebase, rol en almacenamiento y token no expirado
+        if (
+          isMounted &&
+          currentUser &&
+          cachedRole &&
+          cachedJwt &&
+          !isJwtExpired(cachedJwt)
+        ) {
           console.log(
-            '[Layout] Fast-path: Sesión autenticada restaurada desde caché:',
+            '[Layout] Fast-path: Sesión autenticada válida restaurada desde caché:',
             cachedRole,
           );
           setUserRole(cachedRole);
           setPhase('signed_in');
+        } else {
+          console.log(
+            '[Layout] Fast-path omitido: Sin usuario activo o token vencido.',
+          );
         }
       } catch (err) {
         console.warn('[Layout] Error en fast-path restore:', err);
@@ -291,18 +292,7 @@ export default function RootLayout() {
       const resolvedUser = user;
 
       if (!resolvedUser) {
-        await clearBackendJwt();
-        try {
-          await SecureStore.deleteItemAsync('user_role');
-          await AsyncStorage.removeItem('gofare_cached_user_profile');
-          await AsyncStorage.removeItem('phone_verified_bypass');
-          await AsyncStorage.removeItem('auth_method');
-        } catch (storageErr) {
-          console.warn(
-            '[Layout] Error al limpiar caché de rol en logout:',
-            storageErr,
-          );
-        }
+        await purgeUserSessionAndLogout();
         if (!cancelled) {
           setUserRole(null);
           setPhase('signed_out');
@@ -328,10 +318,7 @@ export default function RootLayout() {
       }
 
       if (!currentUser) {
-        await clearBackendJwt();
-        try {
-          await SecureStore.deleteItemAsync('user_role');
-        } catch {}
+        await purgeUserSessionAndLogout();
         if (!cancelled) {
           setUserRole(null);
           setPhase('signed_out');
@@ -343,7 +330,19 @@ export default function RootLayout() {
         const response = await syncWithBackend(currentUser);
         backendUser = response.user;
       } catch (err) {
-        console.warn('[backend] token refresh failed:', err);
+        console.warn('[Layout] syncWithBackend falló:', err);
+      }
+
+      if (!backendUser) {
+        console.warn(
+          '[Layout] No se pudo sincronizar usuario con el backend. Sesión expirada o inválida.',
+        );
+        await purgeUserSessionAndLogout();
+        if (!cancelled) {
+          setUserRole(null);
+          setPhase('signed_out');
+        }
+        return;
       }
 
       if (backendUser) {

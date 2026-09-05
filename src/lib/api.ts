@@ -89,85 +89,18 @@ export async function syncWithBackend(
   try {
     idToken = await firebaseUser.getIdToken();
   } catch (tErr) {
-    console.warn('[API] error al obtener idToken, usando fallback:', tErr);
-    idToken = 'mock-id-token-bypass';
-  }
-
-  if (
-    !idToken ||
-    idToken === 'mock-id-token-bypass' ||
-    idToken.startsWith('mock-')
-  ) {
-    // Bypass de autenticación para desarrollo:
-    await saveGoFareToken('mock-gofare-jwt-token-bypass');
-    return {
-      token: 'mock-gofare-jwt-token-bypass',
-      user: {
-        id: `local-usr-${firebaseUser.uid}`,
-        uuid: `local-usr-${firebaseUser.uid}`,
-        email:
-          firebaseUser.email ||
-          (firebaseUser.phoneNumber
-            ? `${firebaseUser.phoneNumber.replace('+', '')}@gofare.app`
-            : 'usuario@gofare.app'),
-        phoneNumber: firebaseUser.phoneNumber || undefined,
-        firstName: firebaseUser.displayName
-          ? firebaseUser.displayName.split(' ')[0]
-          : 'Usuario',
-        lastName: firebaseUser.displayName
-          ? firebaseUser.displayName.split(' ').slice(1).join(' ') || 'GoFare'
-          : 'GoFare',
-        displayName:
-          firebaseUser.displayName ||
-          (firebaseUser.phoneNumber
-            ? `Usuario ${firebaseUser.phoneNumber}`
-            : 'Usuario GoFare'),
-        provider: 'phone',
-        providerId: firebaseUser.uid,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    };
-  }
-
-  try {
-    const response = await loginWithFirebaseToken(idToken);
-    return response;
-  } catch (err: any) {
-    console.warn(
-      '[API] syncWithBackend falló la conexión con el servidor backend, usando fallback local resiliente:',
-      err?.message || err,
+    console.warn('[API] error al obtener idToken de Firebase:', tErr);
+    throw new Error(
+      'No se pudo obtener el token de autenticación de Firebase.',
     );
-    await saveGoFareToken('mock-gofare-jwt-token-bypass');
-    return {
-      token: 'mock-gofare-jwt-token-bypass',
-      user: {
-        id: `local-usr-${firebaseUser.uid}`,
-        uuid: `local-usr-${firebaseUser.uid}`,
-        email:
-          firebaseUser.email ||
-          (firebaseUser.phoneNumber
-            ? `${firebaseUser.phoneNumber.replace('+', '')}@gofare.app`
-            : 'usuario@gofare.app'),
-        phoneNumber: firebaseUser.phoneNumber || undefined,
-        firstName: firebaseUser.displayName
-          ? firebaseUser.displayName.split(' ')[0]
-          : 'Usuario',
-        lastName: firebaseUser.displayName
-          ? firebaseUser.displayName.split(' ').slice(1).join(' ') || 'GoFare'
-          : 'GoFare',
-        displayName:
-          firebaseUser.displayName ||
-          (firebaseUser.phoneNumber
-            ? `Usuario ${firebaseUser.phoneNumber}`
-            : 'Usuario GoFare'),
-        provider: firebaseUser.providerData?.[0]?.providerId || 'phone',
-        providerId: firebaseUser.uid,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    };
   }
+
+  if (!idToken) {
+    throw new Error('Token de Firebase vacío o no disponible.');
+  }
+
+  const response = await loginWithFirebaseToken(idToken);
+  return response;
 }
 
 function sanitizeNumericFields(data: any): any {
@@ -235,7 +168,7 @@ async function fetchWithTimeout(
 /**
  * Decodifica de forma segura la fecha de expiración (exp) en segundos de un JWT.
  */
-function decodeJwtExp(token: string): number | null {
+export function decodeJwtExp(token: string): number | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
@@ -252,6 +185,60 @@ function decodeJwtExp(token: string): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Determina si un token JWT ha expirado o está a menos de 15 segundos de expirar.
+ */
+export function isJwtExpired(token: string | null): boolean {
+  if (!token || token === 'mock-gofare-jwt-token-bypass') return true;
+  const exp = decodeJwtExp(token);
+  if (!exp) return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  return nowSec >= exp - 15;
+}
+
+export interface AuthStatusResult {
+  isAuthenticated: boolean;
+  isTokenExpired: boolean;
+  user: FirebaseAuthTypes.User | null;
+  token: string | null;
+}
+
+/**
+ * Verifica exhaustivamente el estado de autenticación:
+ * Comprueba si hay usuario en Firebase y si su token JWT del backend es válido y vigente.
+ */
+export async function verifyAuthStatus(): Promise<AuthStatusResult> {
+  const fbUser = auth.currentUser;
+  if (!fbUser) {
+    return {
+      isAuthenticated: false,
+      isTokenExpired: false,
+      user: null,
+      token: null,
+    };
+  }
+
+  const token = await getValidGoFareToken();
+  if (!token || isJwtExpired(token)) {
+    console.warn(
+      '[API] verifyAuthStatus: El usuario tiene sesión en Firebase pero su token JWT de backend expiró o no es válido.',
+    );
+    return {
+      isAuthenticated: false,
+      isTokenExpired: true,
+      user: fbUser,
+      token: null,
+    };
+  }
+
+  return {
+    isAuthenticated: true,
+    isTokenExpired: false,
+    user: fbUser,
+    token,
+  };
 }
 
 let activeJwtRefreshPromise: Promise<string | null> | null = null;
@@ -299,7 +286,8 @@ export async function getValidGoFareToken(): Promise<string | null> {
   let token = await getGoFareToken();
 
   if (token === 'mock-gofare-jwt-token-bypass') {
-    return token;
+    await clearGoFareToken();
+    token = null;
   }
 
   if (token) {
@@ -335,226 +323,17 @@ async function fetchWithAuth(
 ): Promise<any> {
   const token = await getValidGoFareToken();
 
-  if (token === 'mock-gofare-jwt-token-bypass') {
-    // Interceptor de desarrollo para usuarios de bypass telefónico (offline / local)
-    if (
-      path === '/auth/profile' &&
-      (options.method === 'GET' || !options.method)
-    ) {
-      const fbUser = auth.currentUser;
-      const fbEmail =
-        fbUser?.email ||
-        (fbUser?.phoneNumber
-          ? `${fbUser.phoneNumber.replace('+', '')}@gofare.app`
-          : 'usuario@gofare.app');
-      const fbName =
-        fbUser?.displayName ||
-        (fbUser?.phoneNumber
-          ? `Usuario ${fbUser.phoneNumber}`
-          : 'Usuario GoFare');
-      const nameParts = fbName.split(' ');
-      let mockProfile = {
-        id: `local-usr-${fbUser?.uid || 'active'}`,
-        uuid: `local-usr-${fbUser?.uid || 'active'}`,
-        email: fbEmail,
-        phoneNumber: fbUser?.phoneNumber || '+584120000000',
-        firstName: nameParts[0] || 'Usuario',
-        lastName: nameParts.slice(1).join(' ') || 'GoFare',
-        displayName: fbName,
-        nationalId: '',
-        provider: fbUser?.providerData?.[0]?.providerId || 'phone',
-        providerId: fbUser?.uid || 'mock-phone',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      try {
-        const cachedMock = await AsyncStorage.getItem('mock_user_profile_data');
-        if (cachedMock) {
-          mockProfile = { ...mockProfile, ...JSON.parse(cachedMock) };
-        }
-      } catch {}
-      return mockProfile;
-    }
-
-    if (path.startsWith('/users/') && options.method === 'PUT') {
-      const body = JSON.parse((options.body as string) || '{}');
-      const fbUser = auth.currentUser;
-      const fbEmail =
-        fbUser?.email ||
-        (fbUser?.phoneNumber
-          ? `${fbUser.phoneNumber.replace('+', '')}@gofare.app`
-          : 'usuario@gofare.app');
-      const fbName =
-        fbUser?.displayName ||
-        (fbUser?.phoneNumber
-          ? `Usuario ${fbUser.phoneNumber}`
-          : 'Usuario GoFare');
-      const nameParts = fbName.split(' ');
-      let mockProfile = {
-        id: `local-usr-${fbUser?.uid || 'active'}`,
-        uuid: `local-usr-${fbUser?.uid || 'active'}`,
-        email: fbEmail,
-        phoneNumber: fbUser?.phoneNumber || '+584120000000',
-        firstName: nameParts[0] || 'Usuario',
-        lastName: nameParts.slice(1).join(' ') || 'GoFare',
-        displayName: fbName,
-        nationalId: '',
-        provider: fbUser?.providerData?.[0]?.providerId || 'phone',
-        providerId: fbUser?.uid || 'mock-phone',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      try {
-        const cachedMock = await AsyncStorage.getItem('mock_user_profile_data');
-        if (cachedMock) {
-          mockProfile = { ...mockProfile, ...JSON.parse(cachedMock) };
-        }
-      } catch {}
-
-      const updatedProfile = {
-        ...mockProfile,
-        displayName: body.displayName || mockProfile.displayName,
-        firstName: body.firstName || mockProfile.firstName,
-        lastName: body.lastName || mockProfile.lastName,
-        phoneNumber: body.phoneNumber || mockProfile.phoneNumber,
-        nationalId: body.nationalId || mockProfile.nationalId,
-        updatedAt: new Date().toISOString(),
-      };
-
-      try {
-        await AsyncStorage.setItem(
-          'mock_user_profile_data',
-          JSON.stringify(updatedProfile),
-        );
-      } catch {}
-      return updatedProfile;
-    }
-
-    if (path.startsWith('/fare/accounts/user/')) {
-      return {
-        id: 'local-acc-mock',
-        balance: 100.0,
-        userId: 'local-usr-mock',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    if (path === '/fare/me/top-up') {
-      const body = JSON.parse((options.body as string) || '{}');
-      const account = await getLocalFareAccount('local-usr-mock');
-      const fareUsd = 0.25;
-      const bcvRate = 40.0;
-      const baseFareBs = fareUsd * bcvRate;
-      const faresCredited = Math.max(
-        1,
-        Math.round((body.bsAmount || 10) / baseFareBs),
-      );
-
-      // Simulación probabilística del 70% de aprobación (según especificación de Sherman)
-      const isApproved = Math.random() < 0.7;
-      if (!isApproved) {
-        throw new Error(
-          'Rechazo bancario (simulado): La referencia no pudo ser verificada por la tesorería o ya fue utilizada.',
-        );
-      }
-
-      account.balance += faresCredited;
-      account.updatedAt = new Date().toISOString();
-      await saveLocalFareAccount(account);
-
-      const transactions = await getLocalTransactions(account.id);
-      transactions.unshift({
-        id: `tx-${Date.now()}`,
-        accountId: account.id,
-        amount: faresCredited,
-        type: 'credit',
-        description: `Recarga Pago Móvil Ref: ${body.reference || 'N/A'}`,
-        createdAt: new Date().toISOString(),
-      });
-      await saveLocalTransactions(account.id, transactions);
-
-      return {
-        balanceFares: account.balance,
-        faresCredited,
-        bsAmount: body.bsAmount || 0,
-      };
-    }
-
-    if (path.startsWith('/fare/transactions')) return [];
-    if (path.startsWith('/tickets')) return [];
-    if (path.startsWith('/rates/current')) {
-      try {
-        const cached = await AsyncStorage.getItem('gofare_rates_cache');
-        if (cached) return JSON.parse(cached);
-      } catch {}
-      return {
-        fareUsdValue: 0.25,
-        bcvRate: 721.35,
-        bcvRateDate: new Date().toISOString().slice(0, 10),
-      };
-    }
-
-    if (path.startsWith('/rates/bcv') && options.method === 'POST') {
-      const body = JSON.parse((options.body as string) || '{}');
-      const targetDate = body.rateDate || new Date().toISOString().slice(0, 10);
-      let current = {
-        fareUsdValue: 0.25,
-        bcvRate: Number(body.rate) || 40.0,
-        bcvRateDate: targetDate,
-      };
-      try {
-        const cached = await AsyncStorage.getItem('gofare_rates_cache');
-        if (cached) {
-          current = {
-            ...JSON.parse(cached),
-            bcvRate: Number(body.rate) || 40.0,
-            bcvRateDate: targetDate,
-          };
-        }
-      } catch {}
-      await AsyncStorage.setItem('gofare_rates_cache', JSON.stringify(current));
-      return current;
-    }
-
-    if (path.startsWith('/rates/fare-value') && options.method === 'POST') {
-      const body = JSON.parse((options.body as string) || '{}');
-      let current = {
-        fareUsdValue: Number(body.usdValue) || 0.25,
-        bcvRate: 721.35,
-        bcvRateDate: new Date().toISOString().slice(0, 10),
-      };
-      try {
-        const cached = await AsyncStorage.getItem('gofare_rates_cache');
-        if (cached) {
-          current = {
-            ...JSON.parse(cached),
-            fareUsdValue: Number(body.usdValue) || 0.25,
-          };
-        }
-      } catch {}
-      await AsyncStorage.setItem('gofare_rates_cache', JSON.stringify(current));
-      return current;
-    }
-
-    if (path.startsWith('/rates/bcv/external')) {
-      return {
-        rate: 721.35,
-        source: 'dolarapi',
-        fetchedAt: new Date().toISOString(),
-      };
-    }
-
-    return {};
+  if (!token) {
+    throw new Error(
+      'No hay una sesión activa o el token ha expirado. Por favor, inicia sesión nuevamente.',
+    );
   }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) || {}),
+    Authorization: `Bearer ${token}`,
   };
-
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
 
   let response: Response;
   try {
@@ -1660,13 +1439,49 @@ export async function getOwnerVehicles(): Promise<any[]> {
 
     if (Array.isArray(rawList)) {
       return rawList.map((v: any) => {
-        let appStatus: 'approved' | 'pending' | 'rejected' = 'pending';
-        if (v.status === 'active') {
-          appStatus = 'approved';
-        } else if (v.status === 'rejected' || v.status === 'suspended') {
-          appStatus = 'rejected';
-        } else if (v.status === 'inactive') {
+        const raw = String(v.status || '')
+          .toLowerCase()
+          .trim();
+        let appStatus:
+          | 'active'
+          | 'inactive'
+          | 'suspended'
+          | 'approved'
+          | 'pending'
+          | 'rejected' = 'inactive';
+        if (
+          raw === 'active' ||
+          raw === 'approved' ||
+          raw === 'activa' ||
+          raw === 'aprobada'
+        ) {
+          appStatus = 'active';
+        } else if (
+          raw === 'suspended' ||
+          raw === 'suspendida' ||
+          raw === 'suspendido'
+        ) {
+          appStatus = 'suspended';
+        } else if (
+          raw === 'inactive' ||
+          raw === 'inactiva' ||
+          raw === 'inactivo'
+        ) {
+          appStatus = 'inactive';
+        } else if (
+          raw === 'pending' ||
+          raw === 'pending_review' ||
+          raw === 'pendiente'
+        ) {
           appStatus = 'pending';
+        } else if (
+          raw === 'rejected' ||
+          raw === 'rechazada' ||
+          raw === 'rechazado'
+        ) {
+          appStatus = 'rejected';
+        } else {
+          appStatus = (raw as any) || 'inactive';
         }
 
         return {
@@ -1680,6 +1495,7 @@ export async function getOwnerVehicles(): Promise<any[]> {
           cooperativeName: v.civilAssociation?.name,
           assignedDriver: v.assignedDriver,
           status: appStatus,
+          rawStatus: v.status,
           createdAt: v.createdAt
             ? new Date(v.createdAt).toLocaleDateString('es-VE')
             : '',
@@ -1702,13 +1518,49 @@ export async function getVehicleDetail(uuid: string): Promise<any> {
   try {
     const v = await fetchWithAuth(`/vehicles/${uuid}`);
     if (v) {
-      let appStatus: 'approved' | 'pending' | 'rejected' = 'pending';
-      if (v.status === 'active') {
-        appStatus = 'approved';
-      } else if (v.status === 'rejected' || v.status === 'suspended') {
-        appStatus = 'rejected';
-      } else if (v.status === 'inactive') {
+      const raw = String(v.status || '')
+        .toLowerCase()
+        .trim();
+      let appStatus:
+        | 'active'
+        | 'inactive'
+        | 'suspended'
+        | 'approved'
+        | 'pending'
+        | 'rejected' = 'inactive';
+      if (
+        raw === 'active' ||
+        raw === 'approved' ||
+        raw === 'activa' ||
+        raw === 'aprobada'
+      ) {
+        appStatus = 'active';
+      } else if (
+        raw === 'suspended' ||
+        raw === 'suspendida' ||
+        raw === 'suspendido'
+      ) {
+        appStatus = 'suspended';
+      } else if (
+        raw === 'inactive' ||
+        raw === 'inactiva' ||
+        raw === 'inactivo'
+      ) {
+        appStatus = 'inactive';
+      } else if (
+        raw === 'pending' ||
+        raw === 'pending_review' ||
+        raw === 'pendiente'
+      ) {
         appStatus = 'pending';
+      } else if (
+        raw === 'rejected' ||
+        raw === 'rechazada' ||
+        raw === 'rechazado'
+      ) {
+        appStatus = 'rejected';
+      } else {
+        appStatus = (raw as any) || 'inactive';
       }
 
       return {
@@ -2204,6 +2056,8 @@ export async function getAllTransportUnits(): Promise<any[]> {
         civilAssociation: u.civilAssociation,
         createdAt: u.createdAt,
         rejectionReason: u.rejectionReason || u.rejection_reason,
+        suspensionReason: u.suspensionReason || u.suspension_reason,
+        adminNotes: u.adminNotes || u.admin_notes,
       }));
     }
   } catch (err) {

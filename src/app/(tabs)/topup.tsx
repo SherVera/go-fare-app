@@ -24,6 +24,7 @@ import {
   getCurrentRates,
   getFareAccountByUserId,
   topUpBalance,
+  verifyAuthStatus,
 } from '@/lib/api';
 import {
   CACHE_KEYS,
@@ -31,8 +32,8 @@ import {
   invalidateLiteCache,
   setLiteCache,
 } from '@/lib/api-cache';
+import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { setClipboardText } from '@/lib/clipboard';
-import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 const RECHARGE_PACKAGES_BLUEPRINT = [
@@ -145,7 +146,9 @@ export default function TopUpBalanceScreen() {
 
   const loadUserData = useCallback(
     async (isManualRefresh = false) => {
-      if (!auth.currentUser) {
+      const authStatus = await verifyAuthStatus();
+      if (!authStatus.isAuthenticated || !authStatus.user) {
+        await purgeUserSessionAndLogout();
         router.replace('/login');
         return;
       }
@@ -181,7 +184,7 @@ export default function TopUpBalanceScreen() {
           let account = null;
           try {
             account = await getFareAccountByUserId(backendUser.id);
-          } catch (_) {
+          } catch {
             try {
               account = await createFareAccount(backendUser.id);
             } catch (createErr) {
@@ -194,8 +197,18 @@ export default function TopUpBalanceScreen() {
             setBalance(Number(account.balance));
           }
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('[TopUp] Error loading user data:', err);
+        if (
+          err?.message?.includes('401') ||
+          err?.message?.includes('Unauthorized') ||
+          err?.message?.includes('expirado') ||
+          err?.message?.includes('No hay una sesión activa')
+        ) {
+          await purgeUserSessionAndLogout();
+          router.replace('/login');
+          return;
+        }
       } finally {
         setLoadingBalance(false);
       }

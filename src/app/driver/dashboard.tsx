@@ -25,7 +25,9 @@ import {
   openSession,
   pauseSession,
   resumeSession,
+  verifyAuthStatus,
 } from '@/lib/api';
+import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { auth } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
@@ -97,7 +99,7 @@ export default function DriverDashboard() {
                 Haptics.notificationAsync(
                   Haptics.NotificationFeedbackType.Success,
                 );
-              } catch (_) {}
+              } catch {}
             }
             return session;
           });
@@ -116,8 +118,16 @@ export default function DriverDashboard() {
   const loadDriverData = useCallback(async () => {
     try {
       setLoading(true);
+      const authStatus = await verifyAuthStatus();
+      if (!authStatus.isAuthenticated) {
+        await purgeUserSessionAndLogout();
+        router.replace('/login');
+        return;
+      }
+
       const user = auth.currentUser;
       if (!user) {
+        await purgeUserSessionAndLogout();
         router.replace('/login');
         return;
       }
@@ -181,8 +191,17 @@ export default function DriverDashboard() {
       } else {
         setActiveSession(null);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[DriverDashboard] Error loading data:', err);
+      if (
+        err?.status === 401 ||
+        err?.message?.includes('401') ||
+        err?.message?.includes('expired') ||
+        err?.message?.includes('No authenticated user')
+      ) {
+        await purgeUserSessionAndLogout();
+        router.replace('/login');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

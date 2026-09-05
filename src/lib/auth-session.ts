@@ -34,11 +34,14 @@ export async function purgeUserSessionAndLogout(): Promise<void> {
     await SecureStore.deleteItemAsync('savedEmail');
     await SecureStore.deleteItemAsync('savedPassword');
     await SecureStore.deleteItemAsync('user_role');
+    await SecureStore.deleteItemAsync('gofare_jwt_token');
+    await SecureStore.deleteItemAsync('backend_jwt');
   } catch (e) {
     console.warn('[Logout] Error al eliminar ítems de SecureStore:', e);
   }
   try {
     await AsyncStorage.removeItem('gofare_cached_user_profile');
+    await AsyncStorage.removeItem('mock_user_profile_data');
     await AsyncStorage.removeItem('temp_auth');
     await AsyncStorage.removeItem('phone_verified_bypass');
     await AsyncStorage.removeItem('auth_method');
