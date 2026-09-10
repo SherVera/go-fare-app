@@ -1,10 +1,10 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -25,6 +25,13 @@ import {
 import { CACHE_KEYS, getLiteCache, setLiteCache } from '@/lib/api-cache';
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { tokens } from '@/theme/tokens';
+
+const tripDateFormatter = new Intl.DateTimeFormat('es-ES', {
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 export default function TripsScreen() {
   const router = useRouter();
@@ -330,12 +337,7 @@ export default function TripsScreen() {
               filteredTickets.map((ticket) => {
                 const isUsed = ticket.status === 'used';
                 const ticketDate = new Date(ticket.createdAt);
-                const formattedDate = ticketDate.toLocaleDateString('es-ES', {
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                });
+                const formattedDate = tripDateFormatter.format(ticketDate);
                 return (
                   <View key={ticket.id} style={styles.tripCard}>
                     <View
@@ -451,12 +453,7 @@ export default function TripsScreen() {
               filteredTransactions.map((tx) => {
                 const isCredit = tx.type === 'credit';
                 const txDate = new Date(tx.createdAt);
-                const formattedDate = txDate.toLocaleDateString('es-ES', {
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                });
+                const formattedDate = tripDateFormatter.format(txDate);
                 return (
                   <View key={tx.id} style={styles.tripCard}>
                     <View

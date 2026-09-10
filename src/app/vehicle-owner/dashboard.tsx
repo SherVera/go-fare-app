@@ -492,6 +492,45 @@ export default function VehicleOwnerDashboard() {
                   </View>
                 </View>
 
+                {vehicle.routeNumber ? (
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      marginTop: 8,
+                      backgroundColor: '#F1F5F9',
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 6,
+                      alignSelf: 'flex-start',
+                      gap: 4,
+                    }}
+                  >
+                    <Ionicons
+                      name="trail-sign-outline"
+                      size={13}
+                      color="#475569"
+                    />
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color: '#475569',
+                        fontWeight: '500',
+                      }}
+                    >
+                      Ruta:{' '}
+                      <Text
+                        style={{
+                          color: '#0F172A',
+                          fontWeight: '700',
+                        }}
+                      >
+                        {vehicle.routeNumber}
+                      </Text>
+                    </Text>
+                  </View>
+                ) : null}
+
                 {(vehicle.status === 'rejected' ||
                   vehicle.status === 'suspended') &&
                   vehicle.adminNotes && (

@@ -51,6 +51,7 @@ interface MockVehicle {
   licensePlate: string;
   color?: string;
   capacity?: number;
+  routeNumber?: string;
   cooperativeName?: string;
   inviteCode?: string;
   documents?: any[];
@@ -578,6 +579,15 @@ export default function VehicleDetailsScreen() {
               </Text>
             </View>
           </View>
+
+          {vehicle.routeNumber ? (
+            <View style={styles.specGrid}>
+              <View style={[styles.specBox, { flex: 1 }]}>
+                <Text style={styles.specLabel}>N° DE RUTA ASIGNADA</Text>
+                <Text style={styles.specValue}>{vehicle.routeNumber}</Text>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.statusRow}>
             <Text style={styles.statusLabel}>ESTADO DE LA UNIDAD:</Text>

@@ -526,7 +526,9 @@ export default function RegisterVehicleOwnerScreen() {
               editable={!loading}
             />
           </View>
-          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+          {errors.email ? (
+            <Text style={styles.errorText}>{errors.email}</Text>
+          ) : null}
 
           {/* Contraseña */}
           <Text style={styles.inputLabel}>CONTRASEÑA</Text>

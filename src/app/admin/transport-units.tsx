@@ -96,6 +96,7 @@ export default function AdminTransportUnitsScreen() {
           const brand = (u.brand || '').toLowerCase();
           const model = (u.model || '').toLowerCase();
           const invite = (u.inviteCode || '').toLowerCase();
+          const route = (u.routeNumber || '').toLowerCase();
           const ownerName = (
             u.owner?.displayName ||
             `${u.owner?.firstName || ''} ${u.owner?.lastName || ''}`
@@ -107,6 +108,7 @@ export default function AdminTransportUnitsScreen() {
             brand.includes(q) ||
             model.includes(q) ||
             invite.includes(q) ||
+            route.includes(q) ||
             ownerName.includes(q)
           );
         });
@@ -833,6 +835,12 @@ export default function AdminTransportUnitsScreen() {
                         {item.civilAssociation?.name || 'Particular / Ninguna'}
                       </Text>
                     </View>
+                    {item.routeNumber ? (
+                      <View style={styles.specItem}>
+                        <Text style={styles.specLabel}>N° RUTA</Text>
+                        <Text style={styles.specVal}>{item.routeNumber}</Text>
+                      </View>
+                    ) : null}
                   </View>
 
                   {item.inviteCode ? (
@@ -1219,6 +1227,14 @@ export default function AdminTransportUnitsScreen() {
                         {selectedUnit.cooperativeName || 'Particular / Ninguna'}
                       </Text>
                     </View>
+                    {selectedUnit.routeNumber ? (
+                      <View style={styles.modalGridItem}>
+                        <Text style={styles.gridLabel}>N° de Ruta</Text>
+                        <Text style={styles.gridVal} numberOfLines={1}>
+                          {selectedUnit.routeNumber}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
 

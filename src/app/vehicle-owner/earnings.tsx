@@ -30,10 +30,15 @@ interface WeeklyBarData {
   height: string;
 }
 
-function formatRelativeTime(dateStr?: string): string {
-  if (!dateStr) return 'Reciente';
+const fallbackDateFormatter = new Intl.DateTimeFormat('es-VE', {
+  day: 'numeric',
+  month: 'short',
+});
+
+function formatRelativeTime(dateStr: string): string {
+  if (!dateStr) return '';
   const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return 'Reciente';
+  if (Number.isNaN(date.getTime())) return '';
 
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -47,10 +52,7 @@ function formatRelativeTime(dateStr?: string): string {
   if (diffDays === 1) return 'Ayer';
   if (diffDays < 7) return `Hace ${diffDays} días`;
 
-  return date.toLocaleDateString('es-VE', {
-    day: 'numeric',
-    month: 'short',
-  });
+  return fallbackDateFormatter.format(date);
 }
 
 export default function VehicleOwnerEarnings() {
