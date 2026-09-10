@@ -546,7 +546,7 @@ export default function TopUpBalanceScreen() {
                     isSelected && { borderColor: tokens.colors.primary },
                   ]}
                 >
-                  {isSelected && <View style={styles.radioInner} />}
+                  {isSelected ? <View style={styles.radioInner} /> : null}
                 </View>
               )}
             </Pressable>

@@ -1407,6 +1407,7 @@ export async function submitVehicleRequest(requestData: {
   cooperativeUuid?: string;
   vehicleColor?: string;
   capacity?: number;
+  routeNumber?: string;
 }): Promise<any> {
   const payload: Record<string, any> = {
     plate: requestData.licensePlate.trim().toUpperCase(),
@@ -1416,6 +1417,10 @@ export async function submitVehicleRequest(requestData: {
     color: requestData.vehicleColor?.trim(),
     capacity: requestData.capacity,
   };
+
+  if (requestData.routeNumber?.trim()) {
+    payload.routeNumber = requestData.routeNumber.trim();
+  }
 
   if (requestData.cooperativeUuid) {
     payload.civilAssociationUuid = requestData.cooperativeUuid;
@@ -1492,6 +1497,7 @@ export async function getOwnerVehicles(): Promise<any[]> {
           licensePlate: v.plate,
           color: v.color,
           capacity: v.capacity,
+          routeNumber: v.routeNumber || v.route_number || undefined,
           cooperativeName: v.civilAssociation?.name,
           assignedDriver: v.assignedDriver,
           status: appStatus,
@@ -1583,7 +1589,7 @@ export async function getVehicleDetail(uuid: string): Promise<any> {
         totalEarnings: v.totalEarnings ?? 0,
         tripsCount: v.tripsCount ?? 0,
         photoUrl: v.photoUrl,
-        routeNumber: v.routeNumber,
+        routeNumber: v.routeNumber || v.route_number || undefined,
       };
     }
   } catch (err) {
@@ -2049,6 +2055,7 @@ export async function getAllTransportUnits(): Promise<any[]> {
         year: u.year,
         color: u.color,
         capacity: u.capacity,
+        routeNumber: u.routeNumber || u.route_number || undefined,
         inviteCode: u.inviteCode,
         isActive: u.status === 'active',
         status: u.status,

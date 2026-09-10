@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { updateBackendProfile, updateOwnNationalId } from '@/lib/api';
@@ -156,9 +155,16 @@ export function EditProfileModal({
         <View style={styles.container}>
           <View style={styles.header}>
             <Text style={styles.title}>Editar Perfil</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+            <Pressable
+              onPress={onClose}
+              style={({ pressed }) => [
+                styles.closeButton,
+                pressed && { opacity: 0.6 },
+              ]}
+              hitSlop={8}
+            >
               <Ionicons name="close" size={24} color="#64748B" />
-            </TouchableOpacity>
+            </Pressable>
           </View>
 
           {/* Nombre */}
@@ -186,11 +192,12 @@ export function EditProfileModal({
           <View style={styles.idRow}>
             <View style={styles.nationalityContainer}>
               {NATIONALITY_OPTIONS.map((opt) => (
-                <TouchableOpacity
+                <Pressable
                   key={opt}
-                  style={[
+                  style={({ pressed }) => [
                     styles.nationalityBadge,
                     nationality === opt && styles.nationalityBadgeActive,
+                    pressed && { opacity: 0.8 },
                   ]}
                   onPress={() => setNationality(opt)}
                 >
@@ -202,7 +209,7 @@ export function EditProfileModal({
                   >
                     {opt}-
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               ))}
             </View>
             <TextInput

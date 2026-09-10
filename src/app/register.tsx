@@ -562,7 +562,9 @@ export default function RegisterScreen() {
               editable={!loading}
             />
           </View>
-          {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
+          {errors.email ? (
+            <Text style={styles.errorText}>{errors.email}</Text>
+          ) : null}
 
           <Text style={styles.inputLabel}>CONTRASEÑA</Text>
           <View

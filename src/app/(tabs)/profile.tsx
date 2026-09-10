@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
@@ -7,13 +8,11 @@ import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -297,13 +296,16 @@ export default function ProfileScreen() {
       >
         {/* ── PROFILE CARD ── */}
         <View style={styles.profileCard}>
-          <TouchableOpacity
-            style={styles.editProfileBtn}
+          <Pressable
+            style={({ pressed }) => [
+              styles.editProfileBtn,
+              pressed && { opacity: 0.8 },
+            ]}
             onPress={() => setShowEditModal(true)}
           >
             <Ionicons name="create-outline" size={16} color="#FFFFFF" />
             <Text style={styles.editProfileBtnText}>Editar</Text>
-          </TouchableOpacity>
+          </Pressable>
 
           <View style={styles.avatarContainer}>
             <Image

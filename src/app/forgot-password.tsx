@@ -155,11 +155,11 @@ export default function ForgotPasswordScreen() {
               </View>
               <Text style={styles.spamText}>
                 • Revisa tu carpeta de{' '}
-                <Text style={styles.spamBold}>"Correo no deseado"</Text> o{' '}
-                <Text style={styles.spamBold}>"Spam"</Text>.{'\n'}• Si usas
+                <Text style={styles.spamBold}>{'"Correo no deseado"'}</Text> o{' '}
+                <Text style={styles.spamBold}>{'"Spam"'}</Text>.{'\n'}• Si usas
                 Gmail, busca en la pestaña{' '}
-                <Text style={styles.spamBold}>"Promociones"</Text>.{'\n'}• El
-                mensaje llegará bajo el nombre de{' '}
+                <Text style={styles.spamBold}>{'"Promociones"'}</Text>.{'\n'}•
+                El mensaje llegará bajo el nombre de{' '}
                 <Text style={styles.spamBold}>GoFare</Text>.{'\n'}• Si aún no te
                 llega, puedes pedir que te lo enviemos de nuevo abajo.
               </Text>

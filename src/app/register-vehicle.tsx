@@ -57,6 +57,7 @@ interface FormFields {
   vehicleYear: string;
   licensePlate: string;
   capacity: string;
+  routeNumber: string;
   cooperativeUuid: string;
   tituloPropiedadNumber: string;
   rcvNumber: string;
@@ -71,6 +72,7 @@ interface FormErrors {
   vehicleYear?: string;
   licensePlate?: string;
   capacity?: string;
+  routeNumber?: string;
   cooperativeUuid?: string;
   tituloPropiedadNumber?: string;
   rcvNumber?: string;
@@ -98,6 +100,7 @@ export default function RegisterVehicleScreen() {
     vehicleYear: '',
     licensePlate: '',
     capacity: '',
+    routeNumber: '',
     cooperativeUuid: '',
     tituloPropiedadNumber: '',
     rcvNumber: '',
@@ -285,6 +288,7 @@ export default function RegisterVehicleScreen() {
         licensePlate: form.licensePlate.trim().toUpperCase(),
         vehicleColor: form.vehicleColor.trim(),
         capacity: parseInt(form.capacity, 10) || 32,
+        routeNumber: form.routeNumber.trim() || undefined,
         cooperativeUuid: form.cooperativeUuid || undefined,
       });
 
@@ -612,6 +616,33 @@ export default function RegisterVehicleScreen() {
               </View>
               {errors.capacity && (
                 <Text style={styles.errorText}>{errors.capacity}</Text>
+              )}
+
+              {/* Número de Ruta */}
+              <Text style={styles.inputLabel}>NÚMERO DE RUTA (OPCIONAL)</Text>
+              <View
+                style={[
+                  styles.inputCard,
+                  errors.routeNumber && styles.inputCardError,
+                ]}
+              >
+                <Ionicons
+                  name="trail-sign-outline"
+                  size={20}
+                  color={errors.routeNumber ? '#EF4444' : '#8594AB'}
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej. Ruta L1, Ruta 15, 792..."
+                  placeholderTextColor="#A1A1AA"
+                  value={form.routeNumber}
+                  onChangeText={(text) => updateField('routeNumber', text)}
+                  editable={!loading}
+                />
+              </View>
+              {errors.routeNumber && (
+                <Text style={styles.errorText}>{errors.routeNumber}</Text>
               )}
 
               {/* Cooperativa Asociada (Opcional) */}

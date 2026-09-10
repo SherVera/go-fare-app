@@ -1,13 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   Keyboard,
   Modal,
   Platform,
@@ -115,7 +115,7 @@ export default function DriverScanScreen() {
                     break;
                   }
                 }
-              } catch (_e) {
+              } catch {
                 // Ignore
               }
             }
@@ -234,7 +234,7 @@ export default function DriverScanScreen() {
               await Haptics.notificationAsync(
                 Haptics.NotificationFeedbackType.Success,
               );
-            } catch (_) {}
+            } catch {}
 
             setTimeout(() => setSuccessNotification(null), 4000);
           }
@@ -412,7 +412,7 @@ export default function DriverScanScreen() {
                   )}`,
                 }}
                 style={styles.qrImage}
-                resizeMode="contain"
+                contentFit="contain"
               />
             ) : (
               <ActivityIndicator size="large" color={tokens.colors.primary} />
@@ -462,7 +462,7 @@ export default function DriverScanScreen() {
 
               return (
                 <View key={item.uuid}>
-                  {index > 0 && <View style={styles.feedDivider} />}
+                  {index > 0 ? <View style={styles.feedDivider} /> : null}
                   <View style={styles.feedItem}>
                     <View style={styles.feedLeft}>
                       <View style={styles.feedIconWrapper}>
