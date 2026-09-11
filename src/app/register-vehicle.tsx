@@ -480,9 +480,9 @@ export default function RegisterVehicleScreen() {
                   editable={!loading}
                 />
               </View>
-              {errors.vehicleMake && (
+              {errors.vehicleMake ? (
                 <Text style={styles.errorText}>{errors.vehicleMake}</Text>
-              )}
+              ) : null}
 
               {/* Modelo del Vehículo */}
               <Text style={styles.inputLabel}>MODELO DEL VEHÍCULO</Text>
@@ -507,9 +507,9 @@ export default function RegisterVehicleScreen() {
                   editable={!loading}
                 />
               </View>
-              {errors.vehicleModel && (
+              {errors.vehicleModel ? (
                 <Text style={styles.errorText}>{errors.vehicleModel}</Text>
-              )}
+              ) : null}
 
               {/* Placa */}
               <Text style={styles.inputLabel}>PLACA / MATRÍCULA</Text>
@@ -535,9 +535,9 @@ export default function RegisterVehicleScreen() {
                   editable={!loading}
                 />
               </View>
-              {errors.licensePlate && (
+              {errors.licensePlate ? (
                 <Text style={styles.errorText}>{errors.licensePlate}</Text>
-              )}
+              ) : null}
 
               <View style={styles.rowFields}>
                 {/* Año */}
@@ -560,9 +560,9 @@ export default function RegisterVehicleScreen() {
                       editable={!loading}
                     />
                   </View>
-                  {errors.vehicleYear && (
+                  {errors.vehicleYear ? (
                     <Text style={styles.errorText}>{errors.vehicleYear}</Text>
-                  )}
+                  ) : null}
                 </View>
 
                 {/* Color */}
@@ -583,9 +583,9 @@ export default function RegisterVehicleScreen() {
                       editable={!loading}
                     />
                   </View>
-                  {errors.vehicleColor && (
+                  {errors.vehicleColor ? (
                     <Text style={styles.errorText}>{errors.vehicleColor}</Text>
-                  )}
+                  ) : null}
                 </View>
               </View>
 
@@ -614,9 +614,9 @@ export default function RegisterVehicleScreen() {
                   editable={!loading}
                 />
               </View>
-              {errors.capacity && (
+              {errors.capacity ? (
                 <Text style={styles.errorText}>{errors.capacity}</Text>
-              )}
+              ) : null}
 
               {/* Número de Ruta */}
               <Text style={styles.inputLabel}>NÚMERO DE RUTA (OPCIONAL)</Text>
@@ -641,9 +641,9 @@ export default function RegisterVehicleScreen() {
                   editable={!loading}
                 />
               </View>
-              {errors.routeNumber && (
+              {errors.routeNumber ? (
                 <Text style={styles.errorText}>{errors.routeNumber}</Text>
-              )}
+              ) : null}
 
               {/* Cooperativa Asociada (Opcional) */}
               <Text style={styles.inputLabel}>
@@ -845,11 +845,11 @@ export default function RegisterVehicleScreen() {
                     editable={!loading}
                   />
                 </View>
-                {errors.tituloPropiedadNumber && (
+                {errors.tituloPropiedadNumber ? (
                   <Text style={styles.errorTextSmall}>
                     {errors.tituloPropiedadNumber}
                   </Text>
-                )}
+                ) : null}
               </View>
 
               {/* Tarjeta 2: Responsabilidad Civil (RCV) */}
@@ -884,9 +884,9 @@ export default function RegisterVehicleScreen() {
                     editable={!loading}
                   />
                 </View>
-                {errors.rcvNumber && (
+                {errors.rcvNumber ? (
                   <Text style={styles.errorTextSmall}>{errors.rcvNumber}</Text>
-                )}
+                ) : null}
 
                 <View style={styles.rowFields}>
                   <View style={{ flex: 1, marginRight: 6 }}>
@@ -916,11 +916,11 @@ export default function RegisterVehicleScreen() {
                         {form.rcvIssuedAt || 'DD/MM/YYYY'}
                       </Text>
                     </Pressable>
-                    {errors.rcvIssuedAt && (
+                    {errors.rcvIssuedAt ? (
                       <Text style={styles.errorTextSmall}>
                         {errors.rcvIssuedAt}
                       </Text>
-                    )}
+                    ) : null}
                   </View>
 
                   <View style={{ flex: 1, marginLeft: 6 }}>
@@ -950,11 +950,11 @@ export default function RegisterVehicleScreen() {
                         {form.rcvExpiresAt || 'DD/MM/YYYY'}
                       </Text>
                     </Pressable>
-                    {errors.rcvExpiresAt && (
+                    {errors.rcvExpiresAt ? (
                       <Text style={styles.errorTextSmall}>
                         {errors.rcvExpiresAt}
                       </Text>
-                    )}
+                    ) : null}
                   </View>
                 </View>
               </View>

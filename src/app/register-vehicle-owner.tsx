@@ -416,9 +416,9 @@ export default function RegisterVehicleOwnerScreen() {
               editable={!loading}
             />
           </View>
-          {errors.fullName && (
+          {errors.fullName ? (
             <Text style={styles.errorText}>{errors.fullName}</Text>
-          )}
+          ) : null}
 
           {/* Cédula */}
           <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
@@ -463,9 +463,9 @@ export default function RegisterVehicleOwnerScreen() {
               editable={!loading}
             />
           </View>
-          {errors.idNumber && (
+          {errors.idNumber ? (
             <Text style={styles.errorText}>{errors.idNumber}</Text>
-          )}
+          ) : null}
 
           {/* Teléfono */}
           <Text style={styles.inputLabel}>TELÉFONO</Text>
@@ -496,9 +496,9 @@ export default function RegisterVehicleOwnerScreen() {
               editable={!loading}
             />
           </View>
-          {errors.phoneNumber && (
+          {errors.phoneNumber ? (
             <Text style={styles.errorText}>{errors.phoneNumber}</Text>
-          )}
+          ) : null}
 
           {/* Correo */}
           <Text style={styles.inputLabel}>CORREO ELECTRÓNICO</Text>
@@ -565,9 +565,9 @@ export default function RegisterVehicleOwnerScreen() {
               />
             </Pressable>
           </View>
-          {errors.password && (
+          {errors.password ? (
             <Text style={styles.errorText}>{errors.password}</Text>
-          )}
+          ) : null}
 
           {/* Botón de Envío */}
           <Pressable

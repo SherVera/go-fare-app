@@ -22,6 +22,12 @@ import {
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
+const historyDateFormatter = new Intl.DateTimeFormat('es-VE');
+const historyTimeFormatter = new Intl.DateTimeFormat('es-VE', {
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 export default function DriverHistoryScreen() {
   const [validations, setValidations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +107,7 @@ export default function DriverHistoryScreen() {
                         break; // Encontrado, detenemos la búsqueda para este ride
                       }
                     }
-                  } catch (_e) {
+                  } catch {
                     // El usuario no tiene cuenta de tarifa creada
                   }
                 }
@@ -187,11 +193,8 @@ export default function DriverHistoryScreen() {
 
     // Formatear fecha y hora
     const dateObj = new Date(item.createdAt);
-    const dateStr = dateObj.toLocaleDateString('es-VE');
-    const timeStr = dateObj.toLocaleTimeString('es-VE', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    const dateStr = historyDateFormatter.format(dateObj);
+    const timeStr = historyTimeFormatter.format(dateObj);
 
     return (
       <View style={styles.card}>

@@ -31,6 +31,12 @@ import {
 } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
+const reqDateFormatter = new Intl.DateTimeFormat('es-ES', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+
 export default function AdminOwnerRequestsScreen() {
   const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
@@ -422,11 +428,7 @@ export default function AdminOwnerRequestsScreen() {
           const isRejected = item.status === 'rejected';
           const isSuspended = item.status === 'suspended';
           const dateStr = item.createdAt
-            ? new Date(item.createdAt).toLocaleDateString('es-ES', {
-                day: 'numeric',
-                month: 'short',
-                year: 'numeric',
-              })
+            ? reqDateFormatter.format(new Date(item.createdAt))
             : '';
 
           return (
