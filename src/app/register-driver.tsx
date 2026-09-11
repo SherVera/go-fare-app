@@ -111,11 +111,6 @@ export default function RegisterDriverScreen() {
         return;
       }
 
-      const _driverUuid = profile.id;
-      const _driverName = profile.displayName || 'Conductor Registrado';
-      const _driverPhone = profile.phoneNumber || form.emergencyPhone;
-      const _driverNationalId = profile.nationalId || 'V-00000000';
-
       // 2. Canjear el código de invitación en el backend real
       console.log(
         '[RegisterDriver] Canjeando código de invitación en backend:',
@@ -226,9 +221,9 @@ export default function RegisterDriverScreen() {
               />
             )}
           </View>
-          {errors.inviteCode && (
+          {errors.inviteCode ? (
             <Text style={styles.errorText}>{errors.inviteCode}</Text>
-          )}
+          ) : null}
 
           {/* Número de Licencia */}
           <Text style={styles.inputLabel}>NÚMERO DE LICENCIA</Text>
@@ -253,9 +248,9 @@ export default function RegisterDriverScreen() {
               editable={!loading}
             />
           </View>
-          {errors.licenseNumber && (
+          {errors.licenseNumber ? (
             <Text style={styles.errorText}>{errors.licenseNumber}</Text>
-          )}
+          ) : null}
 
           {/* Tipo de Licencia */}
           <Text style={styles.inputLabel}>GRADO / TIPO DE LICENCIA</Text>
@@ -280,9 +275,9 @@ export default function RegisterDriverScreen() {
               editable={!loading}
             />
           </View>
-          {errors.licenseType && (
+          {errors.licenseType ? (
             <Text style={styles.errorText}>{errors.licenseType}</Text>
-          )}
+          ) : null}
 
           {/* Años de Experiencia */}
           <Text style={styles.inputLabel}>AÑOS DE EXPERIENCIA</Text>
@@ -308,9 +303,9 @@ export default function RegisterDriverScreen() {
               editable={!loading}
             />
           </View>
-          {errors.experienceYears && (
+          {errors.experienceYears ? (
             <Text style={styles.errorText}>{errors.experienceYears}</Text>
-          )}
+          ) : null}
 
           {/* Teléfono de Emergencia */}
           <Text style={styles.inputLabel}>TELÉFONO DE EMERGENCIA</Text>
@@ -336,9 +331,9 @@ export default function RegisterDriverScreen() {
               editable={!loading}
             />
           </View>
-          {errors.emergencyPhone && (
+          {errors.emergencyPhone ? (
             <Text style={styles.errorText}>{errors.emergencyPhone}</Text>
-          )}
+          ) : null}
 
           {/* Botón de Envío */}
           <Pressable

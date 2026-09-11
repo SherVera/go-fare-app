@@ -19,6 +19,12 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { getAllDocuments, rejectDocument, verifyDocument } from '@/lib/api';
 import { tokens } from '@/theme/tokens';
 
+const adminDocDateFormatter = new Intl.DateTimeFormat('es-ES', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+});
+
 const isVehicleDocType = (type: string) => {
   const vehicleTypes = [
     'titulo_propiedad',
@@ -558,11 +564,7 @@ export default function AdminDocumentsScreen() {
                       doc.status === 'pending';
 
                     const dateStr = doc.createdAt
-                      ? new Date(doc.createdAt).toLocaleDateString('es-ES', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })
+                      ? adminDocDateFormatter.format(new Date(doc.createdAt))
                       : '';
 
                     return (
@@ -749,11 +751,7 @@ export default function AdminDocumentsScreen() {
                       doc.status === 'pending';
 
                     const dateStr = doc.createdAt
-                      ? new Date(doc.createdAt).toLocaleDateString('es-ES', {
-                          day: 'numeric',
-                          month: 'short',
-                          year: 'numeric',
-                        })
+                      ? adminDocDateFormatter.format(new Date(doc.createdAt))
                       : '';
 
                     return (

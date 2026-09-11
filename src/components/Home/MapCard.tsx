@@ -16,20 +16,20 @@ export const MapCard = () => {
   );
   const [address, setAddress] = useState<string>('Buscando ubicación...');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const animatedValue = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0.45)).current;
 
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(animatedValue, {
+        Animated.timing(pulseAnim, {
           toValue: 1,
           duration: 1000,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
-        Animated.timing(animatedValue, {
-          toValue: 0,
+        Animated.timing(pulseAnim, {
+          toValue: 0.45,
           duration: 1000,
-          useNativeDriver: false,
+          useNativeDriver: true,
         }),
       ]),
     ).start();
@@ -77,7 +77,7 @@ export const MapCard = () => {
         setAddress('Ubicación no disponible');
       }
     })();
-  }, [animatedValue]);
+  }, [pulseAnim]);
 
   const renderMap = () => {
     if (!location) {
@@ -95,11 +95,6 @@ export const MapCard = () => {
     );
   };
 
-  const dotColor = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['#94A3B8', '#3B82F6'], // Gris a Azul
-  });
-
   return (
     <View style={styles.container}>
       <View style={styles.mapWrapper}>
@@ -108,9 +103,10 @@ export const MapCard = () => {
           <Animated.View
             style={[
               styles.dot,
-              errorMsg
-                ? { backgroundColor: '#EF4444' }
-                : { backgroundColor: dotColor },
+              {
+                backgroundColor: errorMsg ? '#EF4444' : '#3B82F6',
+                opacity: pulseAnim,
+              },
             ]}
           />
           <Text style={styles.badgeText} numberOfLines={1}>

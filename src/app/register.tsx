@@ -418,9 +418,9 @@ export default function RegisterScreen() {
               editable={!loading}
             />
           </View>
-          {errors.firstName && (
+          {errors.firstName ? (
             <Text style={styles.errorText}>{errors.firstName}</Text>
-          )}
+          ) : null}
 
           <Text style={styles.inputLabel}>APELLIDOS</Text>
           <View
@@ -447,9 +447,9 @@ export default function RegisterScreen() {
               editable={!loading}
             />
           </View>
-          {errors.lastName && (
+          {errors.lastName ? (
             <Text style={styles.errorText}>{errors.lastName}</Text>
-          )}
+          ) : null}
 
           <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
           <View
@@ -494,9 +494,9 @@ export default function RegisterScreen() {
               editable={!loading}
             />
           </View>
-          {errors.idNumber && (
+          {errors.idNumber ? (
             <Text style={styles.errorText}>{errors.idNumber}</Text>
-          )}
+          ) : null}
 
           <Text style={styles.inputLabel}>TELÉFONO</Text>
           <View
@@ -531,9 +531,9 @@ export default function RegisterScreen() {
               editable={!loading}
             />
           </View>
-          {errors.phoneNumber && (
+          {errors.phoneNumber ? (
             <Text style={styles.errorText}>{errors.phoneNumber}</Text>
-          )}
+          ) : null}
 
           <Text style={styles.inputLabel}>CORREO ELECTRÓNICO</Text>
           <View
@@ -602,9 +602,9 @@ export default function RegisterScreen() {
               />
             </Pressable>
           </View>
-          {errors.password && (
+          {errors.password ? (
             <Text style={styles.errorText}>{errors.password}</Text>
-          )}
+          ) : null}
 
           <View style={styles.secureRow}>
             <Ionicons
