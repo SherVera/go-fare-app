@@ -9,7 +9,7 @@ import type {
   FirebaseEmailRegisterDto,
   FirebaseIssuedCredentialsDto,
 } from '@/interfaces';
-import { auth, sigOutAccount } from './firebase';
+import { auth, getIdToken, sigOutAccount } from './firebase';
 
 let resolvedBaseUrl = process.env.EXPO_PUBLIC_API_URL;
 
@@ -87,7 +87,7 @@ export async function syncWithBackend(
 
   let idToken = '';
   try {
-    idToken = await firebaseUser.getIdToken();
+    idToken = await getIdToken(firebaseUser);
   } catch (tErr) {
     console.warn('[API] error al obtener idToken de Firebase:', tErr);
     throw new Error(
@@ -257,7 +257,7 @@ export async function refreshBackendJwt(): Promise<string | null> {
   activeJwtRefreshPromise = (async () => {
     try {
       console.log('[API] Renovando token JWT de backend con Firebase...');
-      const freshIdToken = await fbUser.getIdToken(true);
+      const freshIdToken = await getIdToken(fbUser, true);
       if (!freshIdToken) return null;
       const result = await loginWithFirebaseToken(freshIdToken);
       if (result?.token) {
@@ -2773,22 +2773,46 @@ export async function confirmRide(qr: string): Promise<{
 
 // ─── SESIONES DE CAJA (TURNOS DEL CONDUCTOR) ──────────────────────────────────
 
+/** Indicadores que identifican datos de sesión inválidos o mockeados. */
+const MOCK_SESSION_PREFIXES = ['sess-', 'mock-'];
+const MOCK_PLATE = 'XY987ZT';
+
+function isMockedSession(session: any): boolean {
+  if (!session) return false;
+  const plate = (session.vehicle?.plate || '').toUpperCase();
+  const uuid = session.uuid || '';
+  if (plate === MOCK_PLATE) return true;
+  return MOCK_SESSION_PREFIXES.some(
+    (prefix) => uuid.startsWith(prefix),
+  );
+}
+
 /**
  * Obtiene la sesión de caja (turno) activa del conductor autenticado.
+ * Si el backend no confirma una sesión activa válida, purga la caché local
+ * para evitar que datos residuales bloqueen el estado operativo real.
  */
 export async function getCurrentSession(): Promise<any> {
+  // Intentar obtener la sesión real desde el backend
   try {
     const session = await fetchWithAuth('/cash-sessions/me/current');
-    if (session?.uuid) {
+
+    if (session?.uuid && !isMockedSession(session)) {
+      // Sesión válida confirmada por el backend → actualizar caché
       await AsyncStorage.setItem(
         'gofare_active_cash_session',
         JSON.stringify(session),
       );
       return session;
     }
+
+    // El backend respondió pero sin sesión activa válida → purgar caché
+    await AsyncStorage.removeItem('gofare_active_cash_session');
+    return null;
   } catch (err) {
+    // Error de red/servidor → usar caché sólo si es válida y no está cerrada ni es mock
     console.warn(
-      '[API] getCurrentSession error, falling back to cached session:',
+      '[API] getCurrentSession: error de red, evaluando caché local:',
       err,
     );
   }
@@ -2797,9 +2821,12 @@ export async function getCurrentSession(): Promise<any> {
     const stored = await AsyncStorage.getItem('gofare_active_cash_session');
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (parsed.status !== 'closed') {
-        return parsed;
+      // Rechazar sesiones cerradas o con datos mockeados en caché
+      if (parsed.status === 'closed' || isMockedSession(parsed)) {
+        await AsyncStorage.removeItem('gofare_active_cash_session');
+        return null;
       }
+      return parsed;
     }
   } catch {}
 
@@ -3202,36 +3229,110 @@ export async function closeSession(sessionUuid: string): Promise<any> {
   }
 }
 
+/** Filtra un listado de vehículos eliminando los que tengan indicadores de datos mockeados. */
+function filterMockedVehicles(vehicles: any[]): any[] {
+  return vehicles.filter((v: any) => {
+    const plate = (v.plate || v.licensePlate || '').toUpperCase();
+    const uuid = (v.uuid || v.id || '').toLowerCase();
+    if (plate === MOCK_PLATE) return false;
+    if (MOCK_SESSION_PREFIXES.some((prefix) => uuid.startsWith(prefix))) return false;
+    return true;
+  });
+}
+
 /**
- * Obtiene las unidades de transporte (vehículos) asignadas del conductor.
- * Consulta directamente al backend en PostgreSQL y nunca retorna datos mockeados.
+ * Obtiene las unidades de transporte a las que puede acceder el conductor autenticado.
+ *
+ * Según models.md, la tabla `invite_codes` vincula un conductor al OWNER (toda la flota),
+ * no a un vehículo específico. Por tanto, el conductor tiene acceso a todos los
+ * vehículos ACTIVOS del owner al que está asociado.
+ *
+ * Estrategia (endpoints reales del backend):
+ * 1. Sesión activa (`GET /cash-sessions/me/current`) → el vehículo en uso viene embebido.
+ * 2. Asociación activa (`GET /invite-codes/mine`) → extrae el owner asociado, luego consulta
+ *    los vehículos de ese owner verificando que el conductor está asignado a cada uno
+ *    (`GET /vehicles/{uuid}/drivers`).
+ * 3. Fallback dueño: si el autenticado también tiene rol de owner (`GET /vehicles/my`).
  */
 export async function getAssignedVehicles(): Promise<any[]> {
+  const currentUserUid = auth.currentUser?.uid;
+
+  // ── 1. Sesión de caja activa: el backend inyecta el vehículo en la sesión ──
   try {
-    // 1. Si hay una sesión activa de caja en el backend, tomar la unidad real de la sesión
-    const activeSession = await getCurrentSession().catch(() => null);
-    if (activeSession?.vehicle?.uuid) {
-      return [activeSession.vehicle];
+    const session = await fetchWithAuth('/cash-sessions/me/current');
+    if (session?.uuid && session?.vehicle?.uuid && !isMockedSession(session)) {
+      const clean = filterMockedVehicles([session.vehicle]);
+      if (clean.length > 0) return clean;
     }
+  } catch {}
 
-    // 2. Consultar unidades asignadas directamente desde el backend (/vehicles/assigned)
-    const res = await fetchWithAuth('/vehicles/assigned').catch(() => null);
-    if (Array.isArray(res) && res.length > 0) {
-      return res;
+  // ── 2. Asociación conductor↔owner via invite-codes ──
+  // El invite_code vincula al conductor con el OWNER (toda la flota), no con un vehículo.
+  // Estado activo: usedAt NOT NULL y revokedAt IS NULL (ver models.md § invite_codes).
+  try {
+    const codes: any[] = await fetchWithAuth('/invite-codes/mine');
+    if (Array.isArray(codes) && codes.length > 0) {
+      const activeCode = codes.find((c: any) => c.usedAt && !c.revokedAt);
+
+      if (activeCode?.owner) {
+        // El owner viene embebido en el invite-code; consultar sus vehículos
+        // El conductor tiene acceso a TODOS los vehículos activos del owner.
+        // Para verificar cuáles tiene asignados: GET /vehicles/{uuid}/drivers
+        const allVehicles = await fetchWithAuth('/vehicles').catch(() => null);
+        if (Array.isArray(allVehicles) && currentUserUid) {
+          const ownerUuid = activeCode.owner.uuid;
+          // Filtrar vehículos del owner asociado
+          const ownerVehicles = allVehicles.filter(
+            (v: any) => v.owner?.uuid === ownerUuid || v.ownerId === ownerUuid,
+          );
+          if (ownerVehicles.length > 0) {
+            const assignedVehicles: any[] = [];
+            for (const v of ownerVehicles.slice(0, 10)) {
+              if (!v.uuid) continue;
+              const drivers = await fetchWithAuth(`/vehicles/${v.uuid}/drivers`).catch(() => []);
+              if (Array.isArray(drivers)) {
+                const isAssigned = drivers.some(
+                  (d: any) =>
+                    d.uuid === currentUserUid ||
+                    d.firebaseUid === currentUserUid ||
+                    d.uid === currentUserUid ||
+                    d.providerId === currentUserUid,
+                );
+                if (isAssigned) assignedVehicles.push(v);
+              }
+            }
+            const clean = filterMockedVehicles(assignedVehicles);
+            if (clean.length > 0) return clean;
+
+            // Si el backend no confirma asignación por drivers,
+            // considerar toda la flota activa del owner como accesible al conductor.
+            const activeOwnerFleet = filterMockedVehicles(
+              ownerVehicles.filter((v: any) => {
+                const s = (v.status || '').toLowerCase();
+                return s === 'active' || s === 'approved' || s === 'activa';
+              }),
+            );
+            if (activeOwnerFleet.length > 0) return activeOwnerFleet;
+          }
+        }
+      }
     }
-
-    // 3. Fallback: intentar /vehicles/my
-    const myUnits = await fetchWithAuth('/vehicles/my').catch(() => null);
-    if (Array.isArray(myUnits) && myUnits.length > 0) {
-      return myUnits;
-    }
-
-    // 4. Si el conductor no tiene unidades asignadas en base de datos, retornar arreglo vacío (sin mock)
-    return [];
   } catch (err) {
-    console.warn('[API] Error consultando vehículos asignados:', err);
-    return [];
+    console.warn('[API] Error al resolver flota via invite-codes/mine:', err);
   }
+
+  // ── 3. Fallback: el autenticado también es dueño de unidades ──
+  try {
+    const myUnits = await fetchWithAuth('/vehicles/my');
+    if (Array.isArray(myUnits) && myUnits.length > 0) {
+      const clean = filterMockedVehicles(myUnits);
+      if (clean.length > 0) return clean;
+    }
+  } catch {}
+
+  // Sin unidades confirmadas por el backend → conductor no puede operar
+  await AsyncStorage.removeItem('gofare_active_cash_session').catch(() => {});
+  return [];
 }
 
 /**
