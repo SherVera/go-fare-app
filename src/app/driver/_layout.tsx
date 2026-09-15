@@ -42,7 +42,7 @@ export default function DriverLayout() {
         name="dashboard"
         options={{
           title: 'INICIO',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'bus' : 'bus-outline'}
               size={24}
@@ -55,7 +55,7 @@ export default function DriverLayout() {
         name="scan"
         options={{
           title: 'COBRAR',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'qr-code' : 'qr-code-outline'}
               size={24}
@@ -68,7 +68,7 @@ export default function DriverLayout() {
         name="history"
         options={{
           title: 'VIAJES',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'list' : 'list-outline'}
               size={24}
@@ -81,7 +81,7 @@ export default function DriverLayout() {
         name="profile"
         options={{
           title: 'PERFIL',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'person' : 'person-outline'}
               size={24}

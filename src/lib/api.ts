@@ -2782,9 +2782,7 @@ function isMockedSession(session: any): boolean {
   const plate = (session.vehicle?.plate || '').toUpperCase();
   const uuid = session.uuid || '';
   if (plate === MOCK_PLATE) return true;
-  return MOCK_SESSION_PREFIXES.some(
-    (prefix) => uuid.startsWith(prefix),
-  );
+  return MOCK_SESSION_PREFIXES.some((prefix) => uuid.startsWith(prefix));
 }
 
 /**
@@ -3235,7 +3233,8 @@ function filterMockedVehicles(vehicles: any[]): any[] {
     const plate = (v.plate || v.licensePlate || '').toUpperCase();
     const uuid = (v.uuid || v.id || '').toLowerCase();
     if (plate === MOCK_PLATE) return false;
-    if (MOCK_SESSION_PREFIXES.some((prefix) => uuid.startsWith(prefix))) return false;
+    if (MOCK_SESSION_PREFIXES.some((prefix) => uuid.startsWith(prefix)))
+      return false;
     return true;
   });
 }
@@ -3289,7 +3288,9 @@ export async function getAssignedVehicles(): Promise<any[]> {
             const assignedVehicles: any[] = [];
             for (const v of ownerVehicles.slice(0, 10)) {
               if (!v.uuid) continue;
-              const drivers = await fetchWithAuth(`/vehicles/${v.uuid}/drivers`).catch(() => []);
+              const drivers = await fetchWithAuth(
+                `/vehicles/${v.uuid}/drivers`,
+              ).catch(() => []);
               if (Array.isArray(drivers)) {
                 const isAssigned = drivers.some(
                   (d: any) =>

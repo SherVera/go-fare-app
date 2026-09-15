@@ -509,12 +509,14 @@ export default function DriverDashboard() {
                 </Text>
               )}
               {/* Nota explicativa cuando el conductor no tiene unidad asignada */}
-              {!activeSession && !isPausado && assignedVehicles.length === 0 && (
-                <Text style={[styles.statusSubNote, { color: '#DC2626' }]}>
-                  Sin unidad asignada. No puedes operar hasta que tu
-                  transportista te asigne un vehículo.
-                </Text>
-              )}
+              {!activeSession &&
+                !isPausado &&
+                assignedVehicles.length === 0 && (
+                  <Text style={[styles.statusSubNote, { color: '#DC2626' }]}>
+                    Sin unidad asignada. No puedes operar hasta que tu
+                    transportista te asigne un vehículo.
+                  </Text>
+                )}
             </View>
           </View>
 
@@ -732,7 +734,12 @@ export default function DriverDashboard() {
           </View>
         ) : assignedVehicles.length === 0 ? (
           // Bloquear el selector de ruta si no hay unidad asignada
-          <View style={[styles.noRouteContainer, { borderColor: '#FECACA', backgroundColor: '#FEF2F2' }]}>
+          <View
+            style={[
+              styles.noRouteContainer,
+              { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
+            ]}
+          >
             <Ionicons
               name="lock-closed-outline"
               size={18}
@@ -818,7 +825,10 @@ export default function DriverDashboard() {
             <View style={styles.statsRow}>
               <View style={styles.statBox}>
                 <View
-                  style={[styles.statIconContainer, { backgroundColor: '#DBEAFE' }]}
+                  style={[
+                    styles.statIconContainer,
+                    { backgroundColor: '#DBEAFE' },
+                  ]}
                 >
                   <Ionicons
                     name="ticket-outline"
@@ -833,13 +843,18 @@ export default function DriverDashboard() {
               </View>
               <View style={styles.statBox}>
                 <View
-                  style={[styles.statIconContainer, { backgroundColor: '#DCFCE7' }]}
+                  style={[
+                    styles.statIconContainer,
+                    { backgroundColor: '#DCFCE7' },
+                  ]}
                 >
                   <Ionicons name="cash-outline" size={20} color="#16A34A" />
                 </View>
                 <Text style={styles.statValue}>
                   {activeSession
-                    ? Number(activeSession.totalFares).toFixed(2).replace('.', ',')
+                    ? Number(activeSession.totalFares)
+                        .toFixed(2)
+                        .replace('.', ',')
                     : '0,00'}{' '}
                   tickets
                 </Text>
