@@ -161,11 +161,16 @@ export default function DriverDashboard() {
       setAssignedVehicles(vehicles);
       setAssignedRoutes(routes);
 
-      if (vehicles.length > 0) {
-        setSelectedVehicle(vehicles[0]);
-      } else {
+      // Regla de negocio: sin unidades asignadas → el conductor no puede operar.
+      // Forzar estado inactivo y purgar cualquier sesión residual en caché.
+      if (vehicles.length === 0) {
+        setActiveSession(null);
         setSelectedVehicle(null);
+        setSelectedRoute(null);
+        return;
       }
+
+      setSelectedVehicle(vehicles[0]);
 
       if (routes.length > 0) {
         setSelectedRoute(routes[0]);
@@ -221,10 +226,12 @@ export default function DriverDashboard() {
 
   // 1. INICIAR TURNO (Abrir sesión de caja en el backend)
   const handleStartShift = async () => {
-    if (!selectedVehicle) {
+    // Verificación estricta: sin unidad asignada no se puede operar
+    if (assignedVehicles.length === 0 || !selectedVehicle) {
       Alert.alert(
-        'Sin Unidad Asignada',
-        'No tienes un vehículo asignado para operar. Contacta a tu dueño de transporte para que te asigne una unidad.',
+        'Operación No Permitida',
+        'No tienes un vehículo asignado para operar.\n\nSolicita a tu transportista o dueño que te asigne una unidad desde el panel de socios para poder iniciar tu turno.',
+        [{ text: 'Entendido', style: 'default' }],
       );
       return;
     }
@@ -379,7 +386,21 @@ export default function DriverDashboard() {
             </Text>
           </View>
         )}
-        {!activeSession && (
+        {/* Sin sesión activa: diferenciar entre sin unidad y simplemente inactivo */}
+        {!activeSession && assignedVehicles.length === 0 && (
+          <View style={[styles.activePill, { backgroundColor: '#FEF2F2' }]}>
+            <Ionicons
+              name="lock-closed"
+              size={9}
+              color="#DC2626"
+              style={{ marginRight: 5 }}
+            />
+            <Text style={[styles.activePillText, { color: '#DC2626' }]}>
+              SIN UNIDAD
+            </Text>
+          </View>
+        )}
+        {!activeSession && assignedVehicles.length > 0 && (
           <View style={[styles.activePill, { backgroundColor: '#F1F5F9' }]}>
             <View style={[styles.activeDot, { backgroundColor: '#64748B' }]} />
             <Text style={[styles.activePillText, { color: '#64748B' }]}>
@@ -487,6 +508,15 @@ export default function DriverDashboard() {
                   Cobros inhabilitados temporalmente
                 </Text>
               )}
+              {/* Nota explicativa cuando el conductor no tiene unidad asignada */}
+              {!activeSession &&
+                !isPausado &&
+                assignedVehicles.length === 0 && (
+                  <Text style={[styles.statusSubNote, { color: '#DC2626' }]}>
+                    Sin unidad asignada. No puedes operar hasta que tu
+                    transportista te asigne un vehículo.
+                  </Text>
+                )}
             </View>
           </View>
 
@@ -702,6 +732,24 @@ export default function DriverDashboard() {
               {displayRouteName}
             </Text>
           </View>
+        ) : assignedVehicles.length === 0 ? (
+          // Bloquear el selector de ruta si no hay unidad asignada
+          <View
+            style={[
+              styles.noRouteContainer,
+              { borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
+            ]}
+          >
+            <Ionicons
+              name="lock-closed-outline"
+              size={18}
+              color="#DC2626"
+              style={{ marginRight: 10 }}
+            />
+            <Text style={[styles.noRouteText, { color: '#DC2626' }]}>
+              Requiere una unidad asignada para operar rutas
+            </Text>
+          </View>
         ) : assignedRoutes.length === 0 ? (
           <View style={styles.noRouteContainer}>
             <Ionicons
@@ -770,39 +818,51 @@ export default function DriverDashboard() {
           </View>
         )}
 
-        {/* Estadísticas de Turno */}
-        <Text style={styles.sectionTitle}>Estadísticas de la Jornada</Text>
-        <View style={styles.statsRow}>
-          <View style={styles.statBox}>
-            <View
-              style={[styles.statIconContainer, { backgroundColor: '#DBEAFE' }]}
-            >
-              <Ionicons
-                name="ticket-outline"
-                size={20}
-                color={tokens.colors.primary}
-              />
+        {/* Estadísticas de Turno — solo visible con unidad asignada */}
+        {assignedVehicles.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Estadísticas de la Jornada</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <View
+                  style={[
+                    styles.statIconContainer,
+                    { backgroundColor: '#DBEAFE' },
+                  ]}
+                >
+                  <Ionicons
+                    name="ticket-outline"
+                    size={20}
+                    color={tokens.colors.primary}
+                  />
+                </View>
+                <Text style={styles.statValue}>
+                  {activeSession ? activeSession.ridesCount : 0}
+                </Text>
+                <Text style={styles.statLabel}>Tickets Validados</Text>
+              </View>
+              <View style={styles.statBox}>
+                <View
+                  style={[
+                    styles.statIconContainer,
+                    { backgroundColor: '#DCFCE7' },
+                  ]}
+                >
+                  <Ionicons name="cash-outline" size={20} color="#16A34A" />
+                </View>
+                <Text style={styles.statValue}>
+                  {activeSession
+                    ? Number(activeSession.totalFares)
+                        .toFixed(2)
+                        .replace('.', ',')
+                    : '0,00'}{' '}
+                  tickets
+                </Text>
+                <Text style={styles.statLabel}>Recaudado Turno</Text>
+              </View>
             </View>
-            <Text style={styles.statValue}>
-              {activeSession ? activeSession.ridesCount : 0}
-            </Text>
-            <Text style={styles.statLabel}>Tickets Validados</Text>
-          </View>
-          <View style={styles.statBox}>
-            <View
-              style={[styles.statIconContainer, { backgroundColor: '#DCFCE7' }]}
-            >
-              <Ionicons name="cash-outline" size={20} color="#16A34A" />
-            </View>
-            <Text style={styles.statValue}>
-              {activeSession
-                ? Number(activeSession.totalFares).toFixed(2).replace('.', ',')
-                : '0,00'}{' '}
-              tickets
-            </Text>
-            <Text style={styles.statLabel}>Recaudado Turno</Text>
-          </View>
-        </View>
+          </>
+        )}
 
         {/* Aviso de tiempo real */}
         {isEnServicio && (

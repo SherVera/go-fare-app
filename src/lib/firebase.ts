@@ -54,7 +54,7 @@ export const auth = getAuth();
 export const db = getFirestore();
 export const storage = getStorage();
 export const listenToAuthState = onAuthStateChanged;
-export { getIdTokenResult } from '@react-native-firebase/auth';
+export { getIdToken, getIdTokenResult } from '@react-native-firebase/auth';
 
 interface Credentials {
   email: string;
