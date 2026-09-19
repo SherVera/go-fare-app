@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -34,6 +34,12 @@ import { tokens } from '@/theme/tokens';
 export default function VehicleOwnerDrivers() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'active' | 'invited'>('active');
+  const [inviteFilter, setInviteFilter] = useState<
+    'all' | 'used' | 'pending' | 'revoked'
+  >('all');
+  const [driverFilter, setDriverFilter] = useState<
+    'all' | 'assigned' | 'unassigned'
+  >('all');
   const [drivers, setDrivers] = useState<MockDriver[]>([]);
   const [vehicles, setVehicles] = useState<MockVehicle[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
@@ -126,13 +132,24 @@ export default function VehicleOwnerDrivers() {
       const mapStr = await AsyncStorage.getItem('gofare_invited_phones_map');
       const phoneMap = mapStr ? JSON.parse(mapStr) : {};
 
-      const enrichedInvites = backendInvites.map((inv: any) => ({
-        ...inv,
-        invitedPhone:
-          inv.driver?.phoneNumber ||
-          phoneMap[inv.code] ||
-          'Invitado sin número',
-      }));
+      const enrichedInvites = backendInvites.map((inv: any) => {
+        const matchedDriver =
+          inv.driver ||
+          realDrivers.find(
+            (d) =>
+              String(d.id) === String(inv.driverId || inv.driver_id) ||
+              (d.driverUuid && d.driverUuid === inv.driverUuid),
+          );
+        return {
+          ...inv,
+          driver: matchedDriver || inv.driver,
+          invitedPhone:
+            phoneMap[inv.code] ||
+            inv.driver?.phoneNumber ||
+            inv.driver?.phone ||
+            'Invitado sin número',
+        };
+      });
 
       setInvitations(enrichedInvites);
     } catch (err) {
@@ -154,15 +171,18 @@ export default function VehicleOwnerDrivers() {
     }, [loadDriversData]),
   );
 
-  const getDriverAssignment = (driverId: string) => {
-    const assignedVehicle = vehicles.find(
-      (v) => v.assignedDriver?.id === driverId,
-    );
-    if (assignedVehicle) {
-      return `${assignedVehicle.vehicleMake} ${assignedVehicle.vehicleModel} (${assignedVehicle.licensePlate})`;
-    }
-    return null;
-  };
+  const getDriverAssignment = useCallback(
+    (driverId: string) => {
+      const assignedVehicle = vehicles.find(
+        (v) => v.assignedDriver?.id === driverId,
+      );
+      if (assignedVehicle) {
+        return `${assignedVehicle.vehicleMake} ${assignedVehicle.vehicleModel} (${assignedVehicle.licensePlate})`;
+      }
+      return null;
+    },
+    [vehicles],
+  );
 
   const handleSendInviteWhatsApp = async () => {
     if (!invitePhone.trim()) {
@@ -245,7 +265,72 @@ Tu código de invitación único es: *${code}*`;
     }
   };
 
+  const isUsedInvite = useCallback(
+    (inv: any) =>
+      Boolean(
+        inv.used ||
+          inv.usedAt ||
+          inv.used_at ||
+          inv.driver ||
+          inv.driverId ||
+          inv.driver_id,
+      ),
+    [],
+  );
+
+  const isRevokedInvite = useCallback(
+    (inv: any) => Boolean(inv.revokedAt || inv.revoked_at),
+    [],
+  );
+
+  const isPendingInvite = useCallback(
+    (inv: any) => !isUsedInvite(inv) && !isRevokedInvite(inv),
+    [isUsedInvite, isRevokedInvite],
+  );
+
+  const inviteCounts = useMemo(() => {
+    let used = 0;
+    let pending = 0;
+    let revoked = 0;
+    for (const inv of invitations) {
+      if (isRevokedInvite(inv)) {
+        revoked++;
+      } else if (isUsedInvite(inv)) {
+        used++;
+      } else {
+        pending++;
+      }
+    }
+    return {
+      all: invitations.length,
+      used,
+      pending,
+      revoked,
+    };
+  }, [invitations, isUsedInvite, isRevokedInvite]);
+
+  const driverCounts = useMemo(() => {
+    let assigned = 0;
+    let unassigned = 0;
+    for (const d of drivers) {
+      if (getDriverAssignment(d.id)) {
+        assigned++;
+      } else {
+        unassigned++;
+      }
+    }
+    return {
+      all: drivers.length,
+      assigned,
+      unassigned,
+    };
+  }, [drivers, getDriverAssignment]);
+
   const filteredDrivers = drivers.filter((d) => {
+    const isAssigned = Boolean(getDriverAssignment(d.id));
+    if (driverFilter === 'assigned' && !isAssigned) return false;
+    if (driverFilter === 'unassigned' && isAssigned) return false;
+
     const term = searchText.trim().toLowerCase();
     if (!term) return true;
     return (
@@ -257,11 +342,27 @@ Tu código de invitación único es: *${code}*`;
   });
 
   const filteredInvitations = invitations.filter((inv) => {
+    if (inviteFilter === 'used' && !isUsedInvite(inv)) return false;
+    if (inviteFilter === 'pending' && !isPendingInvite(inv)) return false;
+    if (inviteFilter === 'revoked' && !isRevokedInvite(inv)) return false;
+
     const term = searchText.trim().toLowerCase();
     if (!term) return true;
+    const driver = inv.driver;
+    const driverName =
+      driver?.displayName ||
+      (driver?.firstName || driver?.lastName
+        ? `${driver.firstName || ''} ${driver.lastName || ''}`.trim()
+        : null) ||
+      driver?.name;
     return (
-      inv.invitedPhone.toLowerCase().includes(term) ||
-      inv.code.toLowerCase().includes(term)
+      Boolean(inv.invitedPhone?.toLowerCase().includes(term)) ||
+      Boolean(inv.code?.toLowerCase().includes(term)) ||
+      Boolean(driverName?.toLowerCase().includes(term)) ||
+      Boolean(driver?.nationalId?.toLowerCase().includes(term)) ||
+      Boolean(driver?.email?.toLowerCase().includes(term)) ||
+      Boolean(driver?.phone?.toLowerCase().includes(term)) ||
+      Boolean(driver?.phoneNumber?.toLowerCase().includes(term))
     );
   });
 
@@ -360,6 +461,172 @@ Tu código de invitación único es: *${code}*`;
             <Ionicons name="close-circle" size={18} color="#A1A1AA" />
           </Pressable>
         )}
+      </View>
+
+      {/* Selector de Filtros por Chips */}
+      <View style={styles.filterChipsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterChipsContent}
+        >
+          {activeTab === 'invited' ? (
+            <>
+              <Pressable
+                style={[
+                  styles.filterChip,
+                  inviteFilter === 'all' && styles.filterChipActive,
+                ]}
+                onPress={() => setInviteFilter('all')}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    inviteFilter === 'all' && styles.filterChipTextActive,
+                  ]}
+                >
+                  Todos ({inviteCounts.all})
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.filterChip,
+                  inviteFilter === 'used' && styles.filterChipActive,
+                ]}
+                onPress={() => setInviteFilter('used')}
+              >
+                <View
+                  style={[styles.filterDot, { backgroundColor: '#10B981' }]}
+                />
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    inviteFilter === 'used' && styles.filterChipTextActive,
+                  ]}
+                >
+                  Usados ({inviteCounts.used})
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.filterChip,
+                  inviteFilter === 'pending' && styles.filterChipActive,
+                ]}
+                onPress={() => setInviteFilter('pending')}
+              >
+                <View
+                  style={[styles.filterDot, { backgroundColor: '#F59E0B' }]}
+                />
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    inviteFilter === 'pending' && styles.filterChipTextActive,
+                  ]}
+                >
+                  Pendientes ({inviteCounts.pending})
+                </Text>
+              </Pressable>
+
+              {inviteCounts.revoked > 0 && (
+                <Pressable
+                  style={[
+                    styles.filterChip,
+                    inviteFilter === 'revoked' && styles.filterChipActive,
+                  ]}
+                  onPress={() => setInviteFilter('revoked')}
+                >
+                  <View
+                    style={[styles.filterDot, { backgroundColor: '#EF4444' }]}
+                  />
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      inviteFilter === 'revoked' && styles.filterChipTextActive,
+                    ]}
+                  >
+                    Revocados ({inviteCounts.revoked})
+                  </Text>
+                </Pressable>
+              )}
+            </>
+          ) : (
+            <>
+              <Pressable
+                style={[
+                  styles.filterChip,
+                  driverFilter === 'all' && styles.filterChipActive,
+                ]}
+                onPress={() => setDriverFilter('all')}
+              >
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    driverFilter === 'all' && styles.filterChipTextActive,
+                  ]}
+                >
+                  Todos ({driverCounts.all})
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.filterChip,
+                  driverFilter === 'assigned' && styles.filterChipActive,
+                ]}
+                onPress={() => setDriverFilter('assigned')}
+              >
+                <Ionicons
+                  name="bus"
+                  size={12}
+                  color={
+                    driverFilter === 'assigned'
+                      ? tokens.colors.primary
+                      : '#059669'
+                  }
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    driverFilter === 'assigned' && styles.filterChipTextActive,
+                  ]}
+                >
+                  Con unidad ({driverCounts.assigned})
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.filterChip,
+                  driverFilter === 'unassigned' && styles.filterChipActive,
+                ]}
+                onPress={() => setDriverFilter('unassigned')}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={12}
+                  color={
+                    driverFilter === 'unassigned'
+                      ? tokens.colors.primary
+                      : '#64748B'
+                  }
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.filterChipText,
+                    driverFilter === 'unassigned' &&
+                      styles.filterChipTextActive,
+                  ]}
+                >
+                  Sin unidad ({driverCounts.unassigned})
+                </Text>
+              </Pressable>
+            </>
+          )}
+        </ScrollView>
       </View>
 
       {/* Lista Principal */}
@@ -544,6 +811,52 @@ Tu código de invitación único es: *${code}*`;
             );
             const isRevoked = Boolean(item.revokedAt || item.revoked_at);
 
+            // Conductor que canjeó la invitación
+            const matchedDriver =
+              item.driver ||
+              drivers.find(
+                (d) =>
+                  String(d.id) ===
+                    String(item.driverId || item.driver_id || item.driver) ||
+                  (d.driverUuid && d.driverUuid === item.driverUuid),
+              );
+
+            const driverDisplayName =
+              matchedDriver?.displayName ||
+              (matchedDriver?.firstName || matchedDriver?.lastName
+                ? `${matchedDriver.firstName || ''} ${matchedDriver.lastName || ''}`.trim()
+                : null) ||
+              matchedDriver?.name ||
+              (isUsed ? 'Conductor asociado' : null);
+
+            const driverNationalId =
+              matchedDriver?.nationalId &&
+              matchedDriver.nationalId !== 'Sin cédula'
+                ? matchedDriver.nationalId
+                : null;
+
+            const driverPhone =
+              matchedDriver?.phoneNumber ||
+              matchedDriver?.phone ||
+              (matchedDriver?.phone !== 'Sin teléfono'
+                ? matchedDriver?.phone
+                : null);
+
+            const driverEmail = matchedDriver?.email || null;
+
+            const driverVehicleAssignment = matchedDriver?.id
+              ? getDriverAssignment(String(matchedDriver.id))
+              : null;
+
+            const usedAtDate = item.usedAt || item.used_at;
+            const usedAtStr = usedAtDate
+              ? new Date(usedAtDate).toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })
+              : null;
+
             return (
               <View style={styles.driverCard}>
                 <View style={styles.driverHeader}>
@@ -618,6 +931,106 @@ Tu código de invitación único es: *${code}*`;
                     <Text style={styles.codeBadgeText}>{item.code}</Text>
                   </View>
                 </View>
+
+                {/* Detalle: Por quién fue usado */}
+                {isUsed && (
+                  <View style={styles.usedByCard}>
+                    <View style={styles.usedByHeaderRow}>
+                      <View style={styles.usedByTag}>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={14}
+                          color="#059669"
+                        />
+                        <Text style={styles.usedByTagText}>CANJEADO POR</Text>
+                      </View>
+                      {usedAtStr && (
+                        <Text style={styles.usedAtText}>El {usedAtStr}</Text>
+                      )}
+                    </View>
+
+                    <View style={styles.usedByDriverRow}>
+                      <View style={styles.usedByAvatarCircle}>
+                        <Text style={styles.usedByAvatarInitials}>
+                          {(driverDisplayName || 'C')
+                            .split(' ')
+                            .map((n: string) => n[0])
+                            .join('')
+                            .substring(0, 2)
+                            .toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.usedByDriverInfo}>
+                        <Text style={styles.usedByDriverName} numberOfLines={1}>
+                          {driverDisplayName}
+                        </Text>
+                        <View style={styles.usedByBadgesRow}>
+                          {driverNationalId && (
+                            <View style={styles.usedByBadgeItem}>
+                              <Ionicons
+                                name="card-outline"
+                                size={11}
+                                color="#64748B"
+                              />
+                              <Text style={styles.usedByBadgeText}>
+                                {driverNationalId}
+                              </Text>
+                            </View>
+                          )}
+                          {driverPhone && driverPhone !== 'Sin teléfono' && (
+                            <View style={styles.usedByBadgeItem}>
+                              <Ionicons
+                                name="call-outline"
+                                size={11}
+                                color="#64748B"
+                              />
+                              <Text style={styles.usedByBadgeText}>
+                                {driverPhone}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        {driverEmail ? (
+                          <View
+                            style={[styles.usedByBadgeItem, { marginTop: 4 }]}
+                          >
+                            <Ionicons
+                              name="mail-outline"
+                              size={11}
+                              color="#64748B"
+                            />
+                            <Text
+                              style={styles.usedByBadgeText}
+                              numberOfLines={1}
+                            >
+                              {driverEmail}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {driverVehicleAssignment ? (
+                          <View
+                            style={[
+                              styles.usedByBadgeItem,
+                              styles.usedByAssignmentBadge,
+                            ]}
+                          >
+                            <Ionicons
+                              name="bus-outline"
+                              size={11}
+                              color="#065F46"
+                            />
+                            <Text
+                              style={styles.usedByAssignmentText}
+                              numberOfLines={1}
+                            >
+                              {driverVehicleAssignment}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    </View>
+                  </View>
+                )}
               </View>
             );
           }}
@@ -1001,6 +1414,94 @@ const styles = StyleSheet.create({
     color: tokens.colors.primary,
     letterSpacing: 1,
   },
+  usedByCard: {
+    backgroundColor: '#F0FDF4',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#DCFCE7',
+  },
+  usedByHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  usedByTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  usedByTagText: {
+    fontSize: 10.5,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#059669',
+    letterSpacing: 0.5,
+  },
+  usedAtText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+  },
+  usedByDriverRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  usedByAvatarCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  usedByAvatarInitials: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: tokens.typography.fontFamily.bold,
+  },
+  usedByDriverInfo: {
+    flex: 1,
+  },
+  usedByDriverName: {
+    fontSize: 13.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#0F172A',
+    marginBottom: 2,
+  },
+  usedByBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  usedByBadgeItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  usedByBadgeText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+  },
+  usedByAssignmentBadge: {
+    marginTop: 4,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignSelf: 'flex-start',
+  },
+  usedByAssignmentText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#065F46',
+  },
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1009,6 +1510,47 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
     borderRadius: 12,
     alignSelf: 'flex-start',
+  },
+  filterChipsContainer: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingVertical: 10,
+  },
+  filterChipsContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  filterChipActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#93C5FD',
+  },
+  filterChipText: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+  },
+  filterChipTextActive: {
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+  },
+  filterDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    marginRight: 6,
   },
   activeDot: {
     width: 6,

@@ -3,13 +3,18 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +23,7 @@ import type { MockVehicle } from '@/interfaces';
 import {
   getBackendProfile,
   getOwnerVehicles,
+  updateVehicle,
   verifyAuthStatus,
 } from '@/lib/api';
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
@@ -63,6 +69,54 @@ export default function VehicleOwnerDashboard() {
   );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Estados para modal de edición de ruta
+  const [isEditRouteModalVisible, setIsEditRouteModalVisible] = useState(false);
+  const [selectedVehicleForRoute, setSelectedVehicleForRoute] =
+    useState<MockVehicle | null>(null);
+  const [newRouteNumber, setNewRouteNumber] = useState('');
+  const [savingRoute, setSavingRoute] = useState(false);
+
+  const handleOpenEditRoute = (vehicle: MockVehicle) => {
+    setSelectedVehicleForRoute(vehicle);
+    setNewRouteNumber(vehicle.routeNumber || '');
+    setIsEditRouteModalVisible(true);
+  };
+
+  const handleSaveRoute = async () => {
+    if (!selectedVehicleForRoute) return;
+    try {
+      setSavingRoute(true);
+      const trimmed = newRouteNumber.trim();
+      await updateVehicle(selectedVehicleForRoute.uuid, {
+        routeNumber: trimmed,
+      });
+
+      setVehicles((prev) =>
+        prev.map((v) =>
+          v.uuid === selectedVehicleForRoute.uuid
+            ? { ...v, routeNumber: trimmed || undefined }
+            : v,
+        ),
+      );
+
+      setIsEditRouteModalVisible(false);
+      Alert.alert(
+        'Ruta Actualizada',
+        trimmed
+          ? `Se ha asignado la ruta "${trimmed}" a la unidad ${selectedVehicleForRoute.vehicleMake} ${selectedVehicleForRoute.vehicleModel}.`
+          : 'Se ha removido la ruta asignada a la unidad.',
+      );
+    } catch (err: any) {
+      console.error('[Dashboard] Error actualizando ruta:', err);
+      Alert.alert(
+        'Error',
+        err.message || 'No se pudo actualizar la ruta del vehículo.',
+      );
+    } finally {
+      setSavingRoute(false);
+    }
+  };
 
   const slideAnim = useRef(new Animated.Value(0)).current;
   const scrollTimeoutRef = useRef<any>(null);
@@ -492,44 +546,41 @@ export default function VehicleOwnerDashboard() {
                   </View>
                 </View>
 
-                {vehicle.routeNumber ? (
-                  <View
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      marginTop: 8,
-                      backgroundColor: '#F1F5F9',
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 6,
-                      alignSelf: 'flex-start',
-                      gap: 4,
-                    }}
-                  >
-                    <Ionicons
-                      name="trail-sign-outline"
-                      size={13}
-                      color="#475569"
-                    />
+                {/* Badge Interactivo de Ruta */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.routeBadgePressable,
+                    pressed && { opacity: 0.75, transform: [{ scale: 0.98 }] },
+                  ]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handleOpenEditRoute(vehicle);
+                  }}
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name="trail-sign-outline"
+                    size={14}
+                    color="#2563EB"
+                  />
+                  <Text style={styles.routeBadgeLabel}>
+                    Ruta:{' '}
                     <Text
-                      style={{
-                        fontSize: 12,
-                        color: '#475569',
-                        fontWeight: '500',
-                      }}
+                      style={[
+                        styles.routeBadgeValue,
+                        !vehicle.routeNumber && {
+                          color: '#94A3B8',
+                          fontStyle: 'italic',
+                        },
+                      ]}
                     >
-                      Ruta:{' '}
-                      <Text
-                        style={{
-                          color: '#0F172A',
-                          fontWeight: '700',
-                        }}
-                      >
-                        {vehicle.routeNumber}
-                      </Text>
+                      {vehicle.routeNumber || 'Sin asignar'}
                     </Text>
+                  </Text>
+                  <View style={styles.routeEditIconCircle}>
+                    <Ionicons name="pencil" size={10} color="#2563EB" />
                   </View>
-                ) : null}
+                </Pressable>
 
                 {(vehicle.status === 'rejected' ||
                   vehicle.status === 'suspended') &&
@@ -681,6 +732,115 @@ export default function VehicleOwnerDashboard() {
             </Pressable>
           </View>
         </View>
+      </Modal>
+
+      {/* ── MODAL EDITAR RUTA DE LA UNIDAD ── */}
+      <Modal
+        visible={isEditRouteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!savingRoute) setIsEditRouteModalVisible(false);
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalTitleRow}>
+                  <View style={styles.routeModalIconBox}>
+                    <Ionicons
+                      name="trail-sign"
+                      size={20}
+                      color={tokens.colors.primary}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.modalTitle, { color: '#18243E' }]}>
+                      Editar Ruta
+                    </Text>
+                    <Text style={styles.routeModalSubtitle} numberOfLines={1}>
+                      {selectedVehicleForRoute?.vehicleMake}{' '}
+                      {selectedVehicleForRoute?.vehicleModel} (
+                      {selectedVehicleForRoute?.licensePlate})
+                    </Text>
+                  </View>
+                </View>
+                <Pressable
+                  onPress={() => setIsEditRouteModalVisible(false)}
+                  disabled={savingRoute}
+                  hitSlop={10}
+                >
+                  <Ionicons name="close" size={22} color="#64748B" />
+                </Pressable>
+              </View>
+
+              <View style={{ marginTop: 8 }}>
+                <Text style={styles.modalLabel}>
+                  NÚMERO O NOMBRE DE LA RUTA
+                </Text>
+                <View style={styles.routeInputCard}>
+                  <Ionicons
+                    name="trail-sign-outline"
+                    size={18}
+                    color="#64748B"
+                    style={{ marginRight: 10 }}
+                  />
+                  <TextInput
+                    style={styles.routeInput}
+                    placeholder="Ej. 792, Ruta L1, Troncal 5..."
+                    placeholderTextColor="#94A3B8"
+                    value={newRouteNumber}
+                    onChangeText={setNewRouteNumber}
+                    autoCapitalize="characters"
+                    editable={!savingRoute}
+                  />
+                  {newRouteNumber.length > 0 && !savingRoute && (
+                    <Pressable
+                      onPress={() => setNewRouteNumber('')}
+                      hitSlop={8}
+                    >
+                      <Ionicons name="close-circle" size={18} color="#94A3B8" />
+                    </Pressable>
+                  )}
+                </View>
+
+                <Text style={styles.routeHelpText}>
+                  Esta ruta aparecerá en el dashboard de tus conductores y se
+                  asociará a los cobros emitidos por esta unidad.
+                </Text>
+
+                <View style={styles.routeModalButtons}>
+                  <Pressable
+                    style={styles.routeCancelBtn}
+                    onPress={() => setIsEditRouteModalVisible(false)}
+                    disabled={savingRoute}
+                  >
+                    <Text style={styles.routeCancelBtnText}>Cancelar</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={[
+                      styles.routeSaveBtn,
+                      savingRoute && { opacity: 0.8 },
+                    ]}
+                    onPress={handleSaveRoute}
+                    disabled={savingRoute}
+                  >
+                    {savingRoute ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.routeSaveBtnText}>Guardar Ruta</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -1061,6 +1221,109 @@ const styles = StyleSheet.create({
   },
   modalCloseBtnText: {
     fontSize: 15,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#FFFFFF',
+  },
+  routeBadgePressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  routeBadgeLabel: {
+    fontSize: 12,
+    color: '#1E40AF',
+    fontFamily: tokens.typography.fontFamily.medium,
+  },
+  routeBadgeValue: {
+    color: '#1E3A8A',
+    fontFamily: tokens.typography.fontFamily.bold,
+  },
+  routeEditIconCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
+  },
+  routeModalIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  routeModalSubtitle: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  routeInputCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    paddingHorizontal: 14,
+    height: 50,
+    marginBottom: 8,
+  },
+  routeInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#0F172A',
+  },
+  routeHelpText: {
+    fontSize: 11.5,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#64748B',
+    lineHeight: 16,
+    marginBottom: 18,
+  },
+  routeModalButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  routeCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+  },
+  routeCancelBtnText: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#64748B',
+  },
+  routeSaveBtn: {
+    flex: 1.5,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: tokens.colors.primary,
+  },
+  routeSaveBtnText: {
+    fontSize: 14,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#FFFFFF',
   },

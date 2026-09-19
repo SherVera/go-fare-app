@@ -134,11 +134,44 @@ export function PendingApprovalScreen({
 
       setStatus('pending');
 
-      // Si no tiene perfil de dueño o no ha solicitado ser dueño (pasajero estándar)
-      if (!ownerProfile || ownerProfile.status === 'not_applied') {
+      const isOwnerRole =
+        cachedRole === 'transport_owner' ||
+        cachedRole === 'vehicle_owner' ||
+        cachedRole === 'owner' ||
+        (profile as any)?.roles?.some((r: any) => {
+          const name = (r?.name || r || '').toLowerCase();
+          return (
+            name === 'transport_owner' ||
+            name === 'vehicle_owner' ||
+            name === 'owner'
+          );
+        });
+
+      if (isOwnerRole) {
+        // Si tiene el rol de dueño y no está suspendido, rechazado ni en revisión explícita
+        if (
+          resolvedStatus !== 'suspended' &&
+          resolvedStatus !== 'rejected' &&
+          resolvedStatus !== 'pending_review'
+        ) {
+          setStatus('approved');
+          if (onApproved) {
+            onApproved();
+          } else {
+            router.replace('/vehicle-owner/dashboard');
+          }
+          return;
+        }
+      }
+
+      // Si no es dueño ni tiene solicitud (pasajero estándar)
+      if (
+        !isOwnerRole &&
+        (!ownerProfile || ownerProfile.status === 'not_applied')
+      ) {
         router.replace('/(tabs)');
       }
-    } catch (_) {}
+    } catch {}
   }, [onApproved, router, userEmail]);
 
   useEffect(() => {

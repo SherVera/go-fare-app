@@ -21,8 +21,18 @@ export default function VehicleOwnerLayout() {
         ownerProfile &&
         (ownerProfile.uuid || ownerProfile.id || ownerProfile.status)
       ) {
-        setIsApproved(ownerProfile.status === 'approved');
-        return;
+        if (ownerProfile.status === 'approved') {
+          setIsApproved(true);
+          return;
+        }
+        if (
+          ownerProfile.status === 'suspended' ||
+          ownerProfile.status === 'rejected' ||
+          ownerProfile.status === 'pending_review'
+        ) {
+          setIsApproved(false);
+          return;
+        }
       }
 
       // 2. Fallback: perfil general y roles
@@ -38,6 +48,15 @@ export default function VehicleOwnerLayout() {
         return;
       }
 
+      const isOwnerRole = roles.some((r: any) => {
+        const name = (r?.name || r || '').toLowerCase();
+        return (
+          name === 'transport_owner' ||
+          name === 'vehicle_owner' ||
+          name === 'owner'
+        );
+      });
+
       const ownerObj =
         (profile as any)?.transportOwner || (profile as any)?.transport_owner;
       const status =
@@ -45,7 +64,26 @@ export default function VehicleOwnerLayout() {
         (profile as any)?.ownerStatus ||
         (profile as any)?.status;
 
-      setIsApproved(status === 'approved');
+      if (status === 'approved') {
+        setIsApproved(true);
+        return;
+      }
+      if (
+        status === 'suspended' ||
+        status === 'rejected' ||
+        status === 'pending_review'
+      ) {
+        setIsApproved(false);
+        return;
+      }
+
+      // Si tiene el rol de socio/dueño asignado en backend y no está suspendido/rechazado
+      if (isOwnerRole) {
+        setIsApproved(true);
+        return;
+      }
+
+      setIsApproved(false);
     } catch (err) {
       console.warn('[VehicleOwnerLayout] Error checking approval status:', err);
       setIsApproved((prev) => (prev !== null ? prev : false));
@@ -113,7 +151,7 @@ export default function VehicleOwnerLayout() {
         name="dashboard"
         options={{
           title: 'BUSES',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'bus' : 'bus-outline'}
               size={24}
@@ -126,7 +164,7 @@ export default function VehicleOwnerLayout() {
         name="earnings"
         options={{
           title: 'INGRESOS',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'analytics' : 'analytics-outline'}
               size={24}
@@ -139,7 +177,7 @@ export default function VehicleOwnerLayout() {
         name="drivers"
         options={{
           title: 'CONDUCTORES',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'people' : 'people-outline'}
               size={24}
@@ -152,7 +190,7 @@ export default function VehicleOwnerLayout() {
         name="profile"
         options={{
           title: 'PERFIL',
-          tabBarIcon: ({ color, size, focused }) => (
+          tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'person' : 'person-outline'}
               size={24}
