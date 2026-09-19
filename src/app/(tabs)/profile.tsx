@@ -4,7 +4,7 @@ import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,6 +41,7 @@ export default function ProfileScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const router = useRouter();
+  const isRedirectingRef = useRef(false);
 
   const fetchUserData = useCallback(async () => {
     const authStatus = await verifyAuthStatus();
@@ -141,15 +142,29 @@ export default function ProfileScreen() {
       await SecureStore.setItemAsync('user_role', newRole);
 
       if (isAdmin) {
-        console.log('[Profile] User is platform admin, redirecting...');
-        router.replace('/admin/dashboard' as any);
+        if (!isRedirectingRef.current) {
+          isRedirectingRef.current = true;
+          console.log('[Profile] User is platform admin, redirecting...');
+          router.replace('/admin/dashboard' as any);
+        }
+        return;
       } else if (isOwner) {
-        console.log('[Profile] User is transport owner, redirecting...');
-        router.replace('/vehicle-owner/dashboard' as any);
+        if (!isRedirectingRef.current) {
+          isRedirectingRef.current = true;
+          console.log('[Profile] User is transport owner, redirecting...');
+          router.replace('/vehicle-owner/dashboard' as any);
+        }
+        return;
       } else if (isDriver) {
-        console.log('[Profile] User is driver, redirecting...');
-        router.replace('/driver/dashboard' as any);
+        if (!isRedirectingRef.current) {
+          isRedirectingRef.current = true;
+          console.log('[Profile] User is driver, redirecting...');
+          router.replace('/driver/dashboard' as any);
+        }
+        return;
       }
+
+      isRedirectingRef.current = false;
     } catch (error: any) {
       console.log(
         '[Profile] Error al obtener datos del backend:',

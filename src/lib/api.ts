@@ -1612,6 +1612,29 @@ export async function deleteVehicle(uuid: string): Promise<any> {
 }
 
 /**
+ * Actualiza los datos de un vehículo (por ejemplo, el número de ruta / concesión).
+ */
+export async function updateVehicle(
+  uuid: string,
+  updateData: {
+    routeNumber?: string;
+    brand?: string;
+    model?: string;
+    year?: number;
+    color?: string;
+    capacity?: number;
+  },
+): Promise<any> {
+  return await fetchWithAuth(`/vehicles/${uuid}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updateData),
+  });
+}
+
+/**
  * Registra un nuevo documento legal de conductor o vehículo.
  */
 export async function submitLegalDocument(requestData: {

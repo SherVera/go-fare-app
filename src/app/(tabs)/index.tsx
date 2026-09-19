@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -35,6 +35,7 @@ export default function HomeDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showPhoneLink, setShowPhoneLink] = useState(false);
+  const isRedirectingRef = useRef(false);
 
   const fetchUserData = useCallback(async () => {
     // 1. Verificar estrictamente estado de autenticación y vigencia del token
@@ -194,15 +195,29 @@ export default function HomeDashboard() {
       await SecureStore.setItemAsync('user_role', newRole);
 
       if (newRole === 'platform_admin' || newRole === 'admin') {
-        console.log('[Home] User is platform admin, redirecting...');
-        router.replace('/admin/dashboard' as any);
+        if (!isRedirectingRef.current) {
+          isRedirectingRef.current = true;
+          console.log('[Home] User is platform admin, redirecting...');
+          router.replace('/admin/dashboard' as any);
+        }
+        return;
       } else if (newRole === 'transport_owner') {
-        console.log('[Home] User is transport owner, redirecting...');
-        router.replace('/vehicle-owner/dashboard' as any);
+        if (!isRedirectingRef.current) {
+          isRedirectingRef.current = true;
+          console.log('[Home] User is transport owner, redirecting...');
+          router.replace('/vehicle-owner/dashboard' as any);
+        }
+        return;
       } else if (newRole === 'driver') {
-        console.log('[Home] User is driver, redirecting...');
-        router.replace('/driver/dashboard' as any);
+        if (!isRedirectingRef.current) {
+          isRedirectingRef.current = true;
+          console.log('[Home] User is driver, redirecting...');
+          router.replace('/driver/dashboard' as any);
+        }
+        return;
       }
+
+      isRedirectingRef.current = false;
     } catch (error: any) {
       console.log(
         '[Home] Error al obtener datos del backend:',

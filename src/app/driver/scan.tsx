@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   getAllTransactions,
   getAllUsers,
+  getAssignedVehicles,
   getCurrentSession,
   getFareAccountByUserId,
   getSessionQr,
@@ -34,6 +35,9 @@ export default function DriverScanScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [activeSession, setActiveSession] = useState<any | null>(null);
+  // Indica si el conductor tiene al menos una unidad asignada en la base de datos.
+  // Si es false, toda la operación está bloqueada.
+  const [hasAssignedVehicle, setHasAssignedVehicle] = useState(true);
 
   // QR dinámico de la sesión
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
@@ -150,6 +154,19 @@ export default function DriverScanScreen() {
   const checkServiceStatus = useCallback(async () => {
     try {
       setLoading(true);
+
+      // Verificar primero si el conductor tiene unidades asignadas.
+      // Sin unidad asignada, bloquear toda la pantalla de cobro.
+      const vehicles = await getAssignedVehicles();
+      if (vehicles.length === 0) {
+        setHasAssignedVehicle(false);
+        setActiveSession(null);
+        setQrCodeData(null);
+        setRecentPayments([]);
+        return;
+      }
+      setHasAssignedVehicle(true);
+
       const session = await getCurrentSession();
       if (session && session.status === 'open') {
         setActiveSession(session);
@@ -252,6 +269,22 @@ export default function DriverScanScreen() {
 
   // Validación manual de código de boleto (pasaje QR)
   const handleManualValidateTicket = async (code: string) => {
+    // Bloquear validación manual si no hay unidad asignada
+    if (!hasAssignedVehicle) {
+      Alert.alert(
+        'Sin Unidad Asignada',
+        'No puedes validar tickets sin una unidad de transporte asignada a tu cuenta.',
+      );
+      return;
+    }
+    // Bloquear validación manual si no hay turno activo
+    if (!activeSession) {
+      Alert.alert(
+        'Sin Turno Activo',
+        'Debes iniciar tu turno de trabajo desde la pestaña de Inicio para poder validar tickets.',
+      );
+      return;
+    }
     if (manualProcessing) return;
     const sanitizedCode = code.trim();
     if (!sanitizedCode) {
@@ -326,7 +359,44 @@ export default function DriverScanScreen() {
 
   const isEnServicio = activeSession?.status === 'open';
 
-  // Vista fuera de servicio
+  // Vista de bloqueo: sin unidad asignada
+  if (!hasAssignedVehicle) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <StatusBar style="dark" />
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Cobrar Pasaje</Text>
+        </View>
+        <View style={[styles.center, { padding: 32 }]}>
+          <View
+            style={[styles.offlineIconWrapper, { backgroundColor: '#FEF2F2' }]}
+          >
+            <Ionicons name="lock-closed" size={48} color="#DC2626" />
+          </View>
+          <Text style={[styles.offlineTitle, { color: '#DC2626' }]}>
+            Sin Unidad Asignada
+          </Text>
+          <Text style={styles.offlineSubtitle}>
+            No puedes cobrar pasajes ni generar códigos QR sin una unidad de
+            transporte asignada a tu cuenta.{`\n\n`}Solicita a tu transportista
+            que te asigne un vehículo en el sistema para poder iniciar tu turno.
+          </Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.offlineBtn,
+              { backgroundColor: '#DC2626' },
+              pressed && { opacity: 0.85 },
+            ]}
+            onPress={() => router.push('/driver/dashboard')}
+          >
+            <Text style={styles.offlineBtnText}>Ir a Inicio</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Vista fuera de servicio (tiene unidad pero turno no iniciado)
   if (!isEnServicio) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
