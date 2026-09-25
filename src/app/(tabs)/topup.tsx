@@ -5,7 +5,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -265,10 +268,10 @@ export default function TopUpBalanceScreen() {
         Alert.alert('Atención', 'Ingresa una cédula válida.');
         return;
       }
-      if (!/^\d{4,20}$/.test(pmReference.trim())) {
+      if (!/^\d{6}$/.test(pmReference.trim())) {
         Alert.alert(
           'Atención',
-          'Ingresa el número de referencia del Pago Móvil.',
+          'Ingresa los últimos 6 dígitos del número de referencia.',
         );
         return;
       }
@@ -367,9 +370,6 @@ export default function TopUpBalanceScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={tokens.colors.primary} />
-        </Pressable>
         <Text style={styles.headerTitle}>Comprar Tickets</Text>
       </View>
 
@@ -594,23 +594,51 @@ export default function TopUpBalanceScreen() {
         visible={showModal}
         animationType="slide"
         transparent
+        statusBarTranslucent
         onRequestClose={() => {
           if (payStep !== 'processing') setShowModal(false);
         }}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              if (payStep !== 'processing') {
+                Keyboard.dismiss();
+                setShowModal(false);
+              }
+            }}
+          />
           <View style={styles.modalSheet}>
             {/* Header del modal */}
             {payStep !== 'processing' && (
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>
-                  {payStep === 'details'
-                    ? 'Confirmar Compra'
-                    : '¡Compra Exitosa!'}
-                </Text>
+                <View style={styles.modalHeaderLeft}>
+                  <Text style={styles.modalTitle}>
+                    {payStep === 'details'
+                      ? 'Confirmar Compra'
+                      : '¡Compra Exitosa!'}
+                  </Text>
+                  {payStep === 'details' && (
+                    <Text style={styles.modalSubtitle}>
+                      {selectedPkg.label} • Bs.{' '}
+                      {selectedPkg.amount.toFixed(2).replace('.', ',')}
+                    </Text>
+                  )}
+                </View>
                 {payStep === 'details' && (
-                  <Pressable onPress={() => setShowModal(false)} hitSlop={10}>
-                    <Ionicons name="close" size={24} color="#6B7280" />
+                  <Pressable
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setShowModal(false);
+                    }}
+                    hitSlop={12}
+                    style={styles.modalCloseBtn}
+                  >
+                    <Ionicons name="close" size={22} color="#64748B" />
                   </Pressable>
                 )}
               </View>
@@ -619,123 +647,113 @@ export default function TopUpBalanceScreen() {
             {/* PASO 1: Detalles de pago */}
             {payStep === 'details' && (
               <ScrollView
-                showsVerticalScrollIndicator={false}
+                style={{ flexShrink: 1 }}
+                contentContainerStyle={styles.modalScrollContent}
+                showsVerticalScrollIndicator={true}
                 keyboardShouldPersistTaps="handled"
+                automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
               >
-                {/* Resumen de compra */}
-                <View style={styles.purchaseSummaryBox}>
-                  <MaterialCommunityIcons
-                    name="ticket-confirmation"
-                    size={32}
-                    color={tokens.colors.primary}
-                  />
-                  <View style={{ marginLeft: 12 }}>
-                    <Text style={styles.purchaseSummaryTitle}>
-                      Compra de Tickets
-                    </Text>
-                    <Text style={styles.purchaseSummaryPrice}>
-                      {selectedPkg.label}
-                    </Text>
-                  </View>
-                </View>
-
                 {/* Formulario según método */}
                 {selectedMethod === 'pago_movil' && (
                   <View style={styles.formContainer}>
                     <View style={styles.targetBankCard}>
-                      <Text style={styles.targetBankTitle}>
-                        DATOS DESTINO DE PAGO MÓVIL
-                      </Text>
-
-                      <View style={styles.targetItemRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.targetItemLabel}>
-                            Banco Destino:
+                      <View style={styles.targetBankHeaderRow}>
+                        <View style={styles.targetBankTitleWrap}>
+                          <Ionicons
+                            name="information-circle"
+                            size={16}
+                            color="#0284C7"
+                          />
+                          <Text style={styles.targetBankTitle}>
+                            DATOS DESTINO PAGO MÓVIL
                           </Text>
-                          <Text style={styles.targetItemValue}>BNC (0191)</Text>
                         </View>
                         <Pressable
-                          style={styles.copyChip}
+                          style={({ pressed }) => [
+                            styles.copyAllTopBtn,
+                            pressed && { opacity: 0.75 },
+                          ]}
+                          onPress={copyAllPagoMovil}
+                        >
+                          <Ionicons
+                            name="copy-outline"
+                            size={12}
+                            color="#0284C7"
+                          />
+                          <Text style={styles.copyAllTopBtnText}>
+                            Copiar Todo
+                          </Text>
+                        </Pressable>
+                      </View>
+
+                      {/* Cuadrícula 2x2 compacta de datos de pago móvil */}
+                      <View style={styles.targetGrid}>
+                        {/* Banco */}
+                        <Pressable
+                          style={styles.targetGridItem}
                           onPress={() =>
                             copyToClipboard('BNC', 'Banco Destino')
                           }
                         >
-                          <Ionicons
-                            name="copy-outline"
-                            size={14}
-                            color={tokens.colors.primary}
-                          />
-                          <Text style={styles.copyChipText}>Copiar</Text>
+                          <Text style={styles.targetGridLabel}>BANCO</Text>
+                          <View style={styles.targetGridValueRow}>
+                            <Text style={styles.targetGridValue}>
+                              BNC (0191)
+                            </Text>
+                            <Ionicons
+                              name="copy-outline"
+                              size={12}
+                              color="#0284C7"
+                            />
+                          </View>
                         </Pressable>
-                      </View>
 
-                      <View style={styles.targetItemRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.targetItemLabel}>
-                            RIF Destino:
-                          </Text>
-                          <Text style={styles.targetItemValue}>
-                            J-501928340
-                          </Text>
-                        </View>
+                        {/* RIF */}
                         <Pressable
-                          style={styles.copyChip}
+                          style={styles.targetGridItem}
                           onPress={() =>
                             copyToClipboard('J501928340', 'RIF Destino')
                           }
                         >
-                          <Ionicons
-                            name="copy-outline"
-                            size={14}
-                            color={tokens.colors.primary}
-                          />
-                          <Text style={styles.copyChipText}>Copiar</Text>
+                          <Text style={styles.targetGridLabel}>RIF</Text>
+                          <View style={styles.targetGridValueRow}>
+                            <Text style={styles.targetGridValue}>
+                              J-501928340
+                            </Text>
+                            <Ionicons
+                              name="copy-outline"
+                              size={12}
+                              color="#0284C7"
+                            />
+                          </View>
                         </Pressable>
-                      </View>
 
-                      <View style={styles.targetItemRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.targetItemLabel}>
-                            Teléfono Destino:
-                          </Text>
-                          <Text style={styles.targetItemValue}>
-                            0412-5551234
-                          </Text>
-                        </View>
+                        {/* Teléfono */}
                         <Pressable
-                          style={styles.copyChip}
+                          style={styles.targetGridItem}
                           onPress={() =>
                             copyToClipboard('04125551234', 'Teléfono Destino')
                           }
                         >
-                          <Ionicons
-                            name="copy-outline"
-                            size={14}
-                            color={tokens.colors.primary}
-                          />
-                          <Text style={styles.copyChipText}>Copiar</Text>
+                          <Text style={styles.targetGridLabel}>TELÉFONO</Text>
+                          <View style={styles.targetGridValueRow}>
+                            <Text style={styles.targetGridValue}>
+                              0412-5551234
+                            </Text>
+                            <Ionicons
+                              name="copy-outline"
+                              size={12}
+                              color="#0284C7"
+                            />
+                          </View>
                         </Pressable>
-                      </View>
 
-                      <View
-                        style={[styles.targetItemRow, { borderBottomWidth: 0 }]}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.targetItemLabel}>
-                            Monto exacto:
-                          </Text>
-                          <Text
-                            style={[
-                              styles.targetItemValue,
-                              { color: tokens.colors.primary },
-                            ]}
-                          >
-                            Bs.{' '}
-                            {selectedPkg.amount.toFixed(2).replace('.', ',')}
-                          </Text>
-                        </View>
+                        {/* Monto Exacto */}
                         <Pressable
-                          style={styles.copyChip}
+                          style={[
+                            styles.targetGridItem,
+                            styles.targetGridItemHighlight,
+                          ]}
                           onPress={() =>
                             copyToClipboard(
                               selectedPkg.amount.toFixed(2).replace('.', ','),
@@ -743,24 +761,22 @@ export default function TopUpBalanceScreen() {
                             )
                           }
                         >
-                          <Ionicons
-                            name="copy-outline"
-                            size={14}
-                            color={tokens.colors.primary}
-                          />
-                          <Text style={styles.copyChipText}>Copiar</Text>
+                          <Text style={styles.targetGridLabelHighlight}>
+                            MONTO EXACTO
+                          </Text>
+                          <View style={styles.targetGridValueRow}>
+                            <Text style={styles.targetGridValueHighlight}>
+                              Bs.{' '}
+                              {selectedPkg.amount.toFixed(2).replace('.', ',')}
+                            </Text>
+                            <Ionicons
+                              name="copy-outline"
+                              size={12}
+                              color={tokens.colors.primary}
+                            />
+                          </View>
                         </Pressable>
                       </View>
-
-                      <Pressable
-                        style={styles.copyAllBtn}
-                        onPress={copyAllPagoMovil}
-                      >
-                        <Ionicons name="copy" size={16} color="#FFFFFF" />
-                        <Text style={styles.copyAllBtnText}>
-                          Copiar Todos los Datos
-                        </Text>
-                      </Pressable>
                     </View>
 
                     <Text style={styles.inputLabel}>BANCO EMISOR</Text>
@@ -768,45 +784,70 @@ export default function TopUpBalanceScreen() {
                       style={styles.bankSelectBox}
                       onPress={() => setShowBankModal(true)}
                     >
-                      <Text
-                        style={[
-                          styles.bankSelectText,
-                          !pmBank && { color: '#94A3B8' },
-                        ]}
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          flex: 1,
+                        }}
                       >
-                        {pmBank || 'Seleccione el Banco'}
-                      </Text>
-                      <Ionicons name="chevron-down" size={20} color="#64748B" />
+                        <Ionicons
+                          name="business-outline"
+                          size={18}
+                          color={pmBank ? tokens.colors.primary : '#94A3B8'}
+                          style={{ marginRight: 10 }}
+                        />
+                        <Text
+                          style={[
+                            styles.bankSelectText,
+                            !pmBank && { color: '#94A3B8' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {pmBank || 'Selecciona tu banco emisor'}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-down" size={18} color="#64748B" />
                     </Pressable>
 
-                    <Text style={styles.inputLabel}>TELÉFONO</Text>
-                    <TextInput
-                      style={styles.inputField}
-                      placeholder="04XX-XXXXXXX"
-                      placeholderTextColor="#9CA3AF"
-                      keyboardType="phone-pad"
-                      value={pmPhone}
-                      onChangeText={setPmPhone}
-                    />
+                    <View style={styles.twoColRow}>
+                      <View style={styles.twoColItem}>
+                        <Text style={styles.inputLabel}>TELÉFONO EMISOR</Text>
+                        <TextInput
+                          style={styles.inputField}
+                          placeholder="04XX-XXXXXXX"
+                          placeholderTextColor="#9CA3AF"
+                          keyboardType="phone-pad"
+                          value={pmPhone}
+                          onChangeText={setPmPhone}
+                        />
+                      </View>
+                      <View style={styles.twoColItem}>
+                        <Text style={styles.inputLabel}>CÉDULA EMISOR</Text>
+                        <TextInput
+                          style={styles.inputField}
+                          placeholder="Ej: 12345678"
+                          placeholderTextColor="#9CA3AF"
+                          keyboardType="number-pad"
+                          value={pmIdNumber}
+                          onChangeText={setPmIdNumber}
+                        />
+                      </View>
+                    </View>
 
-                    <Text style={styles.inputLabel}>CÉDULA DE IDENTIDAD</Text>
+                    <Text style={styles.inputLabel}>
+                      NÚMERO DE REFERENCIA (ÚLTIMOS 6 DÍGITOS)
+                    </Text>
                     <TextInput
                       style={styles.inputField}
-                      placeholder="Ej: 12345678"
+                      placeholder="Últimos 6 dígitos (Ej: 123456)"
                       placeholderTextColor="#9CA3AF"
                       keyboardType="number-pad"
-                      value={pmIdNumber}
-                      onChangeText={setPmIdNumber}
-                    />
-
-                    <Text style={styles.inputLabel}>NÚMERO DE REFERENCIA</Text>
-                    <TextInput
-                      style={styles.inputField}
-                      placeholder="Ej: 00123456"
-                      placeholderTextColor="#9CA3AF"
-                      keyboardType="number-pad"
+                      maxLength={6}
                       value={pmReference}
-                      onChangeText={setPmReference}
+                      onChangeText={(text) =>
+                        setPmReference(text.replace(/\D/g, '').slice(0, 6))
+                      }
                     />
                   </View>
                 )}
@@ -863,15 +904,24 @@ export default function TopUpBalanceScreen() {
                 )}
 
                 <Pressable
-                  style={styles.confirmBtn}
+                  style={({ pressed }) => [
+                    styles.confirmBtn,
+                    pressed && { opacity: 0.9, transform: [{ scale: 0.99 }] },
+                  ]}
                   onPress={handleConfirmPurchase}
                 >
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={20}
+                    color="#FFFFFF"
+                    style={{ marginRight: 8 }}
+                  />
                   <Text style={styles.confirmBtnText}>
                     Confirmar Compra — Bs.{' '}
                     {selectedPkg.amount.toFixed(2).replace('.', ',')}
                   </Text>
                 </Pressable>
-                <View style={{ height: 24 }} />
+                <View style={{ height: 40 }} />
               </ScrollView>
             )}
 
@@ -950,7 +1000,7 @@ export default function TopUpBalanceScreen() {
               </View>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Modal de selección de banco emisor */}
@@ -978,19 +1028,19 @@ const styles = StyleSheet.create({
   },
   container: { flex: 1, backgroundColor: '#F8FAFC' },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
-  backButton: { marginRight: 12 },
   headerTitle: {
     fontSize: 18,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#18243E',
+    textAlign: 'center',
   },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20 },
 
@@ -1283,135 +1333,170 @@ const styles = StyleSheet.create({
   // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.5)',
+    backgroundColor: 'rgba(15,23,42,0.6)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
     paddingTop: 8,
-    maxHeight: '90%',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    maxHeight: '92%',
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 20,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
-    marginBottom: 12,
+    marginBottom: 8,
+  },
+  modalHeaderLeft: {
+    flex: 1,
   },
   modalTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#1E293B',
+    color: '#0F172A',
   },
-
-  // Resumen en modal
-  purchaseSummaryBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F0F9FF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 20,
-  },
-  purchaseSummaryTitle: {
-    fontSize: 16,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: '#1E293B',
-    marginBottom: 2,
-  },
-  purchaseSummaryPrice: {
-    fontSize: 22,
-    fontFamily: tokens.typography.fontFamily.black,
+  modalSubtitle: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.medium,
     color: tokens.colors.primary,
+    marginTop: 2,
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  modalScrollContent: {
+    paddingBottom: 40,
+    paddingTop: 4,
   },
 
   // Formulario
   formContainer: { marginBottom: 8 },
   targetBankCard: {
     backgroundColor: '#F0F9FF',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#BAE6FD',
-    marginBottom: 16,
-  },
-  targetBankTitle: {
-    fontSize: 10,
-    fontFamily: tokens.typography.fontFamily.black,
-    color: '#0284C7',
-    letterSpacing: 0.8,
     marginBottom: 12,
   },
-  targetItemRow: {
+  targetBankHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingBottom: 6,
     borderBottomWidth: 1,
     borderBottomColor: '#E0F2FE',
   },
-  targetItemLabel: {
+  targetBankTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  targetBankTitle: {
     fontSize: 11,
-    color: '#64748B',
-    fontFamily: tokens.typography.fontFamily.medium,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: '#0284C7',
+    letterSpacing: 0.6,
   },
-  targetItemValue: {
-    fontSize: 14,
-    color: '#0F172A',
-    fontFamily: tokens.typography.fontFamily.bold,
-    marginTop: 1,
-  },
-  copyChip: {
+  copyAllTopBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#BAE6FD',
+    gap: 4,
   },
-  copyChipText: {
+  copyAllTopBtnText: {
     fontSize: 11,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.primary,
-    marginLeft: 4,
+    color: '#0284C7',
   },
-  copyAllBtn: {
+  targetGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  targetGridItem: {
+    width: '48.5%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#E0F2FE',
+  },
+  targetGridItemHighlight: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#93C5FD',
+  },
+  targetGridLabel: {
+    fontSize: 9.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#64748B',
+    marginBottom: 2,
+    letterSpacing: 0.4,
+  },
+  targetGridLabelHighlight: {
+    fontSize: 9.5,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: tokens.colors.primary,
+    marginBottom: 2,
+    letterSpacing: 0.4,
+  },
+  targetGridValueRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: tokens.colors.primary,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginTop: 14,
+    justifyContent: 'space-between',
   },
-  copyAllBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
+  targetGridValue: {
+    fontSize: 12.5,
     fontFamily: tokens.typography.fontFamily.bold,
-    marginLeft: 6,
+    color: '#0F172A',
   },
-  inputLabel: {
-    fontSize: 10,
+  targetGridValueHighlight: {
+    fontSize: 12.5,
     fontFamily: tokens.typography.fontFamily.black,
-    color: '#8594AB',
-    letterSpacing: 0.8,
-    marginBottom: 6,
-    marginTop: 12,
+    color: tokens.colors.primary,
+  },
+
+  inputLabel: {
+    fontSize: 10.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#64748B',
+    letterSpacing: 0.6,
+    marginBottom: 5,
+    marginTop: 10,
   },
   inputField: {
     backgroundColor: '#F8FAFC',
     borderRadius: 14,
-    paddingHorizontal: 16,
-    height: 50,
+    paddingHorizontal: 14,
+    height: 48,
     fontFamily: tokens.typography.fontFamily.medium,
-    fontSize: 15,
+    fontSize: 14.5,
     color: '#1E293B',
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -1422,18 +1507,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#F8FAFC',
     borderRadius: 14,
-    paddingHorizontal: 16,
-    height: 50,
+    paddingHorizontal: 14,
+    height: 48,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   bankSelectText: {
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#0F172A',
     flex: 1,
-    marginRight: 8,
   },
   bankPickerRow: {
     flexDirection: 'row',
@@ -1459,17 +1543,18 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   bankBubbleTextActive: { color: tokens.colors.primary },
-  twoColRow: { flexDirection: 'row', gap: 12 },
+  twoColRow: { flexDirection: 'row', gap: 10 },
   twoColItem: { flex: 1 },
 
   // Botón de confirmar
   confirmBtn: {
+    flexDirection: 'row',
     backgroundColor: tokens.colors.primary,
     borderRadius: 18,
-    height: 56,
+    height: 54,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    marginTop: 18,
     shadowColor: tokens.colors.primary,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,

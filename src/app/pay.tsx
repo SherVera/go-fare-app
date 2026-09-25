@@ -21,6 +21,7 @@ import {
   getTicketByQr,
   previewRide,
   resolveDriverAndVehicleFromBackend,
+  saveRidePaymentMeta,
   validateTicketByQr,
 } from '@/lib/api';
 import { auth } from '@/lib/firebase';
@@ -61,6 +62,17 @@ export default function PayTripScreen() {
 
       // Ejecutar el cobro en el backend
       const response = await confirmRide(scannedQr);
+
+      if (response?.rideUuid) {
+        saveRidePaymentMeta({
+          rideUuid: response.rideUuid,
+          driverName: driverName || 'Conductor de Unidad',
+          routeName,
+          vehiclePlate,
+          unitNumber,
+          timestamp: Date.now(),
+        }).catch((e) => console.warn('[Pay] Error saving ride meta:', e));
+      }
 
       setRideUuid(response.rideUuid);
       setBalance(response.balanceFares);

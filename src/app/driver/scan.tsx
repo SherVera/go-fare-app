@@ -4,7 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -39,11 +39,24 @@ export default function DriverScanScreen() {
   // Si es false, toda la operación está bloqueada.
   const [hasAssignedVehicle, setHasAssignedVehicle] = useState(true);
 
-  // QR dinámico de la sesión
-  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
-
   // Lista de cobros validados recientes
   const [recentPayments, setRecentPayments] = useState<any[]>([]);
+
+  // QR dinámico de la sesión y ciclo de actualización automática
+  const QR_ROTATION_INTERVAL = 30; // Rotación automática cada 30 segundos
+  const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number>(QR_ROTATION_INTERVAL);
+  const [isRefreshingQr, setIsRefreshingQr] = useState(false);
+  const activeSessionRef = useRef<any>(activeSession);
+  const recentPaymentsRef = useRef<any[]>(recentPayments);
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
+
+  useEffect(() => {
+    recentPaymentsRef.current = recentPayments;
+  }, [recentPayments]);
 
   // Notificación flotante de cobro recibido
   const [successNotification, setSuccessNotification] = useState<{
@@ -150,6 +163,35 @@ export default function DriverScanScreen() {
     return rides;
   }, []);
 
+  // Renueva el código QR dinámico de la sesión activa
+  const refreshQr = useCallback(async (sessionUuid?: string) => {
+    const targetUuid = sessionUuid || activeSessionRef.current?.uuid;
+    if (!targetUuid) return;
+
+    try {
+      setIsRefreshingQr(true);
+      const qrRes = await getSessionQr(targetUuid);
+      if (qrRes?.qr) {
+        setQrCodeData(qrRes.qr);
+      }
+    } catch (err) {
+      console.warn('[Scan] Error refreshing dynamic QR:', err);
+    } finally {
+      setIsRefreshingQr(false);
+      setSecondsLeft(QR_ROTATION_INTERVAL);
+    }
+  }, []);
+
+  // Renovación manual al presionar el badge
+  const handleManualRefreshQr = useCallback(() => {
+    const session = activeSessionRef.current;
+    if (isRefreshingQr || session?.status !== 'open') return;
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
+    refreshQr(session.uuid);
+  }, [isRefreshingQr, refreshQr]);
+
   // Cargar estado inicial del turno
   const checkServiceStatus = useCallback(async () => {
     try {
@@ -162,6 +204,7 @@ export default function DriverScanScreen() {
         setHasAssignedVehicle(false);
         setActiveSession(null);
         setQrCodeData(null);
+        setSecondsLeft(QR_ROTATION_INTERVAL);
         setRecentPayments([]);
         return;
       }
@@ -173,6 +216,7 @@ export default function DriverScanScreen() {
         // Cargar QR y viajes
         const qrRes = await getSessionQr(session.uuid);
         setQrCodeData(qrRes.qr);
+        setSecondsLeft(QR_ROTATION_INTERVAL);
 
         const rides = await getSessionRides(session.uuid);
         const resolvedRides = await resolveRidesPassengers(rides);
@@ -180,6 +224,7 @@ export default function DriverScanScreen() {
       } else {
         setActiveSession(null);
         setQrCodeData(null);
+        setSecondsLeft(QR_ROTATION_INTERVAL);
         setRecentPayments([]);
       }
     } catch (err) {
@@ -195,7 +240,28 @@ export default function DriverScanScreen() {
     }, [checkServiceStatus]),
   );
 
-  // Polling de pagos y renovación del QR cifrado cada 4 segundos
+  // Temporizador de cuenta regresiva y rotación automática del QR cada 30 segundos
+  useEffect(() => {
+    if (activeSession?.status !== 'open') {
+      setSecondsLeft(QR_ROTATION_INTERVAL);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          // Se agotó el ciclo: renovar el QR automáticamente
+          refreshQr(activeSession.uuid);
+          return QR_ROTATION_INTERVAL;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activeSession?.status, activeSession?.uuid, refreshQr]);
+
+  // Polling de pagos recientes cada 4 segundos
   useEffect(() => {
     if (activeSession?.status !== 'open') return;
 
@@ -210,19 +276,15 @@ export default function DriverScanScreen() {
           return;
         }
 
-        // 2. Renovar el QR dinámico (Omitido para mantener el QR estático)
-        // const qrRes = await getSessionQr(current.uuid);
-        // setQrCodeData(qrRes.qr);
-
-        // 3. Consultar viajes recientes de la sesión en base de datos
+        // 2. Consultar viajes recientes de la sesión en base de datos
         const rides = await getSessionRides(current.uuid);
         const resolvedRides = await resolveRidesPassengers(rides);
 
         // Detectar si hay nuevos cobros para alertas
-        if (resolvedRides.length > recentPayments.length) {
+        const prevPayments = recentPaymentsRef.current;
+        if (resolvedRides.length > prevPayments.length) {
           const newRides = resolvedRides.filter(
-            (r: any) =>
-              !recentPayments.some((prev: any) => prev.uuid === r.uuid),
+            (r: any) => !prevPayments.some((prev: any) => prev.uuid === r.uuid),
           );
 
           for (const newRide of newRides) {
@@ -265,7 +327,7 @@ export default function DriverScanScreen() {
     }, 4000);
 
     return () => clearInterval(pollInterval);
-  }, [activeSession, recentPayments, resolveRidesPassengers]);
+  }, [activeSession?.status, resolveRidesPassengers]);
 
   // Validación manual de código de boleto (pasaje QR)
   const handleManualValidateTicket = async (code: string) => {
@@ -473,6 +535,39 @@ export default function DriverScanScreen() {
             </Text>
           </View>
 
+          {/* Badge de Código Dinámico y Estado de Renovación */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.dynamicBadge,
+              pressed && { opacity: 0.8 },
+            ]}
+            onPress={handleManualRefreshQr}
+            disabled={isRefreshingQr}
+            accessibilityRole="button"
+            accessibilityLabel="Actualizar código QR manualmente"
+          >
+            <View style={styles.dynamicPulseDot} />
+            <Text style={styles.dynamicBadgeText}>
+              {isRefreshingQr
+                ? 'Actualizando código...'
+                : `Código dinámico • Se actualiza en ${secondsLeft}s`}
+            </Text>
+            {isRefreshingQr ? (
+              <ActivityIndicator
+                size="small"
+                color="#0284C7"
+                style={{ marginLeft: 4 }}
+              />
+            ) : (
+              <Ionicons
+                name="sync-outline"
+                size={13}
+                color="#0284C7"
+                style={{ marginLeft: 4 }}
+              />
+            )}
+          </Pressable>
+
           <View style={styles.qrContainer}>
             {qrCodeData ? (
               <Image
@@ -483,12 +578,29 @@ export default function DriverScanScreen() {
                 }}
                 style={styles.qrImage}
                 contentFit="contain"
+                transition={250}
+                cachePolicy="memory-disk"
               />
             ) : (
               <ActivityIndicator size="large" color={tokens.colors.primary} />
             )}
             {/* Indicador de Escaneo Pulsante */}
             <View style={styles.scanPulse} />
+          </View>
+
+          {/* Barra de progreso de rotación automática */}
+          <View style={styles.progressBarBg}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {
+                  width: `${Math.max(
+                    0,
+                    Math.min(100, (secondsLeft / QR_ROTATION_INTERVAL) * 100),
+                  )}%`,
+                },
+              ]}
+            />
           </View>
 
           <Text style={styles.qrFareValue}>
@@ -792,7 +904,7 @@ const styles = StyleSheet.create({
   },
   routeHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 14,
     backgroundColor: '#F0F9FF',
     borderRadius: 16,
     paddingVertical: 10,
@@ -811,6 +923,29 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#0369A1',
     textAlign: 'center',
+  },
+  dynamicBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  dynamicPulseDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    marginRight: 6,
+  },
+  dynamicBadgeText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#0369A1',
   },
   qrContainer: {
     width: 200,
@@ -839,11 +974,24 @@ const styles = StyleSheet.create({
     borderColor: '#0EA5E9',
     opacity: 0.4,
   },
+  progressBarBg: {
+    width: 200,
+    height: 3.5,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 2,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#0EA5E9',
+    borderRadius: 2,
+  },
   qrFareValue: {
     fontSize: 28,
     fontFamily: tokens.typography.fontFamily.black,
     color: '#1E293B',
-    marginTop: 16,
+    marginTop: 12,
     marginBottom: 8,
   },
   qrInstruction: {

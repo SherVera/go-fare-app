@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Image } from 'expo-image';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
@@ -8,6 +7,7 @@ import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -33,12 +33,21 @@ import {
 import { purgeUserSessionAndLogout } from '@/lib/auth-session';
 import { tokens } from '@/theme/tokens';
 
+const getInitials = (fullName?: string) => {
+  if (!fullName) return 'U';
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return 'U';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+};
+
 export default function ProfileScreen() {
   const { isLiteMode, setLiteMode } = useLiteMode();
   const [loggingOut, setLoggingOut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const router = useRouter();
   const isRedirectingRef = useRef(false);
@@ -107,10 +116,7 @@ export default function ProfileScreen() {
         email: backendUser.email || cachedData?.email,
         phoneNumber: backendUser.phoneNumber || cachedData?.phoneNumber || '',
         balance: fareAccountBalance,
-        photoURL:
-          backendUser.profilePhoto ||
-          cachedData?.photoURL ||
-          'https://i.pravatar.cc/150?img=11',
+        photoURL: backendUser.profilePhoto || cachedData?.photoURL || '',
         city: 'Caracas, Venezuela',
         createdAt: backendUser.createdAt,
       };
@@ -219,11 +225,6 @@ export default function ProfileScreen() {
       value: userProfile?.phoneNumber || '...',
       type: 'phone',
     },
-    {
-      label: 'CIUDAD',
-      value: userProfile?.city || 'Caracas, Venezuela',
-      type: 'location',
-    },
   ];
 
   // Ítems del menú — tipados con ProfileMenuItem[]
@@ -233,14 +234,29 @@ export default function ProfileScreen() {
       title: 'Actividad de Viajes',
       subtitle: 'Historial de viajes y boletos',
       iconName: 'bus',
-      onPress: () => router.push('/(tabs)/trips'),
+      onPress: () =>
+        router.push({
+          pathname: '/(tabs)/trips',
+          params: { tab: 'trips' },
+        }),
+    },
+    {
+      id: 'transactions',
+      title: 'Historial de Pagos y Recargas',
+      subtitle: 'Consulta tus recargas, pagos y comprobantes',
+      iconName: 'receipt',
+      onPress: () =>
+        router.push({
+          pathname: '/(tabs)/trips',
+          params: { tab: 'transactions' },
+        }),
     },
     {
       id: 'payments',
       title: 'Métodos de Pago',
       subtitle: 'Visa, Master y Pago Móvil',
       iconName: 'card',
-      onPress: () => {},
+      onPress: () => router.push('/(tabs)/topup'),
     },
     {
       id: 'security',
@@ -266,26 +282,22 @@ export default function ProfileScreen() {
   ];
 
   const handleLogout = () => {
-    Alert.alert('Cerrar Sesión', '¿Estás seguro de que deseas cerrar sesión?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar Sesión',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            setLoggingOut(true);
-            await purgeUserSessionAndLogout();
-            setUserProfile(null);
-            router.replace('/login');
-          } catch (error) {
-            console.error('Error al cerrar sesión:', error);
-            Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
-          } finally {
-            setLoggingOut(false);
-          }
-        },
-      },
-    ]);
+    setShowLogoutModal(true);
+  };
+
+  const confirmLogout = async () => {
+    try {
+      setLoggingOut(true);
+      await purgeUserSessionAndLogout();
+      setUserProfile(null);
+      setShowLogoutModal(false);
+      router.replace('/login');
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+      Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   if (loading) {
@@ -299,10 +311,6 @@ export default function ProfileScreen() {
       {/* ── HEADER ── */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>GoFare</Text>
-        <Image
-          source={{ uri: 'https://i.pravatar.cc/150?img=11' }}
-          style={styles.headerAvatar}
-        />
       </View>
 
       <ScrollView
@@ -323,13 +331,11 @@ export default function ProfileScreen() {
           </Pressable>
 
           <View style={styles.avatarContainer}>
-            <Image
-              source={{
-                uri:
-                  userProfile?.photoURL || 'https://i.pravatar.cc/150?img=11',
-              }}
-              style={styles.profileAvatar}
-            />
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarInitials}>
+                {getInitials(userProfile?.fullName)}
+              </Text>
+            </View>
           </View>
           <Text style={styles.profileName}>
             {userProfile?.fullName || 'Usuario'}
@@ -343,17 +349,7 @@ export default function ProfileScreen() {
         {infoCards.map((card) => (
           <View key={card.label} style={styles.infoCard}>
             <Text style={styles.infoLabel}>{card.label}</Text>
-            {card.type === 'location' ? (
-              <View style={styles.locationRow}>
-                <Ionicons
-                  name="location-outline"
-                  size={20}
-                  color="#0F766E"
-                  style={styles.locationIcon}
-                />
-                <Text style={styles.infoValueDark}>{card.value}</Text>
-              </View>
-            ) : card.type === 'phone' ? (
+            {card.type === 'phone' ? (
               <Pressable
                 style={styles.locationRow}
                 onPress={() => setShowPhoneModal(true)}
@@ -481,6 +477,65 @@ export default function ProfileScreen() {
         currentFullName={userProfile?.fullName}
         currentNationalId={userProfile?.idNumber}
       />
+
+      {/* ── MODAL CUSTOM PARA CERRAR SESIÓN ── */}
+      <Modal
+        visible={showLogoutModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!loggingOut) setShowLogoutModal(false);
+        }}
+      >
+        <Pressable
+          style={styles.logoutModalOverlay}
+          onPress={() => {
+            if (!loggingOut) setShowLogoutModal(false);
+          }}
+        >
+          <Pressable
+            style={styles.logoutModalCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.logoutIconBadge}>
+              <Ionicons name="log-out-outline" size={32} color="#EF4444" />
+            </View>
+
+            <Text style={styles.logoutModalTitle}>Cerrar Sesión</Text>
+            <Text style={styles.logoutModalDesc}>
+              ¿Estás seguro de que deseas cerrar sesión? Tendrás que ingresar
+              tus credenciales nuevamente.
+            </Text>
+
+            <View style={styles.logoutModalActions}>
+              <Pressable
+                style={styles.logoutModalCancelBtn}
+                onPress={() => setShowLogoutModal(false)}
+                disabled={loggingOut}
+              >
+                <Text style={styles.logoutModalCancelText}>Cancelar</Text>
+              </Pressable>
+
+              <Pressable
+                style={[
+                  styles.logoutModalConfirmBtn,
+                  loggingOut && { opacity: 0.7 },
+                ]}
+                onPress={confirmLogout}
+                disabled={loggingOut}
+              >
+                {loggingOut ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.logoutModalConfirmText}>
+                    Cerrar Sesión
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -491,27 +546,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 24,
     paddingVertical: 16,
     backgroundColor: 'transparent',
   },
-  menuBtn: {
-    marginRight: 16,
-  },
   headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontFamily: tokens.typography.fontFamily.bold,
+    fontSize: 20,
+    fontFamily: tokens.typography.fontFamily.black,
     color: tokens.colors.primary,
-  },
-  headerAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
+    textAlign: 'center',
   },
   scrollContent: {
     paddingHorizontal: 24,
@@ -551,13 +596,22 @@ const styles = StyleSheet.create({
   avatarContainer: {
     padding: 6,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 46,
+    borderRadius: 48,
     marginBottom: 16,
   },
-  profileAvatar: {
+  avatarCircle: {
     width: 80,
     height: 80,
     borderRadius: 40,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarInitials: {
+    fontSize: 28,
+    fontFamily: tokens.typography.fontFamily.black,
+    color: tokens.colors.primary,
+    letterSpacing: 1,
   },
   profileName: {
     fontSize: 24,
@@ -603,14 +657,6 @@ const styles = StyleSheet.create({
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  locationIcon: {
-    marginRight: 8,
-  },
-  infoValueDark: {
-    fontSize: 16,
-    fontFamily: tokens.typography.fontFamily.bold,
-    color: tokens.colors.textDark,
   },
   sectionTitle: {
     fontSize: 18,
@@ -720,5 +766,89 @@ const styles = StyleSheet.create({
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#64748B',
     marginBottom: 4,
+  },
+
+  // Modal Custom Cerrar Sesión
+  logoutModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  logoutModalCard: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 24,
+    alignItems: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  logoutIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  logoutModalTitle: {
+    fontSize: 20,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  logoutModalDesc: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.regular,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  logoutModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  logoutModalCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logoutModalCancelText: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#475569',
+  },
+  logoutModalConfirmBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  logoutModalConfirmText: {
+    fontSize: 14,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#FFFFFF',
   },
 });
