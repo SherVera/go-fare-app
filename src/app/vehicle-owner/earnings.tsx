@@ -350,7 +350,11 @@ export default function VehicleOwnerEarnings() {
             <Ionicons
               name={totalEarnings > 0 ? 'card' : 'wallet-outline'}
               size={18}
-              color={totalEarnings > 0 ? tokens.colors.primary : '#94A3B8'}
+              color={
+                totalEarnings > 0
+                  ? tokens.colors.primary
+                  : 'rgba(255, 255, 255, 0.6)'
+              }
               style={{ marginRight: 8 }}
             />
             <Text
@@ -464,21 +468,21 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   balanceCard: {
-    backgroundColor: '#0F172A',
+    backgroundColor: tokens.colors.primary,
     borderRadius: 32,
     padding: 24,
     alignItems: 'center',
     marginBottom: 24,
-    shadowColor: '#0F172A',
+    shadowColor: tokens.colors.primary,
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.25,
     shadowRadius: 16,
     elevation: 8,
   },
   balanceLabel: {
     fontSize: 10,
     fontFamily: tokens.typography.fontFamily.black,
-    color: tokens.colors.primary,
+    color: 'rgba(255, 255, 255, 0.85)',
     letterSpacing: 1.2,
     marginBottom: 8,
   },
@@ -493,7 +497,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
     borderRadius: 20,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -506,7 +510,7 @@ const styles = StyleSheet.create({
   metaLabel: {
     fontSize: 9,
     fontFamily: tokens.typography.fontFamily.black,
-    color: '#94A3B8',
+    color: 'rgba(255, 255, 255, 0.8)',
     letterSpacing: 0.5,
     marginBottom: 2,
   },
@@ -518,7 +522,7 @@ const styles = StyleSheet.create({
   metaDivider: {
     width: 1,
     height: 24,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
   payoutBtn: {
     flexDirection: 'row',
@@ -530,16 +534,16 @@ const styles = StyleSheet.create({
   },
   payoutBtnActive: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
+    shadowColor: '#1E40AF',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.18,
     shadowRadius: 8,
     elevation: 3,
   },
   payoutBtnDisabled: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   payoutBtnText: {
     fontSize: 14,
@@ -547,7 +551,7 @@ const styles = StyleSheet.create({
     color: tokens.colors.primary,
   },
   payoutBtnTextDisabled: {
-    color: '#94A3B8',
+    color: 'rgba(255, 255, 255, 0.6)',
     fontFamily: tokens.typography.fontFamily.medium,
   },
   sectionTitle: {

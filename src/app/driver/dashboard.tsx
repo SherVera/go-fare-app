@@ -187,11 +187,11 @@ export default function DriverDashboard() {
           const foundVehicle = vehicles.find(
             (v) => v.uuid === session.vehicle.uuid,
           );
-          if (foundVehicle) setSelectedVehicle(foundVehicle);
+          setSelectedVehicle(foundVehicle || session.vehicle);
         }
         if (session.route) {
           const foundRoute = routes.find((r) => r.uuid === session.route.uuid);
-          if (foundRoute) setSelectedRoute(foundRoute);
+          setSelectedRoute(foundRoute || session.route);
         }
       } else {
         setActiveSession(null);
@@ -325,6 +325,7 @@ export default function DriverDashboard() {
               setActionLoading(true);
               await closeSession(activeSession.uuid);
               setActiveSession(null);
+              await loadDriverData();
               Alert.alert(
                 'Turno Cerrado',
                 'Tu turno ha finalizado correctamente y los fondos han sido transferidos al transportista.',

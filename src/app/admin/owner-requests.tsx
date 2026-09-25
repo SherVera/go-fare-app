@@ -37,6 +37,41 @@ const reqDateFormatter = new Intl.DateTimeFormat('es-ES', {
   year: 'numeric',
 });
 
+const STATUS_TABS = [
+  {
+    id: 'pending' as const,
+    label: 'Pendientes',
+    icon: 'time-outline' as const,
+    activeIcon: 'time' as const,
+    color: '#2563EB',
+    activeBg: tokens.colors.primary,
+  },
+  {
+    id: 'approved' as const,
+    label: 'Aprobadas',
+    icon: 'checkmark-circle-outline' as const,
+    activeIcon: 'checkmark-circle' as const,
+    color: '#059669',
+    activeBg: '#059669',
+  },
+  {
+    id: 'rejected' as const,
+    label: 'Rechazadas',
+    icon: 'close-circle-outline' as const,
+    activeIcon: 'close-circle' as const,
+    color: '#DC2626',
+    activeBg: '#DC2626',
+  },
+  {
+    id: 'suspended' as const,
+    label: 'Suspendidas',
+    icon: 'ban-outline' as const,
+    activeIcon: 'ban' as const,
+    color: '#EA580C',
+    activeBg: '#EA580C',
+  },
+];
+
 export default function AdminOwnerRequestsScreen() {
   const { setIsOpen } = useAdminSidebar();
   const [loading, setLoading] = useState(true);
@@ -324,67 +359,75 @@ export default function AdminOwnerRequestsScreen() {
         )}
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
-        <Pressable
-          style={[styles.tab, activeTab === 'pending' && styles.tabActive]}
-          onPress={() => setActiveTab('pending')}
+      {/* Selector de Estado de Solicitud (Tabs con Scroll Horizontal y Badges) */}
+      <View style={styles.statusTabsWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.statusTabsContent}
         >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'pending' && styles.tabLabelActive,
-            ]}
-            numberOfLines={1}
-          >
-            Pendientes ({counts.pending})
-          </Text>
-        </Pressable>
+          {STATUS_TABS.map((tab) => {
+            const isActive = activeTab === tab.id;
+            const count = counts[tab.id];
 
-        <Pressable
-          style={[styles.tab, activeTab === 'approved' && styles.tabActive]}
-          onPress={() => setActiveTab('approved')}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'approved' && styles.tabLabelActive,
-            ]}
-            numberOfLines={1}
-          >
-            Aprobadas ({counts.approved})
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.tab, activeTab === 'rejected' && styles.tabActive]}
-          onPress={() => setActiveTab('rejected')}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'rejected' && styles.tabLabelActive,
-            ]}
-            numberOfLines={1}
-          >
-            Rechazadas ({counts.rejected})
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.tab, activeTab === 'suspended' && styles.tabActive]}
-          onPress={() => setActiveTab('suspended')}
-        >
-          <Text
-            style={[
-              styles.tabLabel,
-              activeTab === 'suspended' && styles.tabLabelActive,
-            ]}
-            numberOfLines={1}
-          >
-            Suspendidas ({counts.suspended})
-          </Text>
-        </Pressable>
+            return (
+              <Pressable
+                key={tab.id}
+                style={({ pressed }) => [
+                  styles.statusTabChip,
+                  isActive
+                    ? [
+                        styles.statusTabChipActive,
+                        {
+                          backgroundColor: tab.activeBg,
+                          borderColor: tab.activeBg,
+                          shadowColor: tab.activeBg,
+                        },
+                      ]
+                    : styles.statusTabChipInactive,
+                  pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] },
+                ]}
+                onPress={() => setActiveTab(tab.id)}
+              >
+                <Ionicons
+                  name={isActive ? tab.activeIcon : tab.icon}
+                  size={15}
+                  color={isActive ? '#FFFFFF' : tab.color}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.statusTabLabel,
+                    isActive
+                      ? styles.statusTabLabelActive
+                      : styles.statusTabLabelInactive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+                <View
+                  style={[
+                    styles.statusTabBadge,
+                    isActive
+                      ? styles.statusTabBadgeActive
+                      : styles.statusTabBadgeInactive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusTabBadgeText,
+                      isActive
+                        ? styles.statusTabBadgeTextActive
+                        : styles.statusTabBadgeTextInactive,
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* List */}
@@ -834,37 +877,73 @@ const styles = StyleSheet.create({
   clearBtn: {
     padding: 4,
   },
-  tabsContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#E2E8F0',
-    borderRadius: 12,
-    marginHorizontal: 20,
+  statusTabsWrapper: {
     marginTop: 10,
-    marginBottom: 16,
-    padding: 4,
+    marginBottom: 12,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
+  statusTabsContent: {
+    paddingHorizontal: 20,
+    gap: 8,
+    alignItems: 'center',
+  },
+  statusTabChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 12,
+    paddingRight: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1.5,
+  },
+  statusTabChipInactive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  statusTabChipActive: {
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.28,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  statusTabLabel: {
+    fontSize: 12.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+  },
+  statusTabLabelInactive: {
+    color: '#334155',
+  },
+  statusTabLabelActive: {
+    color: '#FFFFFF',
+  },
+  statusTabBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginLeft: 6,
+    minWidth: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
   },
-  tabActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+  statusTabBadgeInactive: {
+    backgroundColor: '#F1F5F9',
   },
-  tabLabel: {
-    fontSize: 12,
-    fontFamily: tokens.typography.fontFamily.bold,
+  statusTabBadgeActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  statusTabBadgeText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.black,
+  },
+  statusTabBadgeTextInactive: {
     color: '#64748B',
   },
-  tabLabelActive: {
-    color: tokens.colors.primary,
+  statusTabBadgeTextActive: {
+    color: '#FFFFFF',
   },
   listContent: {
     padding: 16,

@@ -653,8 +653,14 @@ export default function VehicleOwnerDashboard() {
         animationType="fade"
         onRequestClose={() => setIsModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setIsModalVisible(false)}
+        >
+          <Pressable
+            style={styles.modalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
             {/* Cabecera Modal */}
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
@@ -730,8 +736,8 @@ export default function VehicleOwnerDashboard() {
             >
               <Text style={styles.modalCloseBtnText}>Entendido</Text>
             </Pressable>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       {/* ── MODAL EDITAR RUTA DE LA UNIDAD ── */}
@@ -744,11 +750,19 @@ export default function VehicleOwnerDashboard() {
         }}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => {
+              if (!savingRoute) setIsEditRouteModalVisible(false);
+            }}
+          >
+            <Pressable
+              style={styles.modalContent}
+              onPress={(e) => e.stopPropagation()}
+            >
               <View style={styles.modalHeader}>
                 <View style={styles.modalTitleRow}>
                   <View style={styles.routeModalIconBox}>
@@ -838,8 +852,8 @@ export default function VehicleOwnerDashboard() {
                   </Pressable>
                 </View>
               </View>
-            </View>
-          </View>
+            </Pressable>
+          </Pressable>
         </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
@@ -873,21 +887,23 @@ const styles = StyleSheet.create({
   coopCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A', // Slate 900
+    backgroundColor: tokens.colors.primary,
     borderRadius: 24,
     padding: 16,
     marginBottom: 20,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowColor: tokens.colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 8,
   },
   coopIconWrapper: {
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: tokens.colors.primary,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -898,7 +914,7 @@ const styles = StyleSheet.create({
   coopLabel: {
     fontSize: 9,
     fontFamily: tokens.typography.fontFamily.black,
-    color: tokens.colors.primary,
+    color: 'rgba(255, 255, 255, 0.8)',
     letterSpacing: 1,
     marginBottom: 2,
   },
@@ -911,12 +927,14 @@ const styles = StyleSheet.create({
   coopRif: {
     fontSize: 11,
     fontFamily: tokens.typography.fontFamily.medium,
-    color: '#94A3B8',
+    color: 'rgba(255, 255, 255, 0.85)',
   },
   activePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
@@ -925,13 +943,13 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#10B981',
+    backgroundColor: '#34D399',
     marginRight: 6,
   },
   activeText: {
     fontSize: 11,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#10B981',
+    color: '#FFFFFF',
   },
   sectionTitle: {
     fontSize: 16,
@@ -1127,19 +1145,22 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.65)',
     justifyContent: 'center',
-    padding: 24,
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   modalContent: {
+    width: '100%',
+    maxWidth: 360,
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
+    padding: 24,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
     shadowRadius: 16,
-    elevation: 10,
+    elevation: 3,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1297,22 +1318,20 @@ const styles = StyleSheet.create({
   routeModalButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   routeCancelBtn: {
     flex: 1,
     height: 48,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
   },
   routeCancelBtnText: {
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#64748B',
+    color: '#475569',
   },
   routeSaveBtn: {
     flex: 1.5,
@@ -1321,6 +1340,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: tokens.colors.primary,
+    shadowColor: tokens.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 2,
   },
   routeSaveBtnText: {
     fontSize: 14,
