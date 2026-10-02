@@ -26,7 +26,6 @@ import { useLiteMode } from '@/context/LiteModeContext';
 import type { LoginFormState } from '@/interfaces';
 import {
   createFareAccount,
-  findEmailByPhone,
   getFareAccountByUserId,
   getMyTransportOwnerProfile,
   loginWithFirebaseToken,
@@ -73,17 +72,19 @@ export default function LoginScreen() {
 
   const _minSpacerHeight = isSmallScreen ? 12 : 48;
 
-  // Recordar el último identificador usado para que el usuario no tenga que escribirlo de nuevo
+  // Recordar el último correo usado para que el usuario no tenga que escribirlo de nuevo
   useEffect(() => {
-    const loadLastIdentifier = async () => {
+    const loadLastEmail = async () => {
       try {
-        const last = await AsyncStorage.getItem('last_login_identifier');
-        if (last) {
+        const last =
+          (await AsyncStorage.getItem('last_login_email')) ||
+          (await AsyncStorage.getItem('last_login_identifier'));
+        if (last?.includes('@')) {
           setEmail(last);
         }
       } catch {}
     };
-    loadLastIdentifier();
+    loadLastEmail();
   }, []);
 
   useEffect(() => {
@@ -290,14 +291,23 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     Keyboard.dismiss();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const rawInput = email.trim();
+    const trimmedEmail = email.trim().toLowerCase();
     const trimmedPassword = password.trim();
 
-    if (!rawInput) {
+    if (!trimmedEmail) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Alert.alert(
-        'Dato necesario',
-        'Por favor, ingresa tu correo electrónico o número de teléfono.',
+        'Correo requerido',
+        'Por favor, ingresa tu correo electrónico.',
+      );
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert(
+        'Correo no válido',
+        'Por favor, ingresa un correo electrónico con formato correcto (ejemplo: usuario@correo.com).',
       );
       return;
     }
@@ -317,62 +327,6 @@ export default function LoginScreen() {
       return;
     }
 
-    let targetEmail = rawInput.toLowerCase();
-
-    // Si el usuario ingresó un número telefónico en lugar de correo
-    if (!targetEmail.includes('@')) {
-      let cleanedPhone = targetEmail.replace(/[^0-9]/g, '');
-      if (cleanedPhone.startsWith('58')) {
-        cleanedPhone = cleanedPhone.slice(2);
-      }
-      if (cleanedPhone.startsWith('0')) {
-        cleanedPhone = cleanedPhone.slice(1);
-      }
-
-      if (cleanedPhone.length === 10) {
-        const e164 = `+58${cleanedPhone}`;
-        try {
-          setLoading(true);
-          const foundEmail = await findEmailByPhone(e164);
-          if (!foundEmail) {
-            setLoading(false);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-            Alert.alert(
-              'Teléfono no registrado',
-              `No encontramos ninguna cuenta con el número ${e164}. Por favor verifica el número o ingresa con tu correo.`,
-            );
-            return;
-          }
-          targetEmail = foundEmail.toLowerCase();
-        } catch {
-          setLoading(false);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          Alert.alert(
-            'Error de conexión',
-            'No se pudo verificar el número de teléfono. Intenta con tu correo electrónico o revisa tu conexión a internet.',
-          );
-          return;
-        }
-      } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        Alert.alert(
-          'Dato no válido',
-          'Por favor ingresa un correo electrónico válido o un número de teléfono de 10 dígitos (ej. 0414 123 4567).',
-        );
-        return;
-      }
-    } else {
-      // Validar formato de correo electrónico
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        Alert.alert(
-          'Correo inválido',
-          'Por favor, ingresa un correo electrónico con formato correcto (ejemplo: usuario@correo.com).',
-        );
-        return;
-      }
-    }
-
     try {
       setLoading(true);
       await AsyncStorage.removeItem('phone_verified_bypass');
@@ -380,7 +334,7 @@ export default function LoginScreen() {
 
       // Autenticar con Firebase
       const userCredential = await signIn({
-        email: targetEmail,
+        email: trimmedEmail,
         password: trimmedPassword,
       });
 
@@ -459,7 +413,7 @@ export default function LoginScreen() {
       if (!isVehicleOwner && !currentUser.emailVerified) {
         router.replace({
           pathname: '/verify-email',
-          params: { email: targetEmail },
+          params: { email: trimmedEmail },
         } as any);
         return;
       }
@@ -468,7 +422,7 @@ export default function LoginScreen() {
       try {
         const savedPref = await AsyncStorage.getItem('isBiometricsEnabled');
         if (savedPref === 'true') {
-          await SecureStore.setItemAsync('savedEmail', targetEmail);
+          await SecureStore.setItemAsync('savedEmail', trimmedEmail);
           await SecureStore.setItemAsync('savedPassword', trimmedPassword);
         }
       } catch (storeError) {
@@ -478,8 +432,8 @@ export default function LoginScreen() {
         );
       }
 
-      // Recordar identificador para próximos inicios de sesión
-      await AsyncStorage.setItem('last_login_identifier', rawInput);
+      // Recordar correo para próximos inicios de sesión
+      await AsyncStorage.setItem('last_login_email', trimmedEmail);
 
       // Sincronizar o crear la cuenta de tarifa (Fare Account) del usuario
       try {
@@ -690,13 +644,13 @@ export default function LoginScreen() {
           </View>
 
           {/* ── INPUT EMAIL ── */}
-          <Text style={styles.inputLabel}>CORREO ELECTRÓNICO O TELÉFONO</Text>
+          <Text style={styles.inputLabel}>CORREO ELECTRÓNICO</Text>
           <View style={styles.inputCard}>
             <Ionicons name="person-outline" size={20} color="#3072ffe7" />
             <View style={styles.divider} />
             <TextInput
               style={styles.input}
-              placeholder="correo@ejemplo.com o 0414 1234567"
+              placeholder="correo@ejemplo.com"
               placeholderTextColor="#B8C4D4"
               keyboardType="email-address"
               autoCapitalize="none"
