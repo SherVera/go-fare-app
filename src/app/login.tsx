@@ -1,12 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -36,6 +38,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const { isLiteMode, setLiteMode } = useLiteMode();
   const { height } = useWindowDimensions();
+  const passwordRef = useRef<TextInput>(null);
   // Estado del formulario — tipado por LoginFormState
   const [email, setEmail] = useState<LoginFormState['email']>('');
   const [password, setPassword] = useState<LoginFormState['password']>('');
@@ -68,6 +71,21 @@ export default function LoginScreen() {
   const titleLineHeight = isSmallScreen ? 32 : isMediumScreen ? 40 : 44;
 
   const _minSpacerHeight = isSmallScreen ? 12 : 48;
+
+  // Recordar el último correo usado para que el usuario no tenga que escribirlo de nuevo
+  useEffect(() => {
+    const loadLastEmail = async () => {
+      try {
+        const last =
+          (await AsyncStorage.getItem('last_login_email')) ||
+          (await AsyncStorage.getItem('last_login_identifier'));
+        if (last?.includes('@')) {
+          setEmail(last);
+        }
+      } catch {}
+    };
+    loadLastEmail();
+  }, []);
 
   useEffect(() => {
     const checkSavedCredentials = async () => {
@@ -109,7 +127,7 @@ export default function LoginScreen() {
     checkSavedCredentials();
   }, []);
 
-  const handleBiometricLogin = async () => {
+  const handleBiometricLogin = useCallback(async () => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: `Inicia sesión con tu ${biometricsType}`,
@@ -118,6 +136,7 @@ export default function LoginScreen() {
       });
 
       if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setLoading(true);
         const savedEmail = await SecureStore.getItemAsync('savedEmail');
         const savedPassword = await SecureStore.getItemAsync('savedPassword');
@@ -199,16 +218,28 @@ export default function LoginScreen() {
           }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[Login] Error during biometric login:', err);
-      Alert.alert(
-        'Error',
-        'Hubo un error al intentar autenticar con biometría.',
-      );
+      if (err?.code !== 'USER_CANCELED' && err?.message !== 'User canceled') {
+        Alert.alert(
+          'Error',
+          'Hubo un error al intentar autenticar con biometría.',
+        );
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [biometricsType, router]);
+
+  // Solicitar biometría automáticamente al cargar si tiene credenciales guardadas
+  useEffect(() => {
+    if (hasSavedCredentials) {
+      const timer = setTimeout(() => {
+        handleBiometricLogin();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasSavedCredentials, handleBiometricLogin]);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -220,16 +251,19 @@ export default function LoginScreen() {
 
   const handleGoogleLogin = async () => {
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setLoading(true);
       const credential = await signInWithGoogle();
       if (credential.user) {
         try {
           await syncWithBackend(credential.user);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         } catch (backendErr) {
           console.warn('[google] backend sync failed:', backendErr);
           try {
             await sigOutAccount();
           } catch {}
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           Alert.alert(
             'Error de Conexión',
             'No se pudo conectar con el servidor para sincronizar tu cuenta. Por favor, verifica tu conexión a internet e inténtalo de nuevo.',
@@ -243,6 +277,7 @@ export default function LoginScreen() {
       if (error?.code === 'auth/internal-error' && __DEV__) {
         console.error('[google] auth/internal-error:', error);
       }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg =
         error?.code === 'auth/internal-error'
           ? 'Error interno de Firebase (en Android suele faltar SHA-1/SHA-256 en la consola, o hace falta rebuild tras cambiar google-services).'
@@ -254,20 +289,39 @@ export default function LoginScreen() {
   };
 
   const handleLogin = async () => {
+    Keyboard.dismiss();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedPassword = password.trim();
 
-    // Validaciones básicas de formato
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    if (!trimmedEmail) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Alert.alert(
-        'Atención',
-        'Por favor, ingresa un correo electrónico válido.',
+        'Correo requerido',
+        'Por favor, ingresa tu correo electrónico.',
       );
       return;
     }
-    if (trimmedPassword.length < 6) {
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Alert.alert(
-        'Atención',
+        'Correo no válido',
+        'Por favor, ingresa un correo electrónico con formato correcto (ejemplo: usuario@correo.com).',
+      );
+      return;
+    }
+
+    if (!trimmedPassword) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert('Contraseña requerida', 'Por favor, ingresa tu contraseña.');
+      return;
+    }
+
+    if (trimmedPassword.length < 6) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert(
+        'Contraseña corta',
         'La contraseña debe tener al menos 6 caracteres.',
       );
       return;
@@ -304,6 +358,7 @@ export default function LoginScreen() {
         try {
           await sigOutAccount();
         } catch {}
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         const rawMsg = backendError?.message || '';
         const isNetworkErr =
           rawMsg.includes('red') ||
@@ -377,6 +432,9 @@ export default function LoginScreen() {
         );
       }
 
+      // Recordar correo para próximos inicios de sesión
+      await AsyncStorage.setItem('last_login_email', trimmedEmail);
+
       // Sincronizar o crear la cuenta de tarifa (Fare Account) del usuario
       try {
         await getFareAccountByUserId(backendUser.id);
@@ -425,6 +483,7 @@ export default function LoginScreen() {
       }
 
       await SecureStore.setItemAsync('user_role', userRole);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       const normRole = (userRole || '').toLowerCase();
       if (normRole === 'platform_admin' || normRole === 'admin') {
@@ -442,23 +501,27 @@ export default function LoginScreen() {
       }
     } catch (error: any) {
       console.warn('Login error:', error);
-      // Manejar errores comunes de Firebase Auth con mensajes claros
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // Manejar errores comunes de Firebase Auth con mensajes claros y comprensibles
       if (
         error.code === 'auth/invalid-credential' ||
         error.code === 'auth/wrong-password' ||
         error.code === 'auth/user-not-found'
       ) {
         Alert.alert(
-          'Error',
-          'Correo o contraseña inválidos. Intenta de nuevo.',
+          'Datos incorrectos',
+          'El correo o la contraseña no coinciden. Por favor verifica que estén bien escritos.',
         );
       } else if (error.code === 'auth/too-many-requests') {
         Alert.alert(
-          'Error',
-          'Demasiados intentos fallidos. Intenta de nuevo más tarde.',
+          'Intenta más tarde',
+          'Muchos intentos fallidos por seguridad. Espera unos minutos antes de volver a intentar.',
         );
       } else if (error.code === 'auth/network-request-failed') {
-        Alert.alert('Error', 'Error de red. Revisa tu conexión a internet.');
+        Alert.alert(
+          'Sin conexión',
+          'No se pudo conectar a internet. Revisa tu conexión Wi-Fi o datos móviles.',
+        );
       } else if (error.code === 'auth/internal-error') {
         if (__DEV__) {
           console.error(
@@ -468,11 +531,7 @@ export default function LoginScreen() {
         }
         Alert.alert(
           'Error de autenticación',
-          'Firebase devolvió un error interno. Lo más habitual en desarrollo:\n\n' +
-            '• Android: registra las huellas SHA-1 y SHA-256 del keystore de debug en Firebase Console (Ajustes del proyecto → tu app Android).\n' +
-            '• Tras cambiar google-services.json o GoogleService-Info.plist, haz un rebuild nativo (npx expo run:android / run:ios).\n' +
-            '• Confirma que el proveedor Email/contraseña está activado en Authentication.\n\n' +
-            'Si usas Google, revisa también EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID.',
+          'Firebase devolvió un error interno. Revisa la consola o conexión con Firebase.',
         );
       } else {
         Alert.alert(
@@ -491,7 +550,7 @@ export default function LoginScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScreenHeader title="Iniciar Sesión" onBack={handleBack} />
 
@@ -585,7 +644,7 @@ export default function LoginScreen() {
           </View>
 
           {/* ── INPUT EMAIL ── */}
-          <Text style={styles.inputLabel}>CORREO ELECTRÓNICO O TELÉFONO</Text>
+          <Text style={styles.inputLabel}>CORREO ELECTRÓNICO</Text>
           <View style={styles.inputCard}>
             <Ionicons name="person-outline" size={20} color="#3072ffe7" />
             <View style={styles.divider} />
@@ -595,6 +654,14 @@ export default function LoginScreen() {
               placeholderTextColor="#B8C4D4"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="emailAddress"
+              autoComplete="email"
+              importantForAutofill="yes"
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
               value={email}
               onChangeText={setEmail}
               selectionColor={tokens.colors.primary}
@@ -608,10 +675,19 @@ export default function LoginScreen() {
             <Ionicons name="lock-closed-outline" size={20} color="#3072ffe7" />
             <View style={styles.divider} />
             <TextInput
+              ref={passwordRef}
               style={styles.input}
               placeholder="******"
               placeholderTextColor="#B8C4D4"
               secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="password"
+              autoComplete="password"
+              importantForAutofill="yes"
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
               value={password}
               onChangeText={setPassword}
               selectionColor={tokens.colors.primary}
@@ -619,8 +695,15 @@ export default function LoginScreen() {
             />
             {/* Botón para mostrar u ocultar la contraseña */}
             <Pressable
-              onPress={() => setShowPassword(!showPassword)}
-              hitSlop={10}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowPassword(!showPassword);
+              }}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                showPassword ? 'Ocultar contraseña' : 'Ver contraseña'
+              }
             >
               <Ionicons
                 name={showPassword ? 'eye-off-outline' : 'eye-outline'}

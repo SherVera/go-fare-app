@@ -1,11 +1,13 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -27,10 +29,24 @@ import { tokens } from '@/theme/tokens';
 export default function PhoneLoginScreen() {
   const router = useRouter();
   const { isLiteMode, setLiteMode } = useLiteMode();
+  const passwordRef = useRef<TextInput>(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Recordar el último número usado para facilitar el acceso a personas mayores
+  useEffect(() => {
+    const loadLastPhone = async () => {
+      try {
+        const last = await AsyncStorage.getItem('last_login_phone');
+        if (last) {
+          setPhoneNumber(last);
+        }
+      } catch {}
+    };
+    loadLastPhone();
+  }, []);
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -41,23 +57,35 @@ export default function PhoneLoginScreen() {
   };
 
   const handlePhoneLogin = async () => {
+    Keyboard.dismiss();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     let cleaned = phoneNumber.trim().replace(/[^0-9]/g, '');
+    if (cleaned.startsWith('58')) {
+      cleaned = cleaned.slice(2);
+    }
     if (cleaned.startsWith('0')) {
       cleaned = cleaned.slice(1);
     }
 
     if (cleaned.length !== 10) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Alert.alert(
-        'Número de teléfono inválido',
-        'Ingresa los 10 dígitos de tu número de teléfono (ej. 414 000 0000).',
+        'Número incompleto',
+        'Ingresa los 10 dígitos de tu número de teléfono (por ejemplo: 414 123 4567).',
       );
       return;
     }
 
     const trimmedPassword = password.trim();
+    if (!trimmedPassword) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert('Contraseña requerida', 'Por favor ingresa tu contraseña.');
+      return;
+    }
     if (trimmedPassword.length < 6) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Alert.alert(
-        'Contraseña inválida',
+        'Contraseña corta',
         'La contraseña debe tener al menos 6 caracteres.',
       );
       return;
@@ -69,11 +97,12 @@ export default function PhoneLoginScreen() {
       setLoading(true);
       const foundEmail = await findEmailByPhone(e164);
       if (!foundEmail) {
+        setLoading(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         Alert.alert(
           'Cuenta no encontrada',
           'No se encontró ninguna cuenta registrada con este número de teléfono. Verifica el número o regístrate.',
         );
-        setLoading(false);
         return;
       }
 
@@ -86,6 +115,7 @@ export default function PhoneLoginScreen() {
       if (userCredential?.user) {
         await AsyncStorage.setItem('phone_verified_bypass', 'true');
         await AsyncStorage.setItem('auth_method', 'phone');
+        await AsyncStorage.setItem('last_login_phone', cleaned);
 
         let backendUser: any = null;
         try {
@@ -114,6 +144,7 @@ export default function PhoneLoginScreen() {
 
         await SecureStore.setItemAsync('user_role', userRole);
         await refreshAuthSessionPhase();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setLoading(false);
 
         if (userRole === 'platform_admin') {
@@ -128,19 +159,25 @@ export default function PhoneLoginScreen() {
       }
     } catch (error: any) {
       console.error('[phone-login] login error:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       if (
         error.code === 'auth/invalid-credential' ||
         error.code === 'auth/wrong-password' ||
         error.code === 'auth/user-not-found'
       ) {
         Alert.alert(
-          'Credenciales incorrectas',
-          'El número de teléfono o la contraseña son incorrectos.',
+          'Datos incorrectos',
+          'El número de teléfono o la contraseña no coinciden. Por favor verifica que estén bien escritos.',
+        );
+      } else if (error.code === 'auth/network-request-failed') {
+        Alert.alert(
+          'Sin conexión',
+          'No se pudo conectar a internet. Por favor revisa tu conexión de datos móviles o Wi-Fi.',
         );
       } else if (error.code === 'auth/too-many-requests') {
         Alert.alert(
-          'Error',
-          'Demasiados intentos fallidos. Intenta de nuevo más tarde.',
+          'Intenta más tarde',
+          'Muchos intentos fallidos por seguridad. Espera unos minutos antes de volver a intentar.',
         );
       } else {
         Alert.alert(
@@ -238,12 +275,24 @@ export default function PhoneLoginScreen() {
               placeholder="414 000 0000"
               placeholderTextColor="#B8C4D4"
               keyboardType="phone-pad"
+              textContentType="telephoneNumber"
+              autoComplete="tel"
+              importantForAutofill="yes"
               value={phoneNumber}
               onChangeText={(text) => {
-                const cleaned = text.replace(/[^0-9]/g, '');
+                let cleaned = text.replace(/[^0-9]/g, '');
+                if (cleaned.startsWith('58')) {
+                  cleaned = cleaned.slice(2);
+                }
+                if (cleaned.startsWith('0')) {
+                  cleaned = cleaned.slice(1);
+                }
                 setPhoneNumber(cleaned);
               }}
               maxLength={10}
+              returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
               selectionColor={tokens.colors.primary}
               editable={!loading}
             />
@@ -255,22 +304,38 @@ export default function PhoneLoginScreen() {
             <Ionicons name="lock-closed-outline" size={20} color="#3072ffe7" />
             <View style={styles.divider} />
             <TextInput
+              ref={passwordRef}
               style={styles.input}
               placeholder="******"
               placeholderTextColor="#B8C4D4"
               secureTextEntry={!showPassword}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="password"
+              autoComplete="password"
+              importantForAutofill="yes"
+              returnKeyType="done"
+              onSubmitEditing={handlePhoneLogin}
               value={password}
               onChangeText={setPassword}
               selectionColor={tokens.colors.primary}
               editable={!loading}
             />
             <Pressable
-              onPress={() => setShowPassword(!showPassword)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setShowPassword(!showPassword);
+              }}
               style={({ pressed }) => [
                 styles.eyeButton,
                 pressed && { opacity: 0.6 },
               ]}
-              hitSlop={10}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                showPassword ? 'Ocultar contraseña' : 'Ver contraseña'
+              }
             >
               <Ionicons
                 name={showPassword ? 'eye-outline' : 'eye-off-outline'}
