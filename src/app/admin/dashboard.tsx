@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,17 +15,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAdminSidebar } from '@/components/AdminSidebarContext';
 import { AppLoadingScreen } from '@/components/AppLoadingScreen';
 import {
-  clearBackendJwt,
   getAllDocuments,
   getAllOwnerRequests,
   getAllTransportUnits,
   getAllUsers,
+  getCurrentRates,
 } from '@/lib/api';
-import { sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 const STATS_CACHE_KEY = 'gofare_admin_dashboard_stats';
 const RECENT_USERS_CACHE_KEY = 'gofare_admin_dashboard_recent_users';
+const RATES_CACHE_KEY = 'gofare_admin_dashboard_rates';
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
@@ -42,16 +42,24 @@ export default function AdminDashboardScreen() {
     civilAssociations: 0,
   });
   const [recentUsers, setRecentUsers] = useState<any[]>([]);
+  const [rates, setRates] = useState<{
+    fareUsdValue: number;
+    bcvRate: number;
+    bcvRateDate?: string;
+  }>({
+    fareUsdValue: 0.25,
+    bcvRate: 40.0,
+  });
 
   const loadDashboardData = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true);
     try {
-      // Optimizamos ejecutando en paralelo solo los endpoints primarios estrictamente necesarios
-      const [users, units, docs, ownerReqs] = await Promise.all([
+      const [users, units, docs, ownerReqs, currentRates] = await Promise.all([
         getAllUsers().catch(() => []),
         getAllTransportUnits().catch(() => []),
         getAllDocuments().catch(() => []),
         getAllOwnerRequests().catch(() => []),
+        getCurrentRates().catch(() => null),
       ]);
 
       const safeUsers = Array.isArray(users) ? users : [];
@@ -59,7 +67,15 @@ export default function AdminDashboardScreen() {
       const safeDocs = Array.isArray(docs) ? docs : [];
       const safeOwnerReqs = Array.isArray(ownerReqs) ? ownerReqs : [];
 
-      // Calcular todas las métricas de usuarios en una sola pasada O(N)
+      if (currentRates?.fareUsdValue && currentRates?.bcvRate) {
+        setRates(currentRates);
+        AsyncStorage.setItem(
+          RATES_CACHE_KEY,
+          JSON.stringify(currentRates),
+        ).catch(() => {});
+      }
+
+      // Calcular métricas de usuarios en una sola pasada O(N)
       let passengerCount = 0;
       let driverCount = 0;
       let ownerCount = 0;
@@ -67,11 +83,15 @@ export default function AdminDashboardScreen() {
 
       for (const u of safeUsers) {
         if (!u) continue;
-        const roles = (u as any).roles || [];
-        const isOwner = roles.some((r: any) => r.name === 'transport_owner');
-        const isDriver = roles.some((r: any) => r.name === 'driver');
-        const isCivil = roles.some((r: any) => r.name === 'civil_association');
-        const isAdmin = roles.some(
+        const userRoles = (u as any).roles || [];
+        const isOwner = userRoles.some(
+          (r: any) => r.name === 'transport_owner',
+        );
+        const isDriver = userRoles.some((r: any) => r.name === 'driver');
+        const isCivil = userRoles.some(
+          (r: any) => r.name === 'civil_association',
+        );
+        const isAdmin = userRoles.some(
           (r: any) => r.name === 'platform_admin' || r.name === 'admin',
         );
 
@@ -91,7 +111,6 @@ export default function AdminDashboardScreen() {
           r && (r.status === 'pending' || r.status === 'pending_review'),
       ).length;
 
-      // Solo sobrescribir y cachear si al menos un endpoint retornó datos válidos
       const hasAnyData =
         safeUsers.length > 0 ||
         safeUnits.length > 0 ||
@@ -121,7 +140,7 @@ export default function AdminDashboardScreen() {
                 new Date(b.createdAt).getTime() -
                 new Date(a.createdAt).getTime(),
             )
-            .slice(0, 3);
+            .slice(0, 4);
 
           setRecentUsers(sortedUsers);
           AsyncStorage.setItem(
@@ -129,10 +148,6 @@ export default function AdminDashboardScreen() {
             JSON.stringify(sortedUsers),
           ).catch(() => {});
         }
-      } else {
-        console.warn(
-          '[AdminDashboard] No se obtuvieron datos nuevos de los endpoints. Preservando estado actual.',
-        );
       }
     } catch (err) {
       console.warn('[AdminDashboard] Error al cargar datos:', err);
@@ -142,14 +157,17 @@ export default function AdminDashboardScreen() {
     }
   }, []);
 
-  // Cargar métricas cacheadas de inmediato para evitar el flash a ceros
+  // Cargar métricas cacheadas de inmediato
   useEffect(() => {
     const loadCached = async () => {
       try {
-        const cachedStatsStr = await AsyncStorage.getItem(STATS_CACHE_KEY);
-        const cachedUsersStr = await AsyncStorage.getItem(
-          RECENT_USERS_CACHE_KEY,
-        );
+        const [cachedStatsStr, cachedUsersStr, cachedRatesStr] =
+          await Promise.all([
+            AsyncStorage.getItem(STATS_CACHE_KEY),
+            AsyncStorage.getItem(RECENT_USERS_CACHE_KEY),
+            AsyncStorage.getItem(RATES_CACHE_KEY),
+          ]);
+
         if (cachedStatsStr) {
           setStats(JSON.parse(cachedStatsStr));
           setLoading(false);
@@ -157,12 +175,18 @@ export default function AdminDashboardScreen() {
         if (cachedUsersStr) {
           setRecentUsers(JSON.parse(cachedUsersStr));
         }
+        if (cachedRatesStr) {
+          setRates(JSON.parse(cachedRatesStr));
+        }
       } catch {}
     };
     loadCached();
   }, []);
 
   const onRefresh = useCallback(async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {}
     setRefreshing(true);
     await loadDashboardData(true);
   }, [loadDashboardData]);
@@ -177,27 +201,14 @@ export default function AdminDashboardScreen() {
     }, [loadDashboardData]),
   );
 
-  const _handleLogout = () => {
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Estás seguro de que deseas salir del panel de administración?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Cerrar Sesión',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await sigOutAccount();
-              await clearBackendJwt();
-            } catch (err) {
-              console.error('Logout error:', err);
-            }
-          },
-        },
-      ],
-    );
+  const handleCardPress = (route: string) => {
+    try {
+      Haptics.selectionAsync();
+    } catch {}
+    router.push(route as any);
   };
+
+  const fareBsEquivalent = rates.fareUsdValue * rates.bcvRate;
 
   if (loading && !refreshing) {
     return (
@@ -222,75 +233,126 @@ export default function AdminDashboardScreen() {
       >
         {/* Cabecera Principal */}
         <View style={styles.header}>
-          <Pressable style={styles.menuBtn} onPress={() => setIsOpen(true)}>
-            <Ionicons name="menu" size={26} color={tokens.colors.primary} />
-          </Pressable>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerSubtitle}>PANEL DE CONTROL</Text>
-            <Text style={styles.headerTitle}>Administración</Text>
-          </View>
-        </View>
-
-        {/* Tarjeta Informativa / Bienvenida */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroInfo}>
-            <Text style={styles.heroTitle}>Control de Plataforma</Text>
-            <Text style={styles.heroDesc}>
-              Monitorea el uso de boletos, aprueba conductores y valida el
-              estado de la red de transporte.
-            </Text>
-          </View>
-          <View style={styles.heroBadge}>
-            <Ionicons name="shield-checkmark" size={32} color="#FFFFFF" />
-          </View>
-        </View>
-
-        {/* Sección de Indicadores Rápidos */}
-        <Text style={styles.sectionTitle}>Métricas Generales</Text>
-        <View style={styles.statsGrid}>
           <Pressable
-            style={[
-              styles.statBox,
-              { borderColor: '#0284C7', borderWidth: 1.5 },
-            ]}
-            onPress={() => router.push('/admin/users?role=passenger')}
+            style={styles.menuBtn}
+            onPress={() => {
+              try {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              } catch {}
+              setIsOpen(true);
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="menu" size={24} color={tokens.colors.primary} />
+          </Pressable>
+
+          <View style={styles.headerTextContainer}>
+            <View style={styles.liveTagRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.headerSubtitle}>SISTEMA EN LÍNEA</Text>
+            </View>
+            <Text style={styles.headerTitle}>Panel de Control</Text>
+          </View>
+
+          <Pressable
+            style={styles.refreshIconBtn}
+            onPress={onRefresh}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="sync-outline" size={20} color="#64748B" />
+          </Pressable>
+        </View>
+        {/* Tarjeta de Pulso Financiero (Tarifas y Tasa BCV) */}
+        <Pressable
+          style={styles.financialCard}
+          onPress={() => handleCardPress('/admin/rates')}
+        >
+          <View style={styles.financialHeader}>
+            <View style={styles.financialTag}>
+              <Ionicons name="trending-up" size={14} color="#059669" />
+              <Text style={styles.financialTagText}>Control Cambiario</Text>
+            </View>
+            <View style={styles.financialActionRow}>
+              <Text style={styles.financialActionText}>Ajustar</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={tokens.colors.primary}
+              />
+            </View>
+          </View>
+
+          <View style={styles.financialGrid}>
+            <View style={styles.financialItem}>
+              <Text style={styles.financialLabel}>1 BOLETO (FARE)</Text>
+              <Text style={styles.financialValue}>
+                ${rates.fareUsdValue.toFixed(2)} USD
+              </Text>
+              <Text style={styles.financialSubtext}>
+                ≈ {fareBsEquivalent.toFixed(2)} Bs.
+              </Text>
+            </View>
+
+            <View style={styles.financialDivider} />
+
+            <View style={styles.financialItem}>
+              <Text style={styles.financialLabel}>TASA OFICIAL BCV</Text>
+              <Text style={styles.financialValue}>
+                {rates.bcvRate.toFixed(2)} Bs/$
+              </Text>
+              <Text style={styles.financialSubtext}>
+                {rates.bcvRateDate ? `Fecha: ${rates.bcvRateDate}` : 'Vigente'}
+              </Text>
+            </View>
+          </View>
+        </Pressable>
+
+        {/* Sección de Métricas Generales */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Métricas de la Red</Text>
+          <Text style={styles.sectionBadge}>Tiempo Real</Text>
+        </View>
+
+        <View style={styles.statsGrid}>
+          {/* Pasajeros */}
+          <Pressable
+            style={styles.statBox}
+            onPress={() =>
+              handleCardPress('/admin/users?role=passenger')
+            }
           >
             <View
-              style={[styles.statIconCircle, { backgroundColor: '#E0F2FE' }]}
+              style={[styles.statIconCircle, { backgroundColor: '#EFF6FF' }]}
             >
-              <Ionicons name="people" size={20} color="#0284C7" />
+              <Ionicons name="people" size={20} color="#2563EB" />
             </View>
             <Text style={styles.statValue}>{stats.passengers}</Text>
             <Text style={styles.statLabel}>Pasajeros</Text>
           </Pressable>
 
+          {/* Unidades */}
           <Pressable
-            style={[
-              styles.statBox,
-              { borderColor: '#059669', borderWidth: 1.5 },
-            ]}
-            onPress={() => router.push('/admin/transport-units')}
+            style={styles.statBox}
+            onPress={() => handleCardPress('/admin/transport-units')}
           >
             <View
               style={[styles.statIconCircle, { backgroundColor: '#ECFDF5' }]}
             >
               <Ionicons name="bus" size={20} color="#059669" />
             </View>
-            <Text style={stats.units > 0 ? styles.statValue : styles.statValue}>
-              {stats.units}
-            </Text>
+            <Text style={styles.statValue}>{stats.units}</Text>
             <Text style={styles.statLabel}>Unidades</Text>
           </Pressable>
 
+          {/* Conductores */}
           <Pressable
-            style={[
-              styles.statBox,
-              { borderColor: '#475569', borderWidth: 1.5 },
-            ]}
-            onPress={() => router.push('/admin/users?role=driver')}
+            style={styles.statBox}
+            onPress={() =>
+              handleCardPress('/admin/users?role=driver')
+            }
           >
             <View
-              style={[styles.statIconCircle, { backgroundColor: '#EEF2F6' }]}
+              style={[styles.statIconCircle, { backgroundColor: '#F1F5F9' }]}
             >
               <Ionicons name="card" size={20} color="#475569" />
             </View>
@@ -298,12 +360,10 @@ export default function AdminDashboardScreen() {
             <Text style={styles.statLabel}>Conductores</Text>
           </Pressable>
 
+          {/* Asoc. Civiles */}
           <Pressable
-            style={[
-              styles.statBox,
-              { borderColor: '#EA580C', borderWidth: 1.5 },
-            ]}
-            onPress={() => router.push('/admin/civil-associations' as any)}
+            style={styles.statBox}
+            onPress={() => handleCardPress('/admin/civil-associations')}
           >
             <View
               style={[styles.statIconCircle, { backgroundColor: '#FFF7ED' }]}
@@ -314,29 +374,27 @@ export default function AdminDashboardScreen() {
             <Text style={styles.statLabel}>Asoc. Civiles</Text>
           </Pressable>
 
+          {/* Documentos Pendientes */}
           <Pressable
             style={[
               styles.statBox,
-              {
-                borderColor: '#F59E0B',
-                borderWidth: 1.5,
-              },
+              stats.pendingDocs > 0 && styles.statBoxAlert,
             ]}
-            onPress={() => router.push('/admin/documents')}
+            onPress={() => handleCardPress('/admin/documents')}
           >
             <View
               style={[
                 styles.statIconCircle,
                 {
                   backgroundColor:
-                    stats.pendingDocs > 0 ? '#FEF3C7' : '#F3F4F6',
+                    stats.pendingDocs > 0 ? '#FEF3C7' : '#F8FAFC',
                 },
               ]}
             >
               <Ionicons
                 name="document-text"
                 size={20}
-                color={stats.pendingDocs > 0 ? '#D97706' : '#9E9E9E'}
+                color={stats.pendingDocs > 0 ? '#D97706' : '#94A3B8'}
               />
             </View>
             <Text
@@ -350,29 +408,27 @@ export default function AdminDashboardScreen() {
             <Text style={styles.statLabel}>Doc. Pendientes</Text>
           </Pressable>
 
+          {/* Solicitudes de Socios */}
           <Pressable
             style={[
               styles.statBox,
-              {
-                borderColor: '#EF4444',
-                borderWidth: 1.5,
-              },
+              stats.pendingOwners > 0 && styles.statBoxAlertRed,
             ]}
-            onPress={() => router.push('/admin/owner-requests')}
+            onPress={() => handleCardPress('/admin/owner-requests')}
           >
             <View
               style={[
                 styles.statIconCircle,
                 {
                   backgroundColor:
-                    stats.pendingOwners > 0 ? '#FEE2E2' : '#F3F4F6',
+                    stats.pendingOwners > 0 ? '#FEE2E2' : '#F8FAFC',
                 },
               ]}
             >
               <Ionicons
                 name="file-tray-full"
                 size={20}
-                color={stats.pendingOwners > 0 ? '#EF4444' : '#9E9E9E'}
+                color={stats.pendingOwners > 0 ? '#EF4444' : '#94A3B8'}
               />
             </View>
             <Text
@@ -387,28 +443,47 @@ export default function AdminDashboardScreen() {
           </Pressable>
         </View>
 
-        {/* Accesos Rápidos */}
+        {/* Módulos Administrativos */}
         <Text style={styles.sectionTitle}>Módulos Administrativos</Text>
         <View style={styles.actionsBlock}>
+          {/* Usuarios */}
           <Pressable
             style={styles.actionRow}
-            onPress={() => router.push('/admin/users')}
+            onPress={() => handleCardPress('/admin/users')}
           >
             <View style={[styles.actionIcon, { backgroundColor: '#EEF2FF' }]}>
-              <Ionicons name="person-add-outline" size={22} color="#4F46E5" />
+              <Ionicons name="people-outline" size={22} color="#4F46E5" />
             </View>
             <View style={styles.actionInfoText}>
               <Text style={styles.actionName}>Usuarios de la Plataforma</Text>
               <Text style={styles.actionSub}>
-                Ver listado, roles and detalles
+                Ver listado, roles y detalles
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </Pressable>
 
+          {/* Tasas y Tarifas */}
           <Pressable
             style={styles.actionRow}
-            onPress={() => router.push('/admin/civil-associations' as any)}
+            onPress={() => handleCardPress('/admin/rates')}
+          >
+            <View style={[styles.actionIcon, { backgroundColor: '#ECFDF5' }]}>
+              <Ionicons name="trending-up-outline" size={22} color="#059669" />
+            </View>
+            <View style={styles.actionInfoText}>
+              <Text style={styles.actionName}>Tasas y Tarifas (BCV / USD)</Text>
+              <Text style={styles.actionSub}>
+                Gestión de cambio oficial y costo de pasaje
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </Pressable>
+
+          {/* Asociaciones Civiles */}
+          <Pressable
+            style={styles.actionRow}
+            onPress={() => handleCardPress('/admin/civil-associations')}
           >
             <View style={[styles.actionIcon, { backgroundColor: '#FFF7ED' }]}>
               <Ionicons name="business-outline" size={22} color="#EA580C" />
@@ -422,12 +497,13 @@ export default function AdminDashboardScreen() {
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </Pressable>
 
+          {/* Validación de Documentos */}
           <Pressable
             style={styles.actionRow}
-            onPress={() => router.push('/admin/documents')}
+            onPress={() => handleCardPress('/admin/documents')}
           >
-            <View style={[styles.actionIcon, { backgroundColor: '#EEF2F6' }]}>
-              <Ionicons name="checkbox-outline" size={22} color="#475569" />
+            <View style={[styles.actionIcon, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="document-text-outline" size={22} color="#D97706" />
             </View>
             <View style={styles.actionInfoText}>
               <Text style={styles.actionName}>Validación de Documentos</Text>
@@ -435,90 +511,142 @@ export default function AdminDashboardScreen() {
                 Revisar licencias, títulos y permisos
               </Text>
             </View>
+            {stats.pendingDocs > 0 && (
+              <View style={styles.warningBadge}>
+                <Text style={styles.warningBadgeText}>
+                  {stats.pendingDocs}
+                </Text>
+              </View>
+            )}
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </Pressable>
 
+          {/* Solicitudes de Socios */}
           <Pressable
             style={styles.actionRow}
-            onPress={() => router.push('/admin/owner-requests')}
+            onPress={() => handleCardPress('/admin/owner-requests')}
           >
-            <View style={[styles.actionIcon, { backgroundColor: '#F5F3FF' }]}>
+            <View style={[styles.actionIcon, { backgroundColor: '#FEE2E2' }]}>
               <Ionicons
                 name="file-tray-full-outline"
                 size={22}
-                color="#7C3AED"
+                color="#DC2626"
               />
             </View>
             <View style={styles.actionInfoText}>
               <Text style={styles.actionName}>Solicitudes de Socios</Text>
               <Text style={styles.actionSub}>
-                Aprobar o rechazar dueños de vehículos
+                Aprobar o suspender dueños y choferes
               </Text>
             </View>
             {stats.pendingOwners > 0 && (
-              <View style={styles.pendingBadge}>
-                <Text style={styles.pendingBadgeText}>
+              <View style={styles.dangerBadge}>
+                <Text style={styles.dangerBadgeText}>
                   {stats.pendingOwners}
                 </Text>
               </View>
             )}
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </Pressable>
+
+          {/* Unidades de Transporte */}
+          <Pressable
+            style={[styles.actionRow, styles.lastActionRow]}
+            onPress={() => handleCardPress('/admin/transport-units')}
+          >
+            <View style={[styles.actionIcon, { backgroundColor: '#F1F5F9' }]}>
+              <Ionicons name="bus-outline" size={22} color="#334155" />
+            </View>
+            <View style={styles.actionInfoText}>
+              <Text style={styles.actionName}>Unidades de Transporte</Text>
+              <Text style={styles.actionSub}>
+                Flota de autobuses, placas y choferes asignados
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </Pressable>
         </View>
 
-        {/* Usuarios Recientes */}
-        <Text style={styles.sectionTitle}>Registros Recientes</Text>
+        {/* Registros Recientes */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>Registros Recientes</Text>
+          <Pressable onPress={() => handleCardPress('/admin/users')}>
+            <Text style={styles.seeAllText}>Ver todos</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.recentUsersCard}>
           {recentUsers.length === 0 ? (
             <Text style={styles.emptyText}>No hay registros recientes.</Text>
           ) : (
             recentUsers.map((user, idx) => {
-              const roles = user.roles || [];
-              const isOwner = roles.some(
+              const userRoles = user.roles || [];
+              const isOwner = userRoles.some(
                 (r: any) => r.name === 'transport_owner',
               );
-              const isDriver = roles.some((r: any) => r.name === 'driver');
+              const isDriver = userRoles.some((r: any) => r.name === 'driver');
+              const isCivil = userRoles.some(
+                (r: any) => r.name === 'civil_association',
+              );
+
               const roleText = isOwner
                 ? 'Socio'
                 : isDriver
                   ? 'Conductor'
-                  : 'Pasajero';
+                  : isCivil
+                    ? 'Asoc. Civil'
+                    : 'Pasajero';
+
               const roleColor = isOwner
                 ? '#8B5CF6'
                 : isDriver
                   ? '#10B981'
-                  : '#3B82F6';
+                  : isCivil
+                    ? '#EA580C'
+                    : '#3B82F6';
+
+              const initial = (
+                user.displayName ||
+                user.firstName ||
+                'U'
+              )
+                .charAt(0)
+                .toUpperCase();
 
               return (
                 <View
-                  key={user.uuid}
+                  key={user.uuid || idx}
                   style={[
                     styles.userRow,
                     idx < recentUsers.length - 1 && styles.borderBottom,
                   ]}
                 >
                   <View style={styles.userLeft}>
-                    <View style={styles.avatarPlaceholder}>
-                      <Text style={styles.avatarText}>
-                        {(user.displayName || user.firstName || 'U')
-                          .charAt(0)
-                          .toUpperCase()}
+                    <View
+                      style={[
+                        styles.avatarPlaceholder,
+                        { borderColor: `${roleColor}40`, borderWidth: 1.5 },
+                      ]}
+                    >
+                      <Text style={[styles.avatarText, { color: roleColor }]}>
+                        {initial}
                       </Text>
                     </View>
                     <View style={styles.userInfo}>
                       <Text style={styles.userName} numberOfLines={1}>
                         {user.displayName ||
-                          `${user.firstName || ''} ${user.lastName || ''}`}
+                          `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
+                          'Usuario'}
                       </Text>
                       <Text style={styles.userEmail} numberOfLines={1}>
-                        {user.email || 'Sin correo electrónico'}
+                        {user.email || user.phoneNumber || 'Sin contacto'}
                       </Text>
                     </View>
                   </View>
                   <View
                     style={[
                       styles.roleBadge,
-                      { backgroundColor: `${roleColor}1A` },
+                      { backgroundColor: `${roleColor}14` },
                     ]}
                   >
                     <Text style={[styles.roleBadgeText, { color: roleColor }]}>
@@ -531,8 +659,8 @@ export default function AdminDashboardScreen() {
           )}
         </View>
 
-        {/* Espaciador inferior para evitar solapamiento con la barra de navegación */}
-        <View style={{ height: 100 }} />
+        {/* Espaciador inferior */}
+        <View style={{ height: 110 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -543,21 +671,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 15,
-    fontFamily: tokens.typography.fontFamily.medium,
-    color: '#64748B',
-  },
   scrollContent: {
-    padding: 24,
+    paddingHorizontal: 20,
     paddingTop: 12,
   },
   header: {
@@ -572,90 +687,176 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
     elevation: 2,
   },
   headerTextContainer: {
     flex: 1,
   },
+  liveTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
   headerSubtitle: {
     fontSize: 10,
-    fontFamily: tokens.typography.fontFamily.black,
-    color: '#94A3B8',
-    letterSpacing: 1.5,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#059669',
+    letterSpacing: 1.2,
   },
   headerTitle: {
-    fontSize: 28,
-    fontFamily: tokens.typography.fontFamily.black,
+    fontSize: 24,
+    fontFamily: tokens.typography.fontFamily.bold,
     color: '#0F172A',
   },
-  heroCard: {
+  refreshIconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  financialCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  financialHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1E293B',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 24,
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.12,
-    shadowRadius: 15,
-    elevation: 4,
+    marginBottom: 14,
   },
-  heroInfo: {
+  financialTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  financialTagText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#059669',
+  },
+  financialActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  financialActionText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
+  },
+  financialGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  financialItem: {
     flex: 1,
-    marginRight: 12,
   },
-  heroTitle: {
+  financialDivider: {
+    width: 1,
+    height: 38,
+    backgroundColor: '#F1F5F9',
+    marginHorizontal: 14,
+  },
+  financialLabel: {
+    fontSize: 10,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#94A3B8',
+    letterSpacing: 0.8,
+    marginBottom: 3,
+  },
+  financialValue: {
     fontSize: 18,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#FFFFFF',
-    marginBottom: 4,
+    color: '#0F172A',
   },
-  heroDesc: {
+  financialSubtext: {
     fontSize: 12,
-    fontFamily: tokens.typography.fontFamily.regular,
-    color: '#94A3B8',
-    lineHeight: 18,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#059669',
+    marginTop: 2,
   },
-  heroBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: '#0EA5E9',
+  sectionHeaderRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 12,
     fontFamily: tokens.typography.fontFamily.black,
     color: '#64748B',
-    letterSpacing: 1.2,
-    marginBottom: 12,
+    letterSpacing: 1.1,
     textTransform: 'uppercase',
+  },
+  sectionBadge: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#3B82F6',
+  },
+  seeAllText: {
+    fontSize: 12,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: tokens.colors.primary,
   },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   statBox: {
     width: '48%',
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  statBoxAlert: {
+    borderColor: '#FDE68A',
+    backgroundColor: '#FFFBEB',
+  },
+  statBoxAlertRed: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
   },
   statIconCircle: {
     width: 38,
@@ -666,7 +867,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#0F172A',
   },
@@ -678,27 +879,36 @@ const styles = StyleSheet.create({
   },
   actionsBlock: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 8,
-    marginBottom: 24,
+    borderRadius: 18,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginBottom: 22,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  lastActionRow: {
+    borderBottomWidth: 0,
   },
   actionIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   actionInfoText: {
     flex: 1,
@@ -714,22 +924,48 @@ const styles = StyleSheet.create({
     color: '#64748B',
     marginTop: 1,
   },
+  warningBadge: {
+    backgroundColor: '#F59E0B',
+    borderRadius: 99,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  warningBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: tokens.typography.fontFamily.bold,
+    fontSize: 11,
+  },
+  dangerBadge: {
+    backgroundColor: '#EF4444',
+    borderRadius: 99,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginRight: 8,
+  },
+  dangerBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: tokens.typography.fontFamily.bold,
+    fontSize: 11,
+  },
   recentUsersCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 18,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   borderBottom: {
     borderBottomWidth: 1,
@@ -742,10 +978,10 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   avatarPlaceholder: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 12,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -753,13 +989,12 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 15,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#475569',
   },
   userInfo: {
     flex: 1,
   },
   userName: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: tokens.typography.fontFamily.bold,
     color: '#0F172A',
   },
@@ -770,8 +1005,8 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   roleBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   roleBadgeText: {
@@ -780,21 +1015,9 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-    paddingVertical: 20,
+    paddingVertical: 18,
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.regular,
     color: '#94A3B8',
-  },
-  pendingBadge: {
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    marginRight: 8,
-  },
-  pendingBadgeText: {
-    color: '#FFFFFF',
-    fontFamily: tokens.typography.fontFamily.bold,
-    fontSize: 11,
   },
 });

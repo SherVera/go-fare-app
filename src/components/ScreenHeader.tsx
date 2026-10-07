@@ -4,7 +4,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ScreenHeaderProps } from '@/interfaces';
 import { tokens } from '@/theme/tokens';
 
-export const ScreenHeader = ({ title, onBack, onMenu }: ScreenHeaderProps) => {
+export const ScreenHeader = ({
+  title,
+  subtitle,
+  onBack,
+  onMenu,
+  rightAction,
+}: ScreenHeaderProps) => {
   const router = useRouter();
 
   return (
@@ -26,8 +32,19 @@ export const ScreenHeader = ({ title, onBack, onMenu }: ScreenHeaderProps) => {
           <Ionicons name="arrow-back" size={22} color={tokens.colors.primary} />
         </Pressable>
       )}
-      <Text style={styles.title}>{title}</Text>
-      <View style={styles.spacer} />
+      <View style={styles.titleWrapper}>
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <View style={styles.rightSlot}>
+        {rightAction || <View style={styles.spacer} />}
+      </View>
     </View>
   );
 };
@@ -42,16 +59,38 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   backBtn: {
-    width: 28,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+  titleWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   title: {
     fontSize: 16,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#18243E',
+    color: '#0F172A',
     textAlign: 'center',
-    flex: 1,
+  },
+  subtitle: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.medium,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 1,
+  },
+  rightSlot: {
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   spacer: {
-    width: 28, // mismo ancho que backBtn para centrar el título
+    width: 36,
   },
 });

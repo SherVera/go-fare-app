@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -335,7 +336,32 @@ export default function AdminDocumentsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScreenHeader title="Validar Documentos" onMenu={() => setIsOpen(true)} />
+      <ScreenHeader
+        title="Validar Documentos"
+        subtitle="Revisión de Recaudos Legales"
+        onMenu={() => {
+          try {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          } catch {}
+          setIsOpen(true);
+        }}
+        rightAction={
+          <Pressable
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              backgroundColor: '#F1F5F9',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            onPress={onRefresh}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="sync-outline" size={18} color="#64748B" />
+          </Pressable>
+        }
+      />
 
       {/* ── 1. SELECTOR DE CATEGORÍA: VEHÍCULOS VS USUARIOS ── */}
       <View style={styles.categorySelectorWrapper}>
@@ -344,7 +370,12 @@ export default function AdminDocumentsScreen() {
             styles.categoryBtn,
             category === 'vehicles' && styles.categoryBtnActive,
           ]}
-          onPress={() => setCategory('vehicles')}
+          onPress={() => {
+            try {
+              Haptics.selectionAsync();
+            } catch {}
+            setCategory('vehicles');
+          }}
         >
           <Ionicons
             name="bus-outline"
