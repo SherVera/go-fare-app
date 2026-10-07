@@ -3,7 +3,7 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!patches"]
+    "includes": ["**", "!patches", "!skills", "!agent", "!.agents"]
   },
   "formatter": {
     "enabled": true,
@@ -45,7 +45,14 @@
         "noWith": "warn"
       }
     },
-    "includes": ["**", "!android/app/build", "!dist/*"]
+    "includes": [
+      "**",
+      "!android/app/build",
+      "!dist/*",
+      "!skills",
+      "!agent",
+      "!.agents"
+    ]
   },
   "javascript": {
     "formatter": {
