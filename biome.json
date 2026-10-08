@@ -225,7 +225,10 @@
     },
     { "includes": ["*.web.*"] },
     {
-      "includes": ["**/src/components/ImageHero.tsx"],
+      "includes": [
+        "**/src/components/ImageHero.tsx",
+        "**/src/lib/clipboard.ts"
+      ],
       "linter": {
         "rules": {
           "style": {
