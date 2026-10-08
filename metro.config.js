@@ -13,9 +13,6 @@ const existingBlockList = Array.isArray(config.resolver.blockList)
   ? config.resolver.blockList
   : [config.resolver.blockList].filter(Boolean);
 
-config.resolver.blockList = [
-  ...existingBlockList,
-  /[\\/]\.agents[\\/].*/,
-];
+config.resolver.blockList = [...existingBlockList, /[\\/]\.agents[\\/].*/];
 
 module.exports = config;
