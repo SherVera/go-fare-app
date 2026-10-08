@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -41,8 +41,7 @@ export function AdminSidebar() {
   const [userName, setUserName] = useState<string>(() => {
     const cu = auth.currentUser;
     return (
-      cu?.displayName ||
-      (cu?.email ? cu.email.split('@')[0] : 'Administrador')
+      cu?.displayName || (cu?.email ? cu.email.split('@')[0] : 'Administrador')
     );
   });
   const [userRole, setUserRole] = useState<string>(() => {
@@ -51,9 +50,7 @@ export function AdminSidebar() {
   });
   const [userInitial, setUserInitial] = useState<string>(() => {
     const cu = auth.currentUser;
-    const name =
-      cu?.displayName ||
-      (cu?.email ? cu.email.split('@')[0] : 'A');
+    const name = cu?.displayName || (cu?.email ? cu.email.split('@')[0] : 'A');
     return name.charAt(0).toUpperCase();
   });
 

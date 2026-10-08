@@ -350,7 +350,9 @@ export default function AdminRatesScreen() {
                   const bsTotal = tickets * currentFareInBs;
                   return (
                     <View key={tickets} style={styles.packageChip}>
-                      <Text style={styles.packageQty}>{tickets} {tickets === 1 ? 'Viaje' : 'Viajes'}</Text>
+                      <Text style={styles.packageQty}>
+                        {tickets} {tickets === 1 ? 'Viaje' : 'Viajes'}
+                      </Text>
                       <Text style={styles.packagePrice}>
                         {bsTotal.toFixed(2)} Bs.
                       </Text>
@@ -430,11 +432,7 @@ export default function AdminRatesScreen() {
                     { backgroundColor: '#EFF6FF' },
                   ]}
                 >
-                  <Ionicons
-                    name="pricetag-outline"
-                    size={20}
-                    color="#2563EB"
-                  />
+                  <Ionicons name="pricetag-outline" size={20} color="#2563EB" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardHeaderTitle}>
@@ -450,8 +448,7 @@ export default function AdminRatesScreen() {
               <Text style={styles.presetLabel}>VALORES SUGERIDOS:</Text>
               <View style={styles.presetRow}>
                 {PRESET_FARES.map((preset) => {
-                  const isSelected =
-                    parseFloat(newFareValue) === preset;
+                  const isSelected = parseFloat(newFareValue) === preset;
                   return (
                     <Pressable
                       key={preset}

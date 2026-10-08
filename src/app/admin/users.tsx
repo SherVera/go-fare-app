@@ -319,10 +319,22 @@ export default function AdminUsersScreen() {
 
   const roleTabItems = [
     { id: 'all' as const, label: 'Todos', count: roleCounts.all },
-    { id: 'passenger' as const, label: 'Pasajeros', count: roleCounts.passenger },
+    {
+      id: 'passenger' as const,
+      label: 'Pasajeros',
+      count: roleCounts.passenger,
+    },
     { id: 'driver' as const, label: 'Conductores', count: roleCounts.driver },
-    { id: 'transport_owner' as const, label: 'Socios', count: roleCounts.transport_owner },
-    { id: 'civil_association' as const, label: 'Asoc. Civiles', count: roleCounts.civil_association },
+    {
+      id: 'transport_owner' as const,
+      label: 'Socios',
+      count: roleCounts.transport_owner,
+    },
+    {
+      id: 'civil_association' as const,
+      label: 'Asoc. Civiles',
+      count: roleCounts.civil_association,
+    },
   ];
 
   return (
@@ -469,11 +481,7 @@ export default function AdminUsersScreen() {
                 ? '#EA580C'
                 : '#3B82F6';
 
-          const initial = (
-            item.displayName ||
-            item.firstName ||
-            'U'
-          )
+          const initial = (item.displayName || item.firstName || 'U')
             .charAt(0)
             .toUpperCase();
 
@@ -591,11 +599,7 @@ export default function AdminUsersScreen() {
               <View style={styles.modalUserCard}>
                 <View style={styles.modalAvatarCircle}>
                   <Text style={styles.modalAvatarText}>
-                    {(
-                      selectedUser.displayName ||
-                      selectedUser.firstName ||
-                      'U'
-                    )
+                    {(selectedUser.displayName || selectedUser.firstName || 'U')
                       .charAt(0)
                       .toUpperCase()}
                   </Text>
@@ -671,12 +675,11 @@ export default function AdminUsersScreen() {
 
             <View style={styles.modalActionSeparator} />
 
-            <Pressable
-              style={styles.deleteUserBtn}
-              onPress={handleDeleteUser}
-            >
+            <Pressable style={styles.deleteUserBtn} onPress={handleDeleteUser}>
               <Ionicons name="trash-outline" size={18} color="#DC2626" />
-              <Text style={styles.deleteUserText}>Eliminar Usuario Permanentemente</Text>
+              <Text style={styles.deleteUserText}>
+                Eliminar Usuario Permanentemente
+              </Text>
             </Pressable>
           </View>
         </View>

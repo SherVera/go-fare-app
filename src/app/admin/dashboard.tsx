@@ -317,9 +317,7 @@ export default function AdminDashboardScreen() {
           {/* Pasajeros */}
           <Pressable
             style={styles.statBox}
-            onPress={() =>
-              handleCardPress('/admin/users?role=passenger')
-            }
+            onPress={() => handleCardPress('/admin/users?role=passenger')}
           >
             <View
               style={[styles.statIconCircle, { backgroundColor: '#EFF6FF' }]}
@@ -347,9 +345,7 @@ export default function AdminDashboardScreen() {
           {/* Conductores */}
           <Pressable
             style={styles.statBox}
-            onPress={() =>
-              handleCardPress('/admin/users?role=driver')
-            }
+            onPress={() => handleCardPress('/admin/users?role=driver')}
           >
             <View
               style={[styles.statIconCircle, { backgroundColor: '#F1F5F9' }]}
@@ -503,7 +499,11 @@ export default function AdminDashboardScreen() {
             onPress={() => handleCardPress('/admin/documents')}
           >
             <View style={[styles.actionIcon, { backgroundColor: '#FEF3C7' }]}>
-              <Ionicons name="document-text-outline" size={22} color="#D97706" />
+              <Ionicons
+                name="document-text-outline"
+                size={22}
+                color="#D97706"
+              />
             </View>
             <View style={styles.actionInfoText}>
               <Text style={styles.actionName}>Validación de Documentos</Text>
@@ -513,9 +513,7 @@ export default function AdminDashboardScreen() {
             </View>
             {stats.pendingDocs > 0 && (
               <View style={styles.warningBadge}>
-                <Text style={styles.warningBadgeText}>
-                  {stats.pendingDocs}
-                </Text>
+                <Text style={styles.warningBadgeText}>{stats.pendingDocs}</Text>
               </View>
             )}
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
@@ -605,11 +603,7 @@ export default function AdminDashboardScreen() {
                     ? '#EA580C'
                     : '#3B82F6';
 
-              const initial = (
-                user.displayName ||
-                user.firstName ||
-                'U'
-              )
+              const initial = (user.displayName || user.firstName || 'U')
                 .charAt(0)
                 .toUpperCase();
 
