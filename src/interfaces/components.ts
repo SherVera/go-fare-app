@@ -19,8 +19,10 @@ export interface ButtonProps {
 /** Props para el encabezado de pantalla ScreenHeader */
 export interface ScreenHeaderProps {
   title: string;
+  subtitle?: string;
   onBack?: () => void;
   onMenu?: () => void;
+  rightAction?: React.ReactNode;
 }
 
 /** Props para tarjetas de características FeatureCard */

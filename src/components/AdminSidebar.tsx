@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Pressable,
@@ -10,10 +13,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { clearBackendJwt } from '@/lib/api';
-import { sigOutAccount } from '@/lib/firebase';
+import { clearBackendJwt, getBackendProfile } from '@/lib/api';
+import { auth, sigOutAccount } from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 import { useAdminSidebar } from './AdminSidebarContext';
+
+const STATS_CACHE_KEY = 'gofare_admin_dashboard_stats';
 
 export function AdminSidebar() {
   const { isOpen, setIsOpen } = useAdminSidebar();
@@ -22,11 +27,103 @@ export function AdminSidebar() {
   const { width } = Dimensions.get('window');
 
   // Sidebar width: 75% of screen width, max 280px
-  const sidebarWidth = Math.min(width * 0.75, 280);
+  const sidebarWidth = Math.min(width * 0.75, 290);
 
   const slideAnim = useRef(new Animated.Value(-sidebarWidth)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [shouldRender, setShouldRender] = useState(isOpen);
+  const [pendingCounts, setPendingCounts] = useState<{
+    pendingDocs: number;
+    pendingOwners: number;
+  }>({ pendingDocs: 0, pendingOwners: 0 });
+
+  // Perfil del usuario autenticado
+  const [userName, setUserName] = useState<string>(() => {
+    const cu = auth.currentUser;
+    return (
+      cu?.displayName || (cu?.email ? cu.email.split('@')[0] : 'Administrador')
+    );
+  });
+  const [userRole, setUserRole] = useState<string>(() => {
+    const cu = auth.currentUser;
+    return cu?.email || 'Soporte GoFare';
+  });
+  const [userInitial, setUserInitial] = useState<string>(() => {
+    const cu = auth.currentUser;
+    const name = cu?.displayName || (cu?.email ? cu.email.split('@')[0] : 'A');
+    return name.charAt(0).toUpperCase();
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      // 1. Obtener de Firebase currentUser inmediato
+      const cu = auth.currentUser;
+      if (cu) {
+        const name =
+          cu.displayName ||
+          (cu.email ? cu.email.split('@')[0] : 'Administrador');
+        setUserName(name);
+        setUserInitial(name.charAt(0).toUpperCase());
+        if (cu.email) setUserRole(cu.email);
+      }
+
+      // 2. Obtener de caché local de perfil si existe
+      AsyncStorage.getItem('gofare_cached_user_profile')
+        .then((str) => {
+          if (str) {
+            const parsed = JSON.parse(str);
+            const resolvedName =
+              parsed.displayName ||
+              parsed.fullName ||
+              (parsed.firstName
+                ? `${parsed.firstName} ${parsed.lastName || ''}`.trim()
+                : null);
+            if (resolvedName) {
+              setUserName(resolvedName);
+              setUserInitial(resolvedName.charAt(0).toUpperCase());
+            }
+            if (parsed.email) {
+              setUserRole(parsed.email);
+            }
+          }
+        })
+        .catch(() => {});
+
+      // 3. Consultar datos actualizados de backend
+      getBackendProfile()
+        .then((bUser) => {
+          if (bUser) {
+            const bName =
+              bUser.displayName ||
+              `${bUser.firstName || ''} ${bUser.lastName || ''}`.trim() ||
+              bUser.email ||
+              'Administrador';
+            setUserName(bName);
+            setUserInitial(bName.charAt(0).toUpperCase() || 'A');
+            if (bUser.email) {
+              setUserRole(bUser.email);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      AsyncStorage.getItem(STATS_CACHE_KEY)
+        .then((str) => {
+          if (str) {
+            const parsed = JSON.parse(str);
+            setPendingCounts({
+              pendingDocs: parsed.pendingDocs || 0,
+              pendingOwners: parsed.pendingOwners || 0,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -62,19 +159,36 @@ export function AdminSidebar() {
   }, [isOpen, sidebarWidth, slideAnim, fadeAnim]);
 
   const handleNavigate = (route: string) => {
+    try {
+      Haptics.selectionAsync();
+    } catch {}
     setIsOpen(false);
     // Switch to the target admin screen
     router.replace(route as any);
   };
 
-  const handleLogout = async () => {
-    setIsOpen(false);
-    try {
-      await sigOutAccount();
-      await clearBackendJwt();
-    } catch (err) {
-      console.warn('[AdminSidebar] Error logging out:', err);
-    }
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Deseas salir del panel de administración de GoFare?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: async () => {
+            setIsOpen(false);
+            try {
+              await sigOutAccount();
+              await clearBackendJwt();
+              router.replace('/login');
+            } catch (err) {
+              console.warn('[AdminSidebar] Error logging out:', err);
+            }
+          },
+        },
+      ],
+    );
   };
 
   const menuSections = [
@@ -190,6 +304,13 @@ export function AdminSidebar() {
               <View style={styles.sectionItems}>
                 {section.items.map((item) => {
                   const isActive = pathname === item.route;
+                  const count =
+                    item.id === 'documents'
+                      ? pendingCounts.pendingDocs
+                      : item.id === 'owner-requests'
+                        ? pendingCounts.pendingOwners
+                        : 0;
+
                   return (
                     <Pressable
                       key={item.id}
@@ -217,6 +338,11 @@ export function AdminSidebar() {
                       >
                         {item.label}
                       </Text>
+                      {count > 0 && (
+                        <View style={styles.menuBadge}>
+                          <Text style={styles.menuBadgeText}>{count}</Text>
+                        </View>
+                      )}
                     </Pressable>
                   );
                 })}
@@ -229,11 +355,15 @@ export function AdminSidebar() {
         <View style={styles.sidebarFooter}>
           <View style={styles.profileRow}>
             <View style={styles.profileAvatar}>
-              <Text style={styles.avatarText}>A</Text>
+              <Text style={styles.avatarText}>{userInitial}</Text>
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>Administrador</Text>
-              <Text style={styles.profileRole}>Soporte GoFare</Text>
+              <Text style={styles.profileName} numberOfLines={1}>
+                {userName}
+              </Text>
+              <Text style={styles.profileRole} numberOfLines={1}>
+                {userRole}
+              </Text>
             </View>
           </View>
 
@@ -347,10 +477,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: tokens.typography.fontFamily.medium,
     color: '#64748B',
+    flex: 1,
   },
   menuLabelActive: {
     color: tokens.colors.primary,
     fontFamily: tokens.typography.fontFamily.bold,
+  },
+  menuBadge: {
+    backgroundColor: '#EF4444',
+    borderRadius: 99,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginLeft: 6,
+  },
+  menuBadgeText: {
+    fontSize: 11,
+    fontFamily: tokens.typography.fontFamily.bold,
+    color: '#FFFFFF',
   },
   sidebarFooter: {
     borderTopWidth: 1,
@@ -378,17 +521,20 @@ const styles = StyleSheet.create({
     color: tokens.colors.primary,
   },
   profileInfo: {
+    flex: 1,
     justifyContent: 'center',
+    marginRight: 6,
   },
   profileName: {
     fontSize: 13,
     fontFamily: tokens.typography.fontFamily.bold,
-    color: '#334155',
+    color: '#0F172A',
   },
   profileRole: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: tokens.typography.fontFamily.medium,
-    color: '#94A3B8',
+    color: '#64748B',
+    marginTop: 1,
   },
   logoutBtn: {
     flexDirection: 'row',
