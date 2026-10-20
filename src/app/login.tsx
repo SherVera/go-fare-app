@@ -31,7 +31,13 @@ import {
   loginWithFirebaseToken,
   syncWithBackend,
 } from '@/lib/api';
-import { auth, signIn, signInWithGoogle, sigOutAccount } from '@/lib/firebase';
+import {
+  auth,
+  reloadUserSafely,
+  signIn,
+  signInWithGoogle,
+  sigOutAccount,
+} from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function LoginScreen() {
@@ -338,12 +344,8 @@ export default function LoginScreen() {
         password: trimmedPassword,
       });
 
-      // Recargar el usuario para asegurarnos de tener el estado de verificación más reciente
-      try {
-        await userCredential.user.reload();
-      } catch (reloadErr) {
-        console.warn('[Login] Error al recargar el usuario:', reloadErr);
-      }
+      // Recargar el usuario para asegurarnos de tener el estado de verificación más reciente de forma segura
+      await reloadUserSafely(userCredential.user);
 
       const currentUser = auth.currentUser || userCredential.user;
 

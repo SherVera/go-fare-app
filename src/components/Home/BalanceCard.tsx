@@ -45,12 +45,12 @@ export const BalanceCard = ({ balance, carnetId }: BalanceCardProps) => {
       <View style={styles.bottomRow}>
         <View>
           <Text style={styles.labelSmall}>CÉDULA DE IDENTIDAD</Text>
-          <Text style={styles.idNumber}>{carnetId || 'V-00000000'}</Text>
+          <Text style={styles.idNumber}>{carnetId}</Text>
         </View>
         <View style={styles.iconRow}>
           {isLiteMode && (
             <View style={styles.liteBadge}>
-              <Text style={styles.liteBadgeText}>⚡ LITE</Text>
+              <Text style={styles.liteBadgeText}>LITE</Text>
             </View>
           )}
           <View style={[styles.miniIcon, { backgroundColor: '#065F46' }]}>

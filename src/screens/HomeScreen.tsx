@@ -33,16 +33,13 @@ export default function HomeScreen() {
         {/* Bottom Sheet */}
         <View style={styles.bottomSheet}>
           <View style={styles.sheetContent}>
-            <Text style={styles.title}>
-              Muévete{'\n'}
-              libremente por <Text style={styles.titleHighlight}>tu</Text>
-              {'\n'}
-              <Text style={styles.titleHighlight}>ciudad.</Text>
+            <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>
+              Muévete libremente por{' '}
+              <Text style={styles.titleHighlight}>tu ciudad.</Text>
             </Text>
             <Text style={styles.subtitle}>
-              Vive la próxima generación de{'\n'}
-              movilidad urbana en Caracas. Rápida,{'\n'}
-              sin contacto y estrictamente segura.
+              Tu pase digital para el transporte público sin efectivo. Viaja de
+              forma rápida, cómoda y segura.
             </Text>
 
             <View style={styles.featuresRow}>
@@ -120,7 +117,8 @@ const styles = StyleSheet.create({
     color: tokens.colors.textGray,
     fontFamily: tokens.typography.fontFamily.regular,
     lineHeight: 22,
-    textAlign: 'center',
+    textAlign: 'justify',
+    alignSelf: 'stretch',
     marginBottom: tokens.spacing.xl,
     paddingHorizontal: tokens.spacing.sm,
   },
