@@ -27,7 +27,12 @@ import {
   updateBackendProfile,
 } from '@/lib/api';
 import { refreshAuthSessionPhase } from '@/lib/auth-session';
-import { auth, sendVerificationEmail, sigOutAccount } from '@/lib/firebase';
+import {
+  auth,
+  reloadUserSafely,
+  sendVerificationEmail,
+  sigOutAccount,
+} from '@/lib/firebase';
 import { tokens } from '@/theme/tokens';
 
 export default function VerifyEmailScreen() {
@@ -139,7 +144,7 @@ export default function VerifyEmailScreen() {
       try {
         const currentUser = auth.currentUser;
         if (currentUser) {
-          await currentUser.reload();
+          await reloadUserSafely(currentUser, 2500);
           if (currentUser.emailVerified && isActive) {
             clearInterval(intervalId);
 

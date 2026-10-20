@@ -128,6 +128,66 @@ export const updateUser = (
   return user.updateProfile(profile);
 };
 
+/**
+ * Recarga el usuario de Firebase de forma segura y tolerante a fallos de red.
+ *
+ * Mejores prácticas implementadas:
+ * 1. Timeout acotado (Promise.race): evita que conexiones móviles lentas o caídas
+ *    bloqueen indefinidamente el flujo de arranque o autenticación de la app.
+ * 2. Clasificación de errores: las intermitencias de red (`auth/network-request-failed`)
+ *    son condiciones normales en dispositivos móviles y no generan advertencias ruidosas (`console.warn`).
+ * 3. Fallback transparente: si no hay red, la app continúa operando con las credenciales
+ *    y perfil almacenados localmente por Firebase Auth.
+ */
+export async function reloadUserSafely(
+  user: FirebaseAuthTypes.User | null | undefined,
+  timeoutMs = 4000,
+): Promise<boolean> {
+  if (!user || typeof user.reload !== 'function') {
+    return false;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const timeoutError: any = new Error(
+          'Timeout al recargar usuario de Firebase.',
+        );
+        timeoutError.code = 'auth/network-request-failed';
+        reject(timeoutError);
+      }, timeoutMs);
+    });
+
+    await Promise.race([user.reload(), timeoutPromise]);
+    return true;
+  } catch (err: any) {
+    const isNetworkError =
+      err?.code === 'auth/network-request-failed' ||
+      err?.code === 'auth/timeout' ||
+      err?.message?.includes('network-request-failed') ||
+      err?.message?.includes('network error') ||
+      err?.message?.includes('timeout') ||
+      err?.message?.includes('unreachable host');
+
+    if (isNetworkError) {
+      if (__DEV__) {
+        console.log(
+          '[Firebase] Red no disponible al recargar usuario; continuando con sesión en caché.',
+        );
+      }
+    } else {
+      console.warn('[Firebase] Error al recargar usuario:', err);
+    }
+    return false;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export const sigOutAccount = async () => {
   try {
     await AsyncStorage.multiRemove([

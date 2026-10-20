@@ -46,7 +46,12 @@ import {
   purgeUserSessionAndLogout,
   registerAuthSessionResolver,
 } from '@/lib/auth-session';
-import { auth, listenToAuthState, sigOutAccount } from '@/lib/firebase';
+import {
+  auth,
+  listenToAuthState,
+  reloadUserSafely,
+  sigOutAccount,
+} from '@/lib/firebase';
 import {
   getFcmToken,
   getInitialNotification,
@@ -300,14 +305,8 @@ export default function RootLayout() {
         return;
       }
 
-      // Intentar recargar el usuario para obtener el estado más reciente de emailVerified
-      try {
-        if (resolvedUser.reload) {
-          await resolvedUser.reload();
-        }
-      } catch (reloadErr) {
-        console.warn('[Layout] Error al recargar el usuario:', reloadErr);
-      }
+      // Intentar recargar el usuario para obtener el estado más reciente de emailVerified de forma segura
+      await reloadUserSafely(resolvedUser);
 
       const currentUser = auth.currentUser || resolvedUser;
       let authMethod = '';
